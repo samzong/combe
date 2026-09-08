@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install build tools
+        run: |
+          zig_version=$(sed -n 's/.*minimum_zig_version = "\([^"]*\)".*/\1/p' vendor/ghostty/build.zig.zon)
+          curl -fsSL https://ziglang.org/download/index.json -o "$RUNNER_TEMP/zig-index.json"
+          zig_url=$(jq -er --arg version "$zig_version" '.[$version]["aarch64-macos"].tarball' "$RUNNER_TEMP/zig-index.json")
+          zig_sha=$(jq -er --arg version "$zig_version" '.[$version]["aarch64-macos"].shasum' "$RUNNER_TEMP/zig-index.json")
+          curl -fsSL "$zig_url" -o "$RUNNER_TEMP/zig.tar.xz"
+          echo "$zig_sha  $RUNNER_TEMP/zig.tar.xz" | shasum -a 256 -c -
+          mkdir "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+          xcodebuild -downloadComponent MetalToolchain
+          rustup component add rustfmt clippy
+          cargo install cargo-audit --locked
+
+      - name: Check
+        run: make check
+
+      - name: Package
+        run: |
+          bash scripts/package_app.sh "${RELEASE_TAG#v}"
+          codesign --verify --deep --strict build/Combe.app
+          test "$(lipo -archs build/Combe.app/Contents/MacOS/Combe)" = arm64
+          ditto -c -k --sequesterRsrc --keepParent build/Combe.app "build/Combe-${RELEASE_TAG}-macos-arm64.zip"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$RELEASE_TAG" "build/Combe-${RELEASE_TAG}-macos-arm64.zip" \
+            --verify-tag --title "$RELEASE_TAG" --generate-notes

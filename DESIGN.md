@@ -2,7 +2,7 @@
 
 Combe is a worktree-aware terminal: a curated repo list on the left, real Ghostty terminals on the right. Click a worktree, land in that directory.
 
-Private tool. macOS on Apple Silicon only. Not a product, not published, no configuration files.
+Private tool. macOS on Apple Silicon only. Private GitHub Releases, no configuration files.
 
 ## Product
 

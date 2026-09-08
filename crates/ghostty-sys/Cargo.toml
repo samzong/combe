@@ -1,0 +1,9 @@
+[package]
+name = "ghostty-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+links = "ghostty"
+
+[build-dependencies]
+bindgen = "0.72"

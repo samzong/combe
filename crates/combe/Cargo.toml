@@ -1,0 +1,17 @@
+[package]
+name = "combe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "combe"
+path = "src/main.rs"
+
+[dependencies]
+combe-catalog = { path = "../combe-catalog" }
+ghostty-sys = { path = "../ghostty-sys" }
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-core-foundation = "0.3"
+objc2-foundation = "0.3"

@@ -48,7 +48,7 @@ combe cleanup                # drop registered paths that no longer exist on dis
 
 Exit codes: `0` success, `1` a path failed, `2` a usage error.
 
-There is no configuration file. Font, colors, padding, shell, and window size are constants in `crates/combe/src/habits.rs`.
+The window and terminals automatically follow the macOS light or dark appearance, without restarting shells. There is no appearance setting or configuration file. Palettes, font, padding, shell, and window size are compiled into `crates/combe/src/habits.rs`.
 
 | Key | Action |
 | --- | --- |

@@ -12,6 +12,7 @@ use crate::habits;
 
 thread_local! {
     static APP: Cell<sys::ghostty_app_t> = const { Cell::new(ptr::null_mut()) };
+    static DARK: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
 pub fn app() -> sys::ghostty_app_t {
@@ -19,7 +20,6 @@ pub fn app() -> sys::ghostty_app_t {
 }
 
 pub fn init() {
-    let config_path = write_config();
     unsafe {
         assert_eq!(
             sys::ghostty_init(0, ptr::null_mut()),
@@ -27,12 +27,7 @@ pub fn init() {
             "ghostty_init failed"
         );
 
-        let config = sys::ghostty_config_new();
-        let path = CString::new(config_path.into_os_string().into_encoded_bytes())
-            .expect("config path has no interior nul");
-        sys::ghostty_config_load_file(config, path.as_ptr());
-        sys::ghostty_config_finalize(config);
-        report_diagnostics(config);
+        let config = load_config(true);
 
         let runtime = sys::ghostty_runtime_config_s {
             userdata: ptr::null_mut(),
@@ -46,6 +41,7 @@ pub fn init() {
         };
 
         let handle = sys::ghostty_app_new(&runtime, config);
+        sys::ghostty_config_free(config);
         assert!(!handle.is_null(), "ghostty_app_new failed");
         APP.with(|cell| cell.set(handle));
     }
@@ -65,9 +61,43 @@ pub fn set_focus(focused: bool) {
     }
 }
 
-fn write_config() -> PathBuf {
-    let path = std::env::temp_dir().join("combe-ghostty.conf");
-    fs::write(&path, habits::ghostty_config()).expect("write generated ghostty config");
+pub fn color_scheme() -> sys::ghostty_color_scheme_e {
+    if DARK.with(Cell::get).unwrap_or(true) {
+        sys::GHOSTTY_COLOR_SCHEME_DARK
+    } else {
+        sys::GHOSTTY_COLOR_SCHEME_LIGHT
+    }
+}
+
+pub fn set_appearance(dark: bool) {
+    if DARK.with(|state| state.replace(Some(dark))) == Some(dark) {
+        return;
+    }
+    unsafe {
+        let config = load_config(dark);
+        sys::ghostty_app_set_color_scheme(app(), color_scheme());
+        sys::ghostty_app_update_config(app(), config);
+        sys::ghostty_config_free(config);
+    }
+}
+
+fn load_config(dark: bool) -> sys::ghostty_config_t {
+    let config_path = write_config(dark);
+    let path = CString::new(config_path.as_os_str().as_encoded_bytes())
+        .expect("config path has no interior nul");
+    unsafe {
+        let config = sys::ghostty_config_new();
+        sys::ghostty_config_load_file(config, path.as_ptr());
+        fs::remove_file(config_path).expect("remove generated ghostty config");
+        sys::ghostty_config_finalize(config);
+        report_diagnostics(config);
+        config
+    }
+}
+
+fn write_config(dark: bool) -> PathBuf {
+    let path = std::env::temp_dir().join(format!("combe-ghostty-{}.conf", std::process::id()));
+    fs::write(&path, habits::ghostty_config(dark)).expect("write generated ghostty config");
     path
 }
 

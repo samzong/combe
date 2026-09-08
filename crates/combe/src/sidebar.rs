@@ -9,6 +9,7 @@ pub struct Row {
 }
 
 pub struct Repo {
+    pub path: PathBuf,
     pub name: String,
     pub rows: Vec<Row>,
 }
@@ -42,6 +43,7 @@ pub fn repos() -> Vec<Repo> {
             continue;
         }
         repos.push(Repo {
+            path: repo.path.clone(),
             name: repo_name(&repo.path),
             rows,
         });

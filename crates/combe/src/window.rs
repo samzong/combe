@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::ffi::c_void;
 use std::path::PathBuf;
 
@@ -6,11 +7,12 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{ClassType, DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSAppearance, NSAppearanceCustomization, NSAppearanceNameDarkAqua, NSApplication,
-    NSApplicationDelegate, NSAutoresizingMaskOptions, NSBackingStoreType, NSBezierPath, NSButton,
-    NSColor, NSEvent, NSEventModifierFlags, NSFont, NSImage, NSLineBreakMode, NSMenu, NSMenuItem,
-    NSOpenPanel, NSScrollView, NSSplitView, NSSplitViewDelegate, NSSplitViewDividerStyle,
-    NSTextField, NSView, NSWindow, NSWindowStyleMask, NSWindowTitleVisibility,
+    NSAccessibility, NSAppearance, NSAppearanceCustomization, NSAppearanceNameDarkAqua,
+    NSApplication, NSApplicationDelegate, NSAutoresizingMaskOptions, NSBackingStoreType,
+    NSBezierPath, NSButton, NSColor, NSEvent, NSEventModifierFlags, NSFont, NSImage,
+    NSLineBreakMode, NSMenu, NSMenuItem, NSOpenPanel, NSScrollView, NSSplitView,
+    NSSplitViewDelegate, NSSplitViewDividerStyle, NSTextField, NSView, NSWindow, NSWindowStyleMask,
+    NSWindowTitleVisibility,
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{
@@ -54,9 +56,11 @@ struct State {
     sidebar_pane: Retained<NSView>,
     sidebar: Retained<NSScrollView>,
     toggle: Option<Retained<NSButton>>,
+    add_repo: Option<Retained<NSButton>>,
     tab_bar: Retained<NSView>,
     content: Retained<NSView>,
     tabs: Tabs,
+    collapsed_repos: HashSet<PathBuf>,
     sidebar_width: f64,
     sidebar_height: Cell<f64>,
 }
@@ -68,6 +72,7 @@ enum Click {
     CloseTab(u64),
     NewTab,
     AddRepo,
+    ToggleRepo(PathBuf),
 }
 
 struct ClickIvars {
@@ -112,6 +117,12 @@ define_class!(
         #[unsafe(method(mouseDown:))]
         fn mouse_down(&self, _event: &NSEvent) {
             dispatch(self.ivars().click.clone());
+        }
+
+        #[unsafe(method(accessibilityPerformPress))]
+        fn accessibility_perform_press(&self) -> bool {
+            dispatch(self.ivars().click.clone());
+            true
         }
     }
 );
@@ -528,6 +539,12 @@ pub fn open(mtm: MainThreadMarker) {
         toggle.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinYMargin);
         root.addSubview(toggle);
     }
+    let add_repo = icon_button(mtm, "plus", sel!(addRepo:), NSRect::default());
+    if let Some(add_repo) = &add_repo {
+        add_repo.setToolTip(Some(&NSString::from_str("Add repo")));
+        add_repo.setAccessibilityLabel(Some(&NSString::from_str("Add repo")));
+        root.addSubview(add_repo);
+    }
     window.setContentView(Some(&root));
 
     let split_delegate = SplitDelegate::alloc(mtm).set_ivars(());
@@ -543,9 +560,11 @@ pub fn open(mtm: MainThreadMarker) {
             sidebar_pane: sidebar_pane.clone(),
             sidebar: sidebar_view.clone(),
             toggle,
+            add_repo,
             tab_bar: tab_bar.clone(),
             content: content.clone(),
             tabs: Tabs::default(),
+            collapsed_repos: HashSet::new(),
             sidebar_width: habits::SIDEBAR_WIDTH,
             sidebar_height: Cell::new(0.0),
         })
@@ -626,6 +645,16 @@ fn dispatch(click: Click) {
             }
         }
         Click::AddRepo => add_repo(),
+        Click::ToggleRepo(path) => {
+            STATE.with(|state| {
+                let mut state = state.borrow_mut();
+                let Some(state) = state.as_mut() else { return };
+                if !state.collapsed_repos.remove(&path) {
+                    state.collapsed_repos.insert(path);
+                }
+            });
+            rebuild_sidebar();
+        }
     }
 }
 
@@ -942,9 +971,12 @@ fn rebuild_sidebar() {
 
         let clip = state.sidebar.contentView().frame().size;
         let width = clip.width;
-        let mut height = 12.0 + ROW_HEIGHT;
+        let mut height = 12.0;
         for repo in &repos {
-            height += HEADER_HEIGHT + repo.rows.len() as f64 * ROW_HEIGHT;
+            height += HEADER_HEIGHT;
+            if !state.collapsed_repos.contains(&repo.path) {
+                height += repo.rows.len() as f64 * ROW_HEIGHT;
+            }
         }
         state.sidebar_height.set(height);
 
@@ -958,16 +990,33 @@ fn rebuild_sidebar() {
 
         let mut y = 6.0;
         for repo in &repos {
-            let header = NSTextField::labelWithString(&NSString::from_str(&repo.name), mtm);
-            header.setFrame(NSRect::new(
-                NSPoint::new(10.0, y + 5.0),
-                NSSize::new(width - 20.0, HEADER_HEIGHT - 8.0),
-            ));
-            header.setFont(Some(&NSFont::boldSystemFontOfSize(habits::FONT_SIZE)));
-            header.setTextColor(Some(&NSColor::secondaryLabelColor()));
+            let collapsed = state.collapsed_repos.contains(&repo.path);
+            let arrow = if collapsed { "▸" } else { "▾" };
+            let header = ClickView::new(
+                mtm,
+                NSRect::new(
+                    NSPoint::new(8.0, y),
+                    NSSize::new(width - 16.0, HEADER_HEIGHT),
+                ),
+                &format!("{arrow} {}", repo.name),
+                2.0,
+                8.0,
+                Click::ToggleRepo(repo.path.clone()),
+            );
+            header.dim_when_idle();
+            if let Some(label) = header.ivars().label.borrow().as_ref() {
+                label.setFont(Some(&NSFont::boldSystemFontOfSize(habits::FONT_SIZE)));
+            }
+            header.setAccessibilityElement(true);
+            header.setAccessibilityRole(Some(&NSString::from_str("AXButton")));
+            header.setAccessibilityLabel(Some(&NSString::from_str(&repo.name)));
+            header.setAccessibilityExpanded(!collapsed);
             header.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
             document.addSubview(&header);
             y += HEADER_HEIGHT;
+            if collapsed {
+                continue;
+            }
 
             for row in &repo.rows {
                 let path = row.path.to_string_lossy().into_owned();
@@ -1003,21 +1052,6 @@ fn rebuild_sidebar() {
                 y += ROW_HEIGHT;
             }
         }
-
-        let add = ClickView::new(
-            mtm,
-            NSRect::new(
-                NSPoint::new(8.0, y + 6.0),
-                NSSize::new(width - 16.0, ROW_HEIGHT - 2.0),
-            ),
-            "+ Add repo",
-            18.0,
-            8.0,
-            Click::AddRepo,
-        );
-        add.dim_when_idle();
-        add.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
-        document.addSubview(&add);
 
         state.sidebar.setDocumentView(Some(&document));
     });
@@ -1180,18 +1214,25 @@ fn layout_chrome() {
             && let Some(root) = unsafe { toggle.superview() }
         {
             let x = if open {
-                (state.sidebar_pane.frame().size.width - TOGGLE_WIDTH - TOGGLE_TRAIL).max(inset)
+                (state.sidebar_pane.frame().size.width - 2.0 * (TOGGLE_WIDTH + TOGGLE_TRAIL))
+                    .max(inset)
             } else {
                 inset
             };
             toggle.setFrame(NSRect::new(
                 NSPoint::new(
-                    x,
+                    x + TOGGLE_WIDTH + TOGGLE_TRAIL,
                     root.frame().size.height - TOP_BAR_HEIGHT
                         + (TOP_BAR_HEIGHT - TOGGLE_HEIGHT) / 2.0,
                 ),
                 NSSize::new(TOGGLE_WIDTH, TOGGLE_HEIGHT),
             ));
+            if let Some(add_repo) = &state.add_repo {
+                add_repo.setFrame(NSRect::new(
+                    NSPoint::new(x, toggle.frame().origin.y),
+                    NSSize::new(TOGGLE_WIDTH, TOGGLE_HEIGHT),
+                ));
+            }
         }
 
         if let Some(right) = unsafe { state.tab_bar.superview() } {
@@ -1199,7 +1240,7 @@ fn layout_chrome() {
             let offset = if open {
                 0.0
             } else {
-                inset + TOGGLE_WIDTH + TOGGLE_TRAIL
+                inset + 2.0 * (TOGGLE_WIDTH + TOGGLE_TRAIL)
             };
             state.tab_bar.setFrame(NSRect::new(
                 NSPoint::new(offset, size.height - TOP_BAR_HEIGHT),

@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use std::ptr;
 
 use ghostty_sys as sys;
-use objc2_app_kit::{NSPasteboard, NSPasteboardTypeString};
-use objc2_foundation::{MainThreadMarker, NSString};
+use objc2_app_kit::{NSBeep, NSPasteboard, NSPasteboardTypeString, NSWorkspace};
+use objc2_foundation::{MainThreadMarker, NSString, NSURL};
 
 use crate::habits;
 
@@ -145,6 +145,9 @@ unsafe extern "C" fn action(
     target: sys::ghostty_target_s,
     action: sys::ghostty_action_s,
 ) -> bool {
+    if action.tag == sys::GHOSTTY_ACTION_OPEN_URL {
+        return open_url_action(action);
+    }
     if action.tag != sys::GHOSTTY_ACTION_SET_TITLE
         && action.tag != sys::GHOSTTY_ACTION_SET_TAB_TITLE
     {
@@ -170,6 +173,63 @@ unsafe extern "C" fn action(
     true
 }
 
+fn open_url_action(action: sys::ghostty_action_s) -> bool {
+    let open = unsafe { action.action.open_url };
+    if open.url.is_null() || open.len == 0 {
+        return true;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(open.url.cast::<u8>(), open.len) };
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return true;
+    };
+    let text = text.to_owned();
+    if MainThreadMarker::new().is_some() {
+        open_in_browser(&text);
+    } else {
+        let ctx = Box::into_raw(Box::new(text)).cast();
+        unsafe {
+            dispatch_async_f(
+                &raw const _dispatch_main_q as *mut c_void,
+                ctx,
+                open_url_on_main,
+            );
+        }
+    }
+    true
+}
+
+unsafe extern "C" fn open_url_on_main(ctx: *mut c_void) {
+    let text = unsafe { Box::from_raw(ctx.cast::<String>()) };
+    open_in_browser(&text);
+}
+
+fn open_in_browser(text: &str) {
+    if !allowed_open_url(text) {
+        return;
+    }
+    let Some(url) = NSURL::URLWithString(&NSString::from_str(text)) else {
+        return;
+    };
+    let _ = NSWorkspace::sharedWorkspace().openURL(&url);
+}
+
+fn allowed_open_url(text: &str) -> bool {
+    let text = text.trim();
+    if text.is_empty() || !text.is_ascii() || text.bytes().any(|b| b < 0x20 || b == 0x7f) {
+        return false;
+    }
+    let lower = text.to_ascii_lowercase();
+    if let Some(rest) = lower
+        .strip_prefix("https://")
+        .or_else(|| lower.strip_prefix("http://"))
+    {
+        let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+        let host = host.rsplit_once('@').map(|(_, host)| host).unwrap_or(host);
+        return !host.is_empty();
+    }
+    lower.starts_with("mailto:") && lower.len() > "mailto:".len()
+}
+
 unsafe extern "C" fn close_surface(userdata: *mut c_void, _: bool) {
     if let Some(view) = crate::surface::view_from_userdata(userdata) {
         crate::window::queue_close(view);
@@ -182,7 +242,7 @@ unsafe extern "C" fn read_clipboard(
     state: *mut c_void,
     _mimes: *const *const c_char,
     _mimes_len: usize,
-    _confirmed: bool,
+    _list: bool,
 ) -> sys::ghostty_clipboard_read_result_e {
     if location != sys::GHOSTTY_CLIPBOARD_STANDARD {
         return sys::GHOSTTY_CLIPBOARD_READ_UNSUPPORTED;
@@ -204,7 +264,7 @@ unsafe extern "C" fn read_clipboard(
         contents_len: 1,
         available: ptr::null(),
         available_len: 0,
-        confirmed: true,
+        confirmed: false,
         remember: false,
     };
     unsafe { sys::ghostty_surface_complete_clipboard_request(surface, &complete, state) };
@@ -215,12 +275,15 @@ unsafe extern "C" fn confirm_read_clipboard(
     userdata: *mut c_void,
     _confirm: *const sys::ghostty_clipboard_confirm_s,
     state: *mut c_void,
-    _request: sys::ghostty_clipboard_request_e,
+    request: sys::ghostty_clipboard_request_e,
 ) {
     let Some(surface) = crate::surface::handle_from_userdata(userdata) else {
         return;
     };
     unsafe { sys::ghostty_surface_deny_clipboard_request(surface, state) };
+    if request == sys::GHOSTTY_CLIPBOARD_REQUEST_PASTE {
+        NSBeep();
+    }
 }
 
 unsafe extern "C" fn write_clipboard(
@@ -261,5 +324,28 @@ fn set_pasteboard_string(text: &str) {
         let pasteboard = NSPasteboard::generalPasteboard();
         pasteboard.clearContents();
         pasteboard.setString_forType(&NSString::from_str(text), NSPasteboardTypeString);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::allowed_open_url;
+
+    #[test]
+    fn allows_http_https_and_mailto() {
+        assert!(allowed_open_url(
+            "https://github.com/lathe-cli/lathe/pull/179"
+        ));
+        assert!(allowed_open_url("http://example.com"));
+        assert!(allowed_open_url("mailto:sam@example.com"));
+    }
+
+    #[test]
+    fn rejects_unsafe_or_local_targets() {
+        assert!(!allowed_open_url("https:relative"));
+        assert!(!allowed_open_url("file:///etc/passwd"));
+        assert!(!allowed_open_url("javascript:alert(1)"));
+        assert!(!allowed_open_url("https://example.com/\u{202e}"));
+        assert!(!allowed_open_url(""));
     }
 }

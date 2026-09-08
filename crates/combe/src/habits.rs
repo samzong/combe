@@ -1,11 +1,12 @@
 use std::fmt::Write as _;
+use std::time::Duration;
 
 pub const SHELL: &str = "/bin/zsh -l";
 
 pub const FONT_FAMILY: &str = "Fira Code";
 pub const FONT_FAMILY_CJK: &str = "Noto Sans Mono CJK SC";
 pub const CJK_CODEPOINTS: &str = "U+2E80-U+2FFF,U+3000-U+303F,U+31C0-U+31EF,U+3400-U+4DBF,U+4E00-U+9FFF,U+F900-U+FAFF,U+FF00-U+FFEF";
-pub const FONT_SIZE: f64 = 12.0;
+pub const FONT_SIZE: f64 = 10.0;
 pub const LINE_HEIGHT: f64 = FONT_SIZE + 6.0;
 
 pub const BACKGROUND: &str = "0d1117";
@@ -37,7 +38,7 @@ pub const CURSOR_STYLE: &str = "block";
 pub const CURSOR_BLINK: bool = true;
 
 pub const OPTION_AS_ALT: bool = true;
-pub const COPY_ON_SELECT: bool = false;
+pub const COPY_ON_SELECT: bool = true;
 
 pub const SCROLLBACK_LINES: usize = 10_000;
 
@@ -46,6 +47,9 @@ pub const WINDOW_HEIGHT: f64 = 780.0;
 
 pub const SIDEBAR_WIDTH: f64 = 220.0;
 pub const SIDEBAR_VISIBLE: bool = true;
+
+pub const QUOTA_POLL: Duration = Duration::from_secs(15 * 60);
+pub const QUOTA_FRESH: Duration = Duration::from_secs(5 * 60);
 
 pub const ALLOW_OSC52_READ: bool = false;
 

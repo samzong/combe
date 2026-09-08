@@ -1,6 +1,9 @@
+mod chrome_view;
 mod cli;
 mod ghostty;
 mod habits;
+mod quota;
+mod quota_panel;
 mod sidebar;
 mod split;
 mod surface;

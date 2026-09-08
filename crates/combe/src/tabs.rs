@@ -3,12 +3,33 @@ use std::collections::HashMap;
 use objc2::rc::Retained;
 use objc2_app_kit::NSView;
 
+use crate::split;
+use crate::surface::SurfaceView;
+
 pub struct Tab {
     pub id: u64,
     pub workspace: String,
     pub name: String,
     pub label: String,
     pub root: Retained<NSView>,
+    pub focused: Option<Retained<SurfaceView>>,
+    pub zoom: Option<crate::split::Zoom>,
+}
+
+impl Tab {
+    pub fn focused_surface(&self) -> Option<Retained<SurfaceView>> {
+        let leaves = split::surfaces(&self.root);
+        self.zoom
+            .as_ref()
+            .map(|zoom| zoom.surface.clone())
+            .or_else(|| {
+                self.focused
+                    .as_ref()
+                    .filter(|view| leaves.iter().any(|leaf| std::ptr::eq(&**leaf, &***view)))
+                    .cloned()
+            })
+            .or_else(|| leaves.into_iter().next())
+    }
 }
 
 #[derive(Default)]
@@ -26,6 +47,10 @@ impl Tabs {
 
     pub fn current(&self) -> Option<&str> {
         self.current.as_deref()
+    }
+
+    pub fn opened(&self, workspace: &str) -> bool {
+        self.items.iter().any(|tab| tab.workspace == workspace)
     }
 
     pub fn visible(&self) -> impl Iterator<Item = &Tab> {
@@ -47,12 +72,25 @@ impl Tabs {
         self.items.iter().find(|tab| tab.id == id)
     }
 
+    pub fn get_mut(&mut self, id: u64) -> Option<&mut Tab> {
+        self.items.iter_mut().find(|tab| tab.id == id)
+    }
+
     pub fn siblings(&self, id: u64) -> usize {
         let Some(tab) = self.get(id) else { return 0 };
         self.items
             .iter()
             .filter(|other| other.workspace == tab.workspace)
             .count()
+    }
+
+    pub fn other(&self, workspace: &str) -> Option<u64> {
+        let next = self.items.iter().find(|tab| tab.workspace != workspace)?;
+        self.active
+            .get(&next.workspace)
+            .copied()
+            .filter(|id| self.get(*id).is_some())
+            .or(Some(next.id))
     }
 
     pub fn enter(&mut self, workspace: &str) -> Option<u64> {
@@ -83,6 +121,8 @@ impl Tabs {
             label: name.clone(),
             name,
             root,
+            focused: None,
+            zoom: None,
         });
         id
     }
@@ -92,17 +132,6 @@ impl Tabs {
         let workspace = tab.workspace.clone();
         self.active.insert(workspace.clone(), id);
         self.current = Some(workspace);
-    }
-
-    pub fn set_label(&mut self, id: u64, label: String) -> bool {
-        let Some(tab) = self.items.iter_mut().find(|tab| tab.id == id) else {
-            return false;
-        };
-        if tab.label == label {
-            return false;
-        }
-        tab.label = label;
-        true
     }
 
     pub fn remove(&mut self, id: u64) -> Option<Tab> {
@@ -124,6 +153,9 @@ impl Tabs {
             }
             None => {
                 self.active.remove(&tab.workspace);
+                if self.current.as_deref() == Some(tab.workspace.as_str()) {
+                    self.current = None;
+                }
             }
         }
         Some(tab)

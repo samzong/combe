@@ -82,6 +82,8 @@ dependencies = [
  "objc2-app-kit",
  "objc2-core-foundation",
  "objc2-foundation",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

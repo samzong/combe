@@ -10,6 +10,43 @@ const FILL: NSAutoresizingMaskOptions = NSAutoresizingMaskOptions(
     NSAutoresizingMaskOptions::ViewWidthSizable.0 | NSAutoresizingMaskOptions::ViewHeightSizable.0,
 );
 
+pub struct Zoom {
+    pub surface: Retained<SurfaceView>,
+    tree: Retained<NSView>,
+    placeholder: Retained<NSView>,
+}
+
+impl Zoom {
+    pub fn new(root: &NSView, surface: &SurfaceView) -> Option<Self> {
+        let parent = unsafe { surface.superview() }?;
+        if !is_pane(&parent) {
+            return None;
+        }
+        let tree = root.subviews().firstObject()?;
+        let placeholder = NSView::initWithFrame(NSView::alloc(surface.mtm()), surface.frame());
+        placeholder.setAutoresizingMask(surface.autoresizingMask());
+        let surface = surface.retain();
+        parent.replaceSubview_with(&surface, &placeholder);
+        tree.setHidden(true);
+        root.addSubview(&surface);
+        surface.setFrame(root.bounds());
+        Some(Self {
+            surface,
+            tree,
+            placeholder,
+        })
+    }
+
+    pub fn restore(self) {
+        if let Some(parent) = unsafe { self.placeholder.superview() } {
+            self.surface.removeFromSuperview();
+            self.surface.setFrame(self.placeholder.frame());
+            parent.replaceSubview_with(&self.placeholder, &self.surface);
+        }
+        self.tree.setHidden(false);
+    }
+}
+
 pub fn leaf(mtm: MainThreadMarker, frame: NSRect, cwd: &str) -> Retained<SurfaceView> {
     let view = SurfaceView::new(mtm, frame, cwd);
     view.setAutoresizingMask(FILL);

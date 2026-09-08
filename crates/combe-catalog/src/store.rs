@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, thiserror::Error)]
@@ -56,7 +57,18 @@ pub fn save_state(path: &Path, state: &State) -> Result<(), StoreError> {
         })?;
     }
     let body = serde_json::to_string_pretty(state).expect("state is serializable");
-    std::fs::write(path, body).map_err(|source| StoreError::Io {
+    let write = || -> std::io::Result<()> {
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let mut temp = tempfile::NamedTempFile::new_in(parent)?;
+        temp.write_all(body.as_bytes())?;
+        temp.as_file().sync_all()?;
+        temp.persist(path).map_err(|err| err.error)?;
+        Ok(())
+    };
+    write().map_err(|source| StoreError::Io {
         path: path.to_path_buf(),
         source,
     })
@@ -65,6 +77,7 @@ pub fn save_state(path: &Path, state: &State) -> Result<(), StoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
 
     #[test]
     fn missing_file_is_empty_state() {
@@ -86,5 +99,17 @@ mod tests {
         };
         save_state(&path, &state).unwrap();
         assert_eq!(load_state(&path).unwrap(), state);
+
+        let mut previous = std::fs::File::open(&path).unwrap();
+        let updated = State {
+            pinned: Vec::new(),
+            ..state.clone()
+        };
+        save_state(&path, &updated).unwrap();
+        assert_eq!(load_state(&path).unwrap(), updated);
+
+        let mut body = String::new();
+        previous.read_to_string(&mut body).unwrap();
+        assert_eq!(serde_json::from_str::<State>(&body).unwrap(), state);
     }
 }

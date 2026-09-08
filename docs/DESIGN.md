@@ -2,15 +2,27 @@
 
 Combe is a worktree-aware terminal: a curated repo list on the left, real Ghostty terminals on the right. Click a worktree, land in that directory.
 
-Private tool. macOS on Apple Silicon only. Private GitHub Releases, no configuration files.
+Built for personal use, exclusively on Apple Silicon Macs. Private GitHub Releases, no configuration files.
 
 ## Product
+
+Combe is a lightweight native terminal organized around workspaces. Its mission is to make switching projects mean returning to the tabs, splits, and running tools left there during the current app session, without finding windows or rebuilding layouts.
+
+### Philosophy
+
+**Restraint, without compromise.**
+
+- Restraint in scope: build for the owner's actual daily work on macOS. Do not add features for hypothetical users or pursue a general-purpose terminal product.
+- No compromise on experience: every retained feature should be dependable, easy to use, and consistent with native macOS interactions. A small feature set is no excuse for a poor experience.
+- Do fewer things, and do the needed things well. CLI tools such as Claude Code and Codex run inside terminals; Combe does not become an IDE or an agent management platform.
+
+### Workspaces
 
 A heavy terminal user keeps many git checkouts and linked worktrees. The missing piece is a directory of those trees, not another multiplexer, editor, or agent overlay.
 
 The user curates the repo list by hand. Combe reads `git worktree list --porcelain` for each registered repo and shows every tree git already knows.
 
-A worktree is a session, not a shortcut. Each row owns its own set of tabs; selecting a row swaps in that worktree's tabs and returns to the one it was left on. New tabs belong to the selected worktree, and a worktree never drops below one tab.
+A worktree is a session, not a shortcut. Each row owns its own set of tabs; selecting a row swaps in that worktree's tabs and returns to the one it was left on. New tabs belong to the selected worktree. Closing the last tab of a workspace ends that session. If another workspace still has tabs, the window switches to it; if none remain, the window closes.
 
 Repos are never discovered by walking the disk.
 
@@ -45,7 +57,7 @@ Rejected:
 
 ## Window
 
-One window. `FullSizeContentView` with a transparent titlebar and hidden title, so a single 40pt row holds the traffic lights, the sidebar toggle, the tab pills, and `+`.
+One window. `FullSizeContentView` with a transparent titlebar and hidden title, so a single 40pt row holds the traffic lights, the sidebar toggle, the tab pills, and `+`. Spotlight, Raycast, or the Dock activating an already-running Combe goes through `applicationShouldHandleReopen:hasVisibleWindows:`, which deminiaturizes if needed and calls `makeKeyAndOrderFront` so the system can switch to the space that holds the window.
 
 ```text
 NSWindow
@@ -60,12 +72,13 @@ NSWindow
           NSView (tab root)
             NSSplitView …         nested panes
               SurfaceView         one libghostty surface
+        status line (24pt)        one quota block; hidden when no local quota snapshot
     add repo and sidebar toggle   overlay, trailing edge of the sidebar
 ```
 
 The add-repo `+` and sidebar toggle live on the content view rather than inside the sidebar, so both remain available when the sidebar collapses. While the sidebar is open the buttons track its trailing edge; collapsed, they fall back to a leading inset — 78pt to clear the traffic lights, 8pt in full screen where there are none. The tab bar leaves room for both buttons.
 
-Clicking a repo heading collapses or expands its worktree rows without closing terminals or changing the selected workspace. Collapsed groups are keyed by registered repo path and retained only for the current app run; all groups start expanded.
+Clicking a repo heading collapses or expands its worktree rows without closing terminals or changing the selected workspace. Collapsed groups are keyed by registered repo path and retained only for the current app run; all groups start expanded. Each worktree row shows a session mark: green when that workspace has a tab this app run, dim when it does not. The mark is not persisted and is not a pin.
 
 Chrome geometry is a layout pass, not a one-shot. The content view overrides `layout`, and the split view delegate answers `splitViewDidResizeSubviews:`; between them every window resize, full-screen transition, divider drag, and collapse re-runs the same placement. Sidebar visibility is read back from `isSubviewCollapsed`, never cached, because a drag can collapse the pane without the app asking.
 
@@ -75,21 +88,34 @@ The window and every terminal follow the macOS light or dark appearance, includi
 
 Every chrome view is transparent, and Ghostty uses the same background as the window, so the sidebar, tab bar and terminal are one surface separated only by a hairline divider. Chrome text and selection highlights use adaptive AppKit colors. Chrome text uses `habits::FONT_SIZE`, the same number the terminal font is set to.
 
-Every tab of every worktree lives in the same content view. Only the active tab of the selected worktree is unhidden; every surface everywhere else gets `ghostty_surface_set_occlusion(false)` and stops drawing. The selection is one pointer per worktree plus the current worktree, so the sidebar highlight and the tab bar cannot disagree.
+The status line sits under the terminals, not under the sidebar. Combe reads local quota snapshots only: Claude's `~/.claude/rate-limits.json` (or `$CLAUDE_CONFIG_DIR/rate-limits.json`) and Codex's `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`). It never reads credentials, accesses Keychain, queries usage endpoints, starts a CLI, or installs hooks. Claude's externally configured statusline writer supplies the `rate_limits` object with an `updated_at` epoch timestamp, which Combe ignores. The Claude file is read whole up to 64 KiB; larger files are unavailable. Missing or invalid snapshots hide that provider.
+
+Codex discovery enumerates session file metadata in the background, including old dates for resumed sessions. It examines at most eight recently modified files and at most the last 1 MiB of each, skips incomplete lines, and selects the newest timestamped `event_msg` / `token_count` snapshot for the `codex` limit bucket (or older records without a limit ID). Unchanged files reuse their parsed in-memory snapshots. Windows are classified by their duration, not by primary/secondary position; unsupported durations are omitted. A quota event outside the read budget is unavailable rather than triggering an unbounded history scan.
+
+One block lists each available provider and the remaining percent of its tighter 5h/7d window. A click opens one NSPopover with the windows, including Claude Fable if the local payload supplies it. These are last-recorded snapshots, not a claim about the current login: neither source establishes account identity, and other devices or account switches can make values stale. Passing a reset time does not manufacture a fresh percentage. Combe persists no quota data. Startup reads once; while focused, it checks every 15 minutes, and activation checks only after five minutes since the previous check. Both intervals are compiled into `habits.rs`.
+
+Every tab of every worktree lives in the same content view. Only the active tab of the selected worktree is unhidden; every surface everywhere else gets `ghostty_surface_set_occlusion(false)` and stops drawing. The selection is one pointer per worktree plus the current worktree, so the sidebar highlight and the tab bar cannot disagree. Each tab remembers its focused pane. Closing a background pane preserves the current input focus.
 
 A tab is named by the focused pane's terminal title, and falls back to the worktree's own name until a title arrives. Ghostty's shell integration writes the running command while a command runs and a shortened path at the prompt, so a pane running `claude` names its tab `claude`; splitting a tab means the name follows whichever pane holds focus. Titles reach the app through `GHOSTTY_ACTION_SET_TITLE` on the runtime action callback, which resolves back to the pane with `ghostty_surface_userdata`. There is no process-name API in `ghostty.h`, and none is invented: a shell without integration keeps the worktree name.
 
 Splitting reparents the focused surface into a fresh `NSSplitView` and adds a sibling. Closing removes the leaf and, when a pane is left with a single child, collapses that pane into its parent. Ghostty asks for a close through `close_surface_cb`, which queues the surface and drains it on the main queue.
 
-Command-modified keys belong to the app and never reach the PTY. Control sequences always reach the PTY.
+Zooming moves the focused surface above its hidden split tree and leaves a placeholder at its original position. Toggling again restores that position without recreating terminals. Zoom is retained per tab; closing a pane or adding a split restores the tree first. A tab with one surface is unchanged.
+
+Command-modified keys belong to the app and never reach the PTY. Control sequences always reach the PTY. Releasing a selection on a surface copies that text to the system clipboard (`copy-on-select`). Cmd-C still copies. Terminal clipboard reads are denied by default; ordinary paste remains available, while unsafe pastes are denied with the system alert sound. Cmd-click on a terminal URL sends `GHOSTTY_ACTION_OPEN_URL`; Combe opens `http`, `https`, and `mailto` in the default handler.
 
 | Key | Action |
 | --- | --- |
 | Cmd-Q | Quit |
+| Cmd-H | Hide Combe |
+| Opt-Cmd-H | Hide other applications |
+| Cmd-M | Minimize the window |
 | Cmd-T | New tab |
-| Cmd-W | Close pane, or the tab when it is the last pane, except the worktree's last tab |
+| Cmd-W | Close pane, or the tab when it is the last pane. The last tab of a workspace ends that session; the window closes only when no sessions remain |
+| Opt-Cmd-W | Close every titled window |
 | Cmd-D | Split right |
 | Cmd-Shift-D | Split down |
+| Cmd-Shift-Return | Zoom the focused split, or restore its layout |
 | Cmd-Alt-Left / Right | Previous / next tab |
 | Cmd-B | Fold or unfold the sidebar |
 | Cmd-C / Cmd-V | Copy / paste through `ghostty_surface_binding_action` |
@@ -103,6 +129,8 @@ One binary, two entry points, separated by `argv[0]`. Running it as `<something>
 
 `list`, `add`, `remove`, and `cleanup` read and write `state.json` and never touch AppKit. `cleanup` drops registered repo paths and pins whose directory no longer exists, which is the recovery path for a checkout deleted outside Combe.
 
+Both the GUI and CLI stop state edits when reading the state file fails. Saves atomically replace the file, preserving the previous contents if writing fails.
+
 ## Catalog
 
 A **repo** is a path the user added. A **worktree** is one record from `git worktree list --porcelain` for that repo. A **folder workspace** is a registered path that is not a git checkout: one row, no branch.
@@ -114,6 +142,8 @@ A **repo** is a path the user added. A **worktree** is one record from `git work
 5. Merge pins
 
 Identity is the resolved worktree path. Pins are a set of those paths.
+
+The window refreshes the catalog on startup, when the app becomes active, and after adding repos or opening a new tab. Tab selection and session marks reuse that catalog without running Git.
 
 `crates/combe-catalog` has no AppKit dependency. `cargo test -p combe-catalog` is the fast loop.
 
@@ -130,9 +160,14 @@ crates/combe
   split.rs             NSSplitView tree: leaf, divide, close, collapse
   tabs.rs              tabs keyed by worktree, active tab per worktree
   window.rs            window, chrome, menu, sidebar, dispatch
+  chrome_view.rs       shared clickable and flipped AppKit views
   sidebar.rs           catalog adapter
+  quota.rs             Claude and Codex subscription windows
+  quota_panel.rs       quota cache, refresh scheduling, status chip, and popover
   habits.rs            every preference, compiled in
 ```
+
+The quota panel owns its cached usage, polling state, and views. The window mounts it, supplies callbacks for current window activity and layout, and uses its height when positioning terminal content. Shared chrome views dispatch clicks through callbacks without owning workspace or quota state.
 
 ## Phases
 

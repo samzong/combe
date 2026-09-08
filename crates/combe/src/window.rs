@@ -5,22 +5,23 @@ use std::path::PathBuf;
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject};
-use objc2::{ClassType, DefinedClass, MainThreadOnly, define_class, msg_send, sel};
+use objc2::{ClassType, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSAccessibility, NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
-    NSApplication, NSApplicationDelegate, NSAutoresizingMaskOptions, NSBackingStoreType,
-    NSBezierPath, NSButton, NSColor, NSEvent, NSEventModifierFlags, NSFont, NSImage,
-    NSLineBreakMode, NSMenu, NSMenuItem, NSOpenPanel, NSScrollView, NSSplitView,
-    NSSplitViewDelegate, NSSplitViewDividerStyle, NSTextField, NSView, NSWindow, NSWindowStyleMask,
-    NSWindowTitleVisibility,
+    NSApplication, NSApplicationDelegate, NSAutoresizingMaskOptions, NSBackingStoreType, NSButton,
+    NSColor, NSEventModifierFlags, NSFont, NSImage, NSMenu, NSMenuItem, NSOpenPanel, NSScrollView,
+    NSSplitView, NSSplitViewDelegate, NSSplitViewDividerStyle, NSTextField, NSView, NSWindow,
+    NSWindowStyleMask, NSWindowTitleVisibility,
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSInteger, NSNotification, NSPoint, NSRect, NSSize, NSString,
 };
 
+use crate::chrome_view::{ClickView, FlippedView};
 use crate::ghostty;
 use crate::habits;
+use crate::quota_panel;
 use crate::sidebar;
 use crate::split;
 use crate::surface::SurfaceView;
@@ -39,7 +40,6 @@ const TOGGLE_TRAIL: f64 = 8.0;
 const SIDEBAR_MIN_WIDTH: f64 = 160.0;
 const SIDEBAR_MAX_WIDTH: f64 = 420.0;
 const DIVIDER_GRAB: f64 = 4.0;
-const PILL_RADIUS: f64 = 6.0;
 
 const FILL: NSAutoresizingMaskOptions = NSAutoresizingMaskOptions(
     NSAutoresizingMaskOptions::ViewWidthSizable.0 | NSAutoresizingMaskOptions::ViewHeightSizable.0,
@@ -60,12 +60,12 @@ struct State {
     tab_bar: Retained<NSView>,
     content: Retained<NSView>,
     tabs: Tabs,
+    repos: Vec<sidebar::Repo>,
     collapsed_repos: HashSet<PathBuf>,
     sidebar_width: f64,
     sidebar_height: Cell<f64>,
 }
 
-#[derive(Clone)]
 enum Click {
     Open(String, String),
     SelectTab(u64),
@@ -73,117 +73,6 @@ enum Click {
     NewTab,
     AddRepo,
     ToggleRepo(PathBuf),
-}
-
-struct ClickIvars {
-    click: Click,
-    label: RefCell<Option<Retained<NSTextField>>>,
-    selected: Cell<bool>,
-    dim_when_idle: Cell<bool>,
-}
-
-define_class!(
-    #[unsafe(super(NSView))]
-    #[thread_kind = MainThreadOnly]
-    #[name = "CombeClickView"]
-    #[ivars = ClickIvars]
-    struct ClickView;
-
-    impl ClickView {
-        #[unsafe(method(isFlipped))]
-        fn is_flipped(&self) -> bool {
-            true
-        }
-
-        #[unsafe(method(drawRect:))]
-        fn draw_rect(&self, _dirty: NSRect) {
-            if !self.ivars().selected.get() {
-                return;
-            }
-            NSColor::labelColor().colorWithAlphaComponent(0.12).setFill();
-            NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(
-                self.bounds(),
-                PILL_RADIUS,
-                PILL_RADIUS,
-            )
-            .fill();
-        }
-
-        #[unsafe(method(acceptsFirstMouse:))]
-        fn accepts_first_mouse(&self, _event: Option<&NSEvent>) -> bool {
-            true
-        }
-
-        #[unsafe(method(mouseDown:))]
-        fn mouse_down(&self, _event: &NSEvent) {
-            dispatch(self.ivars().click.clone());
-        }
-
-        #[unsafe(method(accessibilityPerformPress))]
-        fn accessibility_perform_press(&self) -> bool {
-            dispatch(self.ivars().click.clone());
-            true
-        }
-    }
-);
-
-impl ClickView {
-    fn new(
-        mtm: MainThreadMarker,
-        frame: NSRect,
-        text: &str,
-        indent: f64,
-        trail: f64,
-        click: Click,
-    ) -> Retained<Self> {
-        let ivars = ClickIvars {
-            click,
-            label: RefCell::new(None),
-            selected: Cell::new(false),
-            dim_when_idle: Cell::new(false),
-        };
-        let this = Self::alloc(mtm).set_ivars(ivars);
-        let this: Retained<Self> = unsafe { msg_send![super(this), initWithFrame: frame] };
-
-        let label = NSTextField::labelWithString(&NSString::from_str(text), mtm);
-        label.setFrame(NSRect::new(
-            NSPoint::new(indent, (frame.size.height - habits::LINE_HEIGHT) / 2.0),
-            NSSize::new(
-                (frame.size.width - indent - trail).max(0.0),
-                habits::LINE_HEIGHT,
-            ),
-        ));
-        label.setFont(Some(&NSFont::systemFontOfSize(habits::FONT_SIZE)));
-        label.setLineBreakMode(NSLineBreakMode::ByTruncatingTail);
-        label.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
-        this.addSubview(&label);
-        *this.ivars().label.borrow_mut() = Some(label);
-        this
-    }
-
-    fn dim_when_idle(&self) {
-        self.ivars().dim_when_idle.set(true);
-        self.apply_label_color();
-    }
-
-    fn set_selected(&self, selected: bool) {
-        self.ivars().selected.set(selected);
-        self.apply_label_color();
-        self.setNeedsDisplay(true);
-    }
-
-    fn apply_label_color(&self) {
-        let Some(label) = self.ivars().label.borrow().clone() else {
-            return;
-        };
-        let dim = self.ivars().dim_when_idle.get() && !self.ivars().selected.get();
-        let color = if dim {
-            NSColor::secondaryLabelColor()
-        } else {
-            NSColor::labelColor()
-        };
-        label.setTextColor(Some(&color));
-    }
 }
 
 define_class!(
@@ -212,6 +101,11 @@ define_class!(
         #[unsafe(method(splitDown:))]
         fn split_down(&self, _sender: Option<&AnyObject>) {
             divide(false);
+        }
+
+        #[unsafe(method(toggleSplitZoom:))]
+        fn toggle_split_zoom(&self, _sender: Option<&AnyObject>) {
+            toggle_split_zoom();
         }
 
         #[unsafe(method(previousTab:))]
@@ -247,6 +141,11 @@ define_class!(
         fn add_repo(&self, _sender: Option<&AnyObject>) {
             dispatch(Click::AddRepo);
         }
+
+        #[unsafe(method(closeAllWindows:))]
+        fn close_all_windows(&self, _sender: Option<&AnyObject>) {
+            close_all_windows();
+        }
     }
 );
 
@@ -265,9 +164,17 @@ define_class!(
             true
         }
 
+        #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
+        fn should_handle_reopen(&self, _app: &NSApplication, _has_visible_windows: bool) -> bool {
+            reveal_window();
+            true
+        }
+
         #[unsafe(method(applicationDidBecomeActive:))]
         fn did_become_active(&self, _notification: &AnyObject) {
             ghostty::set_focus(true);
+            refresh_sidebar();
+            quota_panel::refresh();
         }
 
         #[unsafe(method(applicationDidResignActive:))]
@@ -315,6 +222,31 @@ pub fn install_menu(mtm: MainThreadMarker, app: &NSApplication) {
     let app_menu = NSMenu::new(mtm);
     app_menu.addItem(&item(
         mtm,
+        "Hide Combe",
+        sel!(hide:),
+        None,
+        "h",
+        NSEventModifierFlags::Command,
+    ));
+    app_menu.addItem(&item(
+        mtm,
+        "Hide Others",
+        sel!(hideOtherApplications:),
+        None,
+        "h",
+        NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
+    ));
+    app_menu.addItem(&item(
+        mtm,
+        "Show All",
+        sel!(unhideAllApplications:),
+        None,
+        "",
+        NSEventModifierFlags::empty(),
+    ));
+    app_menu.addItem(&NSMenuItem::separatorItem(mtm));
+    app_menu.addItem(&item(
+        mtm,
         "Quit Combe",
         sel!(terminate:),
         None,
@@ -327,7 +259,13 @@ pub fn install_menu(mtm: MainThreadMarker, app: &NSApplication) {
     menubar.addItem(&terminal_item);
     let terminal_menu = NSMenu::new(mtm);
     terminal_menu.setTitle(&NSString::from_str("Terminal"));
-    let entries: [(&str, objc2::runtime::Sel, &str, NSEventModifierFlags); 9] = [
+    let entries: [(&str, objc2::runtime::Sel, &str, NSEventModifierFlags); 10] = [
+        (
+            "Zoom Split",
+            sel!(toggleSplitZoom:),
+            "\r",
+            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
+        ),
         ("New Tab", sel!(newTab:), "t", NSEventModifierFlags::Command),
         (
             "Close",
@@ -391,6 +329,29 @@ pub fn install_menu(mtm: MainThreadMarker, app: &NSApplication) {
         NSEventModifierFlags::Command.union(NSEventModifierFlags::Control),
     ));
     view_item.setSubmenu(Some(&view_menu));
+
+    let window_item = NSMenuItem::new(mtm);
+    menubar.addItem(&window_item);
+    let window_menu = NSMenu::new(mtm);
+    window_menu.setTitle(&NSString::from_str("Window"));
+    window_menu.addItem(&item(
+        mtm,
+        "Minimize",
+        sel!(performMiniaturize:),
+        None,
+        "m",
+        NSEventModifierFlags::Command,
+    ));
+    window_menu.addItem(&item(
+        mtm,
+        "Close All Windows",
+        sel!(closeAllWindows:),
+        Some(&commands),
+        "w",
+        NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
+    ));
+    window_item.setSubmenu(Some(&window_menu));
+    app.setWindowsMenu(Some(&window_menu));
 
     app.setMainMenu(Some(&menubar));
 }
@@ -500,13 +461,21 @@ pub fn open(mtm: MainThreadMarker) {
     );
     right.addSubview(&tab_bar);
 
+    let status_h = quota_panel::mount(
+        mtm,
+        &right,
+        right_frame.size.width,
+        quota_window_live,
+        layout_chrome,
+    );
+
     let content = NSView::initWithFrame(
         NSView::alloc(mtm),
         NSRect::new(
-            NSPoint::new(0.0, 0.0),
+            NSPoint::new(0.0, status_h),
             NSSize::new(
                 right_frame.size.width,
-                right_frame.size.height - TOP_BAR_HEIGHT,
+                (right_frame.size.height - TOP_BAR_HEIGHT - status_h).max(0.0),
             ),
         ),
     );
@@ -560,6 +529,7 @@ pub fn open(mtm: MainThreadMarker) {
             tab_bar: tab_bar.clone(),
             content: content.clone(),
             tabs: Tabs::default(),
+            repos: Vec::new(),
             collapsed_repos: HashSet::new(),
             sidebar_width: habits::SIDEBAR_WIDTH,
             sidebar_height: Cell::new(0.0),
@@ -574,7 +544,8 @@ pub fn open(mtm: MainThreadMarker) {
     window.center();
     window.makeKeyAndOrderFront(None);
 
-    rebuild_sidebar();
+    refresh_sidebar();
+    quota_panel::start();
     if let Some(first) = first_row() {
         dispatch(Click::Open(first.0, first.1));
     }
@@ -611,10 +582,11 @@ fn icon_button(
 }
 
 fn first_row() -> Option<(String, String)> {
-    let repos = sidebar::repos();
-    let repo = repos.first()?;
-    let row = repo.rows.first()?;
-    Some((row.path.to_string_lossy().into_owned(), row.label.clone()))
+    STATE.with(|state| {
+        let state = state.borrow();
+        let row = state.as_ref()?.repos.first()?.rows.first()?;
+        Some((row.path.to_string_lossy().into_owned(), row.label.clone()))
+    })
 }
 
 fn dispatch(click: Click) {
@@ -680,7 +652,7 @@ fn add_repo() {
         .map(|path| PathBuf::from(path.to_string()))
         .collect();
     sidebar::add(&paths);
-    rebuild_sidebar();
+    refresh_sidebar();
 }
 
 fn open_worktree(path: &str, name: &str) {
@@ -705,7 +677,7 @@ fn new_tab(path: &str, name: &str) {
         state.tabs.push(path.to_owned(), name.to_owned(), root);
     });
     sync_tabs();
-    rebuild_sidebar();
+    refresh_sidebar();
     focus_active();
 }
 
@@ -721,16 +693,68 @@ fn activate_tab(id: u64) {
 }
 
 fn request_close_tab(id: u64) {
-    let last = STATE.with(|state| {
-        state
-            .borrow()
-            .as_ref()
-            .is_none_or(|state| state.tabs.siblings(id) <= 1)
+    let plan = STATE.with(|state| {
+        let state = state.borrow();
+        let state = state.as_ref()?;
+        let tab = state.tabs.get(id)?;
+        let last = state.tabs.siblings(id) <= 1;
+        let current = state.tabs.current() == Some(tab.workspace.as_str());
+        let other = if last && current {
+            state.tabs.other(&tab.workspace)
+        } else {
+            None
+        };
+        Some((last, current, other))
     });
-    if last {
+    let Some((last, current, other)) = plan else {
+        return;
+    };
+    if last && current {
+        if let Some(other) = other {
+            close_tab(id);
+            activate_tab(other);
+        } else {
+            close_window();
+        }
         return;
     }
     close_tab(id);
+    if last {
+        rebuild_sidebar();
+    }
+}
+
+fn reveal_window() {
+    STATE.with(|state| {
+        let state = state.borrow();
+        let Some(state) = state.as_ref() else { return };
+        if state.window.isMiniaturized() {
+            state.window.deminiaturize(None);
+        }
+        state.window.makeKeyAndOrderFront(None);
+    });
+}
+
+fn close_window() {
+    STATE.with(|state| {
+        let state = state.borrow();
+        let Some(state) = state.as_ref() else { return };
+        state.window.performClose(None);
+    });
+}
+
+fn close_all_windows() {
+    let mtm = MainThreadMarker::new().expect("main thread");
+    let app = NSApplication::sharedApplication(mtm);
+    let listed = app.windows();
+    let windows: Vec<Retained<NSWindow>> = (0..listed.count())
+        .map(|index| listed.objectAtIndex(index))
+        .collect();
+    for window in windows {
+        if window.styleMask().contains(NSWindowStyleMask::Titled) {
+            window.performClose(None);
+        }
+    }
 }
 
 fn close_tab(id: u64) {
@@ -749,6 +773,54 @@ fn close_tab(id: u64) {
     focus_active();
 }
 
+fn toggle_split_zoom() {
+    let Some(view) = focused_surface() else {
+        return;
+    };
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let Some(state) = state.as_mut() else { return };
+        let Some(id) = state.tabs.active_id() else {
+            return;
+        };
+        let Some(tab) = state.tabs.get_mut(id) else {
+            return;
+        };
+        if let Some(zoom) = tab.zoom.take() {
+            zoom.restore();
+        } else {
+            tab.zoom = split::Zoom::new(&tab.root, &view);
+        }
+    });
+    sync_tabs();
+    if let Some(window) = view.window() {
+        window.makeFirstResponder(Some(&*view));
+    }
+}
+
+fn restore_zoom(view: &SurfaceView) {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let Some(state) = state.as_mut() else { return };
+        let id = state
+            .tabs
+            .items()
+            .iter()
+            .find(|tab| {
+                split::surfaces(&tab.root)
+                    .iter()
+                    .any(|leaf| std::ptr::eq(&**leaf, view))
+            })
+            .map(|tab| tab.id);
+        if let Some(tab) = id.and_then(|id| state.tabs.get_mut(id))
+            && let Some(zoom) = tab.zoom.take()
+        {
+            zoom.restore();
+        }
+    });
+    sync_tabs();
+}
+
 fn close_focused() {
     let Some(view) = focused_surface() else {
         return;
@@ -764,6 +836,7 @@ fn close_focused() {
         request_close_tab(id);
         return;
     }
+    restore_zoom(&view);
     split::close(&view);
     focus_active();
 }
@@ -773,6 +846,7 @@ fn divide(vertical: bool) {
     let Some(view) = focused_surface() else {
         return;
     };
+    restore_zoom(&view);
     let cwd = view.cwd();
     let Some(fresh) = split::divide(mtm, &view, vertical, &cwd) else {
         return;
@@ -844,8 +918,7 @@ fn focused_surface() -> Option<Retained<SurfaceView>> {
         if let Some(view) = responder_surface(state) {
             return Some(view);
         }
-        let tab = state.tabs.active()?;
-        split::surfaces(&tab.root).into_iter().next()
+        state.tabs.active()?.focused_surface()
     })
 }
 
@@ -858,7 +931,7 @@ pub fn refresh_labels() {
             return false;
         };
         let focused = responder_surface(state);
-        let updates: Vec<(u64, String)> = state
+        let updates: Vec<_> = state
             .tabs
             .items()
             .iter()
@@ -872,16 +945,23 @@ pub fn refresh_labels() {
                             .any(|leaf| std::ptr::eq(&**leaf, &***view as *const SurfaceView))
                     })
                     .cloned()
-                    .or_else(|| leaves.into_iter().next());
+                    .or_else(|| tab.focused_surface());
                 let label = view
+                    .as_ref()
                     .and_then(|view| view.title())
                     .unwrap_or_else(|| tab.name.clone());
-                (tab.id, label)
+                (tab.id, label, view)
             })
             .collect();
-        updates.into_iter().fold(false, |changed, (id, label)| {
-            state.tabs.set_label(id, label) || changed
-        })
+        updates
+            .into_iter()
+            .fold(false, |changed, (id, label, view)| {
+                let tab = state.tabs.get_mut(id).expect("existing tab");
+                let changed = changed || tab.label != label;
+                tab.label = label;
+                tab.focused = view;
+                changed
+            })
     });
     if changed {
         sync_tabs();
@@ -892,8 +972,7 @@ fn focus_active() {
     let Some(view) = STATE.with(|state| {
         let state = state.borrow();
         let state = state.as_ref()?;
-        let tab = state.tabs.active()?;
-        split::surfaces(&tab.root).into_iter().next()
+        state.tabs.active()?.focused_surface()
     }) else {
         return;
     };
@@ -913,7 +992,7 @@ fn sync_tabs() {
             let hidden = Some(tab.id) != active;
             tab.root.setHidden(hidden);
             for view in split::surfaces(&tab.root) {
-                view.set_occluded(hidden);
+                view.set_occluded(hidden || view.isHiddenOrHasHiddenAncestor());
             }
         }
 
@@ -925,7 +1004,10 @@ fn sync_tabs() {
         let mut x = 8.0;
         for tab in state.tabs.visible() {
             let frame = NSRect::new(NSPoint::new(x, y), NSSize::new(TAB_WIDTH, TAB_HEIGHT));
-            let view = ClickView::new(mtm, frame, &tab.label, 12.0, 28.0, Click::SelectTab(tab.id));
+            let id = tab.id;
+            let view = ClickView::new(mtm, frame, &tab.label, 12.0, 28.0, move || {
+                dispatch(Click::SelectTab(id))
+            });
             view.dim_when_idle();
             view.set_selected(Some(tab.id) == active);
             state.tab_bar.addSubview(&view);
@@ -939,7 +1021,7 @@ fn sync_tabs() {
                 "\u{00D7}",
                 6.0,
                 0.0,
-                Click::CloseTab(tab.id),
+                move || dispatch(Click::CloseTab(id)),
             );
             close.dim_when_idle();
             state.tab_bar.addSubview(&close);
@@ -952,16 +1034,25 @@ fn sync_tabs() {
             "+",
             10.0,
             0.0,
-            Click::NewTab,
+            || dispatch(Click::NewTab),
         );
         plus.dim_when_idle();
         state.tab_bar.addSubview(&plus);
     });
 }
 
+fn refresh_sidebar() {
+    let repos = sidebar::repos();
+    STATE.with(|state| {
+        if let Some(state) = state.borrow_mut().as_mut() {
+            state.repos = repos;
+        }
+    });
+    rebuild_sidebar();
+}
+
 fn rebuild_sidebar() {
     let mtm = MainThreadMarker::new().expect("main thread");
-    let repos = sidebar::repos();
     STATE.with(|state| {
         let state = state.borrow();
         let Some(state) = state.as_ref() else { return };
@@ -969,7 +1060,7 @@ fn rebuild_sidebar() {
         let clip = state.sidebar.contentView().frame().size;
         let width = clip.width;
         let mut height = 12.0;
-        for repo in &repos {
+        for repo in &state.repos {
             height += HEADER_HEIGHT;
             if !state.collapsed_repos.contains(&repo.path) {
                 height += repo.rows.len() as f64 * ROW_HEIGHT;
@@ -986,9 +1077,10 @@ fn rebuild_sidebar() {
         };
 
         let mut y = 6.0;
-        for repo in &repos {
+        for repo in &state.repos {
             let collapsed = state.collapsed_repos.contains(&repo.path);
             let arrow = if collapsed { "▸" } else { "▾" };
+            let path = repo.path.clone();
             let header = ClickView::new(
                 mtm,
                 NSRect::new(
@@ -998,12 +1090,10 @@ fn rebuild_sidebar() {
                 &format!("{arrow} {}", repo.name),
                 2.0,
                 8.0,
-                Click::ToggleRepo(repo.path.clone()),
+                move || dispatch(Click::ToggleRepo(path.clone())),
             );
             header.dim_when_idle();
-            if let Some(label) = header.ivars().label.borrow().as_ref() {
-                label.setFont(Some(&NSFont::boldSystemFontOfSize(habits::FONT_SIZE)));
-            }
+            header.set_font(&NSFont::boldSystemFontOfSize(habits::FONT_SIZE));
             header.setAccessibilityElement(true);
             header.setAccessibilityRole(Some(&NSString::from_str("AXButton")));
             header.setAccessibilityLabel(Some(&NSString::from_str(&repo.name)));
@@ -1021,16 +1111,23 @@ fn rebuild_sidebar() {
                     NSPoint::new(8.0, y),
                     NSSize::new(width - 16.0, ROW_HEIGHT - 2.0),
                 );
-                let view = ClickView::new(
-                    mtm,
-                    frame,
-                    &row.label,
-                    18.0,
-                    24.0,
-                    Click::Open(path.clone(), row.label.clone()),
-                );
+                let opened = state.tabs.opened(&path);
+                let target = path.clone();
+                let label = row.label.clone();
+                let view = ClickView::new(mtm, frame, &row.label, 18.0, 24.0, move || {
+                    dispatch(Click::Open(target.clone(), label.clone()))
+                });
                 view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
                 view.set_selected(state.tabs.current() == Some(path.as_str()));
+                view.set_opened(opened);
+                view.setAccessibilityElement(true);
+                view.setAccessibilityRole(Some(&NSString::from_str("AXButton")));
+                let access = if opened {
+                    format!("{}, open", row.label)
+                } else {
+                    format!("{}, not open", row.label)
+                };
+                view.setAccessibilityLabel(Some(&NSString::from_str(&access)));
                 if row.pinned {
                     let star = NSTextField::labelWithString(&NSString::from_str("\u{2605}"), mtm);
                     star.setFrame(NSRect::new(
@@ -1054,20 +1151,6 @@ fn rebuild_sidebar() {
     });
     layout_chrome();
 }
-
-define_class!(
-    #[unsafe(super(NSView))]
-    #[thread_kind = MainThreadOnly]
-    #[name = "CombeFlippedView"]
-    struct FlippedView;
-
-    impl FlippedView {
-        #[unsafe(method(isFlipped))]
-        fn is_flipped(&self) -> bool {
-            true
-        }
-    }
-);
 
 define_class!(
     #[unsafe(super(NSView))]
@@ -1279,6 +1362,14 @@ fn layout_chrome() {
                 NSPoint::new(offset, size.height - TOP_BAR_HEIGHT),
                 NSSize::new((size.width - offset).max(0.0), TOP_BAR_HEIGHT),
             ));
+            let status_h = quota_panel::layout(size.width);
+            state.content.setFrame(NSRect::new(
+                NSPoint::new(0.0, status_h),
+                NSSize::new(
+                    size.width,
+                    (size.height - TOP_BAR_HEIGHT - status_h).max(0.0),
+                ),
+            ));
         }
     });
 }
@@ -1301,6 +1392,7 @@ unsafe extern "C" fn drain_pending(_: *mut c_void) {
 }
 
 fn close_leaf(view: &SurfaceView) {
+    restore_zoom(view);
     let owner = STATE.with(|state| {
         let state = state.borrow();
         let state = state.as_ref()?;
@@ -1317,20 +1409,23 @@ fn close_leaf(view: &SurfaceView) {
     });
     let Some((id, leaves)) = owner else { return };
     if leaves <= 1 {
-        let respawn = STATE.with(|state| {
-            let state = state.borrow();
-            let state = state.as_ref()?;
-            let tab = state.tabs.get(id)?;
-            let last = state.tabs.siblings(id) <= 1
-                && state.tabs.current() == Some(tab.workspace.as_str());
-            last.then(|| (tab.workspace.clone(), tab.name.clone()))
-        });
-        close_tab(id);
-        if let Some((workspace, name)) = respawn {
-            new_tab(&workspace, &name);
-        }
+        request_close_tab(id);
         return;
     }
     split::close(view);
     focus_active();
+}
+
+fn quota_window_live() -> bool {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return false;
+    };
+    let active = NSApplication::sharedApplication(mtm).isActive();
+    active
+        && STATE.with(|state| {
+            let state = state.borrow();
+            state
+                .as_ref()
+                .is_some_and(|state| state.window.isKeyWindow() && !state.window.isMiniaturized())
+        })
 }

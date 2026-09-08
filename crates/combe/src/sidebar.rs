@@ -15,7 +15,9 @@ pub struct Repo {
 }
 
 pub fn repos() -> Vec<Repo> {
-    let state = read_state();
+    let Some(state) = read_state() else {
+        return Vec::new();
+    };
     let found = match catalog(&state) {
         Ok(found) => found,
         Err(err) => {
@@ -56,7 +58,9 @@ pub fn add(paths: &[PathBuf]) {
         eprintln!("combe: cannot resolve the application support directory");
         return;
     };
-    let mut state = read_state();
+    let Some(mut state) = read_state() else {
+        return;
+    };
     for path in paths {
         if let Err(err) = add_repo(&mut state, path) {
             eprintln!("combe: {err}");
@@ -68,16 +72,16 @@ pub fn add(paths: &[PathBuf]) {
     }
 }
 
-fn read_state() -> State {
+fn read_state() -> Option<State> {
     let Some(file) = state_path() else {
         eprintln!("combe: cannot resolve the application support directory");
-        return State::default();
+        return None;
     };
     match load_state(&file) {
-        Ok(state) => state,
+        Ok(state) => Some(state),
         Err(err) => {
             eprintln!("combe: {err}");
-            State::default()
+            None
         }
     }
 }

@@ -53,17 +53,19 @@ NSWindow
     NSSplitView (vertical)
       NSView                      sidebar
         header spacer (40pt)
-        NSScrollView              repo groups, worktree rows, "+ Add repo"
+        NSScrollView              collapsible repo groups and worktree rows
       NSView                      right pane
         tab bar (40pt)            the selected worktree's tabs, per-tab close, "+"
         content                   one root per tab, every worktree's
           NSView (tab root)
             NSSplitView …         nested panes
               SurfaceView         one libghostty surface
-    sidebar toggle button         overlay, trailing edge of the sidebar
+    add repo and sidebar toggle   overlay, trailing edge of the sidebar
 ```
 
-The sidebar toggle lives on the content view rather than inside the sidebar, so collapsing the sidebar does not take the control away with it. While the sidebar is open the button tracks its trailing edge; collapsed, it falls back to a leading inset — 78pt to clear the traffic lights, 8pt in full screen where there are none.
+The add-repo `+` and sidebar toggle live on the content view rather than inside the sidebar, so both remain available when the sidebar collapses. While the sidebar is open the buttons track its trailing edge; collapsed, they fall back to a leading inset — 78pt to clear the traffic lights, 8pt in full screen where there are none. The tab bar leaves room for both buttons.
+
+Clicking a repo heading collapses or expands its worktree rows without closing terminals or changing the selected workspace. Collapsed groups are keyed by registered repo path and retained only for the current app run; all groups start expanded.
 
 Chrome geometry is a layout pass, not a one-shot. The content view overrides `layout`, and the split view delegate answers `splitViewDidResizeSubviews:`; between them every window resize, full-screen transition, divider drag, and collapse re-runs the same placement. Sidebar visibility is read back from `isSubviewCollapsed`, never cached, because a drag can collapse the pane without the app asking.
 

@@ -30,7 +30,7 @@ make install                 # /Applications/Combe.app and combe on PATH
 
 ## Use
 
-The sidebar lists registered repos and their worktrees. `+ Add repo` opens a folder picker. Click a row to open or focus a tab whose shell starts there. Combe never scans the disk for projects.
+The sidebar lists registered repos and their worktrees. The `+` button beside the sidebar toggle opens a folder picker. Click a repo heading to collapse or expand its worktrees; groups start expanded on launch. Click a worktree row to open or focus a tab whose shell starts there. Combe never scans the disk for projects.
 
 State lives at `~/Library/Application Support/combe/state.json`. Pins are read from it and shown as a star; toggling a pin from the window is not implemented yet.
 

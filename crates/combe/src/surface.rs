@@ -315,6 +315,12 @@ impl SurfaceView {
         }
     }
 
+    pub fn sync_appearance(&self) {
+        if let Some(surface) = self.handle() {
+            unsafe { sys::ghostty_surface_set_color_scheme(surface, ghostty::color_scheme()) };
+        }
+    }
+
     pub fn set_occluded(&self, occluded: bool) {
         if let Some(surface) = self.handle() {
             unsafe { sys::ghostty_surface_set_occlusion(surface, !occluded) };
@@ -376,6 +382,7 @@ impl SurfaceView {
         let surface = unsafe { sys::ghostty_surface_new(app, &config) };
         assert!(!surface.is_null(), "ghostty_surface_new failed");
         self.ivars().surface.set(surface);
+        self.sync_appearance();
 
         self.updateTrackingAreas();
         self.push_size();

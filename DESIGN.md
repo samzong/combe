@@ -71,7 +71,9 @@ Chrome geometry is a layout pass, not a one-shot. The content view overrides `la
 
 The delegate pins the sidebar's width when the window resizes, clamps a drag to 160–420pt, and widens the divider's hit area. The split view draws no divider while the sidebar is collapsed, and the layout pass invalidates it, because the chrome paints no background and would otherwise leave the old divider standing in the 40pt top bar.
 
-Nothing in the chrome paints its own background. The window is filled with `habits::BACKGROUND`, every chrome view is transparent, and Ghostty is configured with the same color, so the sidebar, the tab bar and the terminal are one surface separated only by a hairline divider. Chrome text uses `habits::FONT_SIZE`, the same number the terminal font is set to.
+The window and every terminal follow the macOS light or dark appearance, including changes while Combe is running. Both palettes are compiled into `habits.rs`; there is no appearance setting. The content view observes effective-appearance changes, updates the window background and Ghostty configuration, and forwards the color scheme to every terminal, including hidden tabs. New surfaces inherit the current scheme. Shells and split trees stay alive during the change.
+
+Every chrome view is transparent, and Ghostty uses the same background as the window, so the sidebar, tab bar and terminal are one surface separated only by a hairline divider. Chrome text and selection highlights use adaptive AppKit colors. Chrome text uses `habits::FONT_SIZE`, the same number the terminal font is set to.
 
 Every tab of every worktree lives in the same content view. Only the active tab of the selected worktree is unhidden; every surface everywhere else gets `ghostty_surface_set_occlusion(false)` and stops drawing. The selection is one pointer per worktree plus the current worktree, so the sidebar highlight and the tab bar cannot disagree.
 

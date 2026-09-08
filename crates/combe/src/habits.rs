@@ -20,6 +20,15 @@ pub const PALETTE: [&str; 16] = [
     "ffa198", "56d364", "e3b341", "79c0ff", "d2a8ff", "56d4dd", "ffffff",
 ];
 
+pub const LIGHT_PALETTE: [&str; 16] = [
+    "24292f", "cf222e", "116329", "4d2d00", "0969da", "8250df", "1b7c83", "6e7781", "57606a",
+    "a40e26", "1a7f37", "633c01", "218bff", "a475f9", "3192aa", "ffffff",
+];
+
+pub fn background(dark: bool) -> &'static str {
+    if dark { BACKGROUND } else { "ffffff" }
+}
+
 pub const PADDING_X: u16 = 8;
 pub const PADDING_Y: u16 = 6;
 pub const PADDING_BALANCE: bool = true;
@@ -40,7 +49,27 @@ pub const SIDEBAR_VISIBLE: bool = true;
 
 pub const ALLOW_OSC52_READ: bool = false;
 
-pub fn ghostty_config() -> String {
+pub fn ghostty_config(dark: bool) -> String {
+    let background = background(dark);
+    let (foreground, cursor, cursor_text, selection, selection_text, palette) = if dark {
+        (
+            FOREGROUND,
+            CURSOR_COLOR,
+            CURSOR_TEXT,
+            SELECTION_BACKGROUND,
+            SELECTION_FOREGROUND,
+            PALETTE,
+        )
+    } else {
+        (
+            "24292f",
+            "0969da",
+            "ffffff",
+            "b6e3ff",
+            "24292f",
+            LIGHT_PALETTE,
+        )
+    };
     let mut config = String::new();
     let _ = writeln!(config, "font-family = {FONT_FAMILY}");
     let _ = writeln!(config, "font-family = {FONT_FAMILY_CJK}");
@@ -49,13 +78,13 @@ pub fn ghostty_config() -> String {
         "font-codepoint-map = {CJK_CODEPOINTS}={FONT_FAMILY_CJK}"
     );
     let _ = writeln!(config, "font-size = {FONT_SIZE}");
-    let _ = writeln!(config, "background = {BACKGROUND}");
-    let _ = writeln!(config, "foreground = {FOREGROUND}");
-    let _ = writeln!(config, "cursor-color = {CURSOR_COLOR}");
-    let _ = writeln!(config, "cursor-text = {CURSOR_TEXT}");
-    let _ = writeln!(config, "selection-background = {SELECTION_BACKGROUND}");
-    let _ = writeln!(config, "selection-foreground = {SELECTION_FOREGROUND}");
-    for (index, color) in PALETTE.iter().enumerate() {
+    let _ = writeln!(config, "background = {background}");
+    let _ = writeln!(config, "foreground = {foreground}");
+    let _ = writeln!(config, "cursor-color = {cursor}");
+    let _ = writeln!(config, "cursor-text = {cursor_text}");
+    let _ = writeln!(config, "selection-background = {selection}");
+    let _ = writeln!(config, "selection-foreground = {selection_text}");
+    for (index, color) in palette.iter().enumerate() {
         let _ = writeln!(config, "palette = {index}={color}");
     }
     let _ = writeln!(config, "window-padding-x = {PADDING_X}");

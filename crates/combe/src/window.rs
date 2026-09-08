@@ -7,7 +7,7 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{ClassType, DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSAccessibility, NSAppearance, NSAppearanceCustomization, NSAppearanceNameDarkAqua,
+    NSAccessibility, NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
     NSApplication, NSApplicationDelegate, NSAutoresizingMaskOptions, NSBackingStoreType,
     NSBezierPath, NSButton, NSColor, NSEvent, NSEventModifierFlags, NSFont, NSImage,
     NSLineBreakMode, NSMenu, NSMenuItem, NSOpenPanel, NSScrollView, NSSplitView,
@@ -16,7 +16,7 @@ use objc2_app_kit::{
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{
-    MainThreadMarker, NSInteger, NSNotification, NSPoint, NSRect, NSSize, NSString,
+    MainThreadMarker, NSArray, NSInteger, NSNotification, NSPoint, NSRect, NSSize, NSString,
 };
 
 use crate::ghostty;
@@ -100,7 +100,7 @@ define_class!(
             if !self.ivars().selected.get() {
                 return;
             }
-            NSColor::colorWithWhite_alpha(1.0, 0.12).setFill();
+            NSColor::labelColor().colorWithAlphaComponent(0.12).setFill();
             NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(
                 self.bounds(),
                 PILL_RADIUS,
@@ -438,10 +438,6 @@ pub fn open(mtm: MainThreadMarker) {
     window.setTitle(&NSString::from_str("Combe"));
     window.setTitlebarAppearsTransparent(true);
     window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
-    window.setAppearance(
-        NSAppearance::appearanceNamed(unsafe { NSAppearanceNameDarkAqua }).as_deref(),
-    );
-    window.setBackgroundColor(Some(&hex(habits::BACKGROUND)));
     unsafe { window.setReleasedWhenClosed(false) };
 
     let split = SplitView::alloc(mtm).set_ivars(());
@@ -570,6 +566,7 @@ pub fn open(mtm: MainThreadMarker) {
         })
     });
 
+    sync_appearance();
     if !habits::SIDEBAR_VISIBLE {
         toggle_sidebar();
     }
@@ -1080,6 +1077,12 @@ define_class!(
     struct ChromeView;
 
     impl ChromeView {
+        #[unsafe(method(viewDidChangeEffectiveAppearance))]
+        fn view_did_change_effective_appearance(&self) {
+            let _: () = unsafe { msg_send![super(self), viewDidChangeEffectiveAppearance] };
+            ghostty::on_main(appearance_on_main);
+        }
+
         #[unsafe(method(layout))]
         fn layout(&self) {
             let _: () = unsafe { msg_send![super(self), layout] };
@@ -1191,6 +1194,36 @@ fn leading_inset(window: &NSWindow) -> f64 {
         FULLSCREEN_INSET
     } else {
         TRAFFIC_INSET
+    }
+}
+
+unsafe extern "C" fn appearance_on_main(_: *mut c_void) {
+    sync_appearance();
+}
+
+fn sync_appearance() {
+    let Some((window, surfaces)) = STATE.with(|state| {
+        let state = state.borrow();
+        let state = state.as_ref()?;
+        let surfaces: Vec<_> = state
+            .tabs
+            .items()
+            .iter()
+            .flat_map(|tab| split::surfaces(&tab.root))
+            .collect();
+        Some((state.window.clone(), surfaces))
+    }) else {
+        return;
+    };
+    let names = unsafe { NSArray::from_slice(&[NSAppearanceNameDarkAqua, NSAppearanceNameAqua]) };
+    let dark = window
+        .effectiveAppearance()
+        .bestMatchFromAppearancesWithNames(&names)
+        .is_some_and(|name| &*name == unsafe { NSAppearanceNameDarkAqua });
+    window.setBackgroundColor(Some(&hex(habits::background(dark))));
+    ghostty::set_appearance(dark);
+    for surface in surfaces {
+        surface.sync_appearance();
     }
 }
 

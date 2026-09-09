@@ -43,7 +43,7 @@ Repos are never discovered by walking the disk.
 | Terminal leaf | Full `libghostty` surface | Metal renderer, PTY, VT, and CoreText in one embedded surface. Ghostty owns its `IOSurfaceLayer` and drives its own frames. |
 | Ghostty build | `vendor/ghostty` submodule, built by `zig`, linked statically | `crates/ghostty-sys` runs `zig build -Dapp-runtime=none` and bindgen over `include/ghostty.h`. Nothing is invented beyond that header. |
 | Git | User's `git` binary | `worktree list --porcelain` is the catalog. Git 2.25 is the floor. |
-| State | `~/Library/Application Support/combe/state.json` | Registered repo paths and pins. Nothing else persists. |
+| State | `~/Library/Application Support/combe/state.json` | Registered repo paths. Nothing else persists. |
 | Preferences | `crates/combe/src/habits.rs` | Font, colors, padding, shell, window size. Compiled in, not read from disk. |
 
 Rejected:
@@ -78,7 +78,7 @@ NSWindow
 
 The add-repo `+` and sidebar toggle live on the content view rather than inside the sidebar, so both remain available when the sidebar collapses. While the sidebar is open the buttons track its trailing edge; collapsed, they fall back to a leading inset — 78pt to clear the traffic lights, 8pt in full screen where there are none. The tab bar leaves room for both buttons.
 
-Clicking a repo heading collapses or expands its worktree rows without closing terminals or changing the selected workspace. Collapsed groups are keyed by registered repo path and retained only for the current app run; all groups start expanded. Each worktree row shows a session mark: green when that workspace has a tab this app run, dim when it does not. The mark is not persisted and is not a pin.
+Clicking a repo heading collapses or expands its worktree rows without closing terminals or changing the selected workspace. Collapsed groups are keyed by registered repo path and retained only for the current app run; all groups start expanded. Each worktree row shows a session mark: green when that workspace has a tab this app run, dim when it does not. The mark is not persisted.
 
 Chrome geometry is a layout pass, not a one-shot. The content view overrides `layout`, and the split view delegate answers `splitViewDidResizeSubviews:`; between them every window resize, full-screen transition, divider drag, and collapse re-runs the same placement. Sidebar visibility is read back from `isSubviewCollapsed`, never cached, because a drag can collapse the pane without the app asking.
 
@@ -104,21 +104,28 @@ Zooming moves the focused surface above its hidden split tree and leaves a place
 
 Command-modified keys belong to the app and never reach the PTY. Control sequences always reach the PTY. Releasing a selection on a surface copies that text to the system clipboard (`copy-on-select`). Cmd-C still copies. Terminal clipboard reads are denied by default; ordinary paste remains available, while unsafe pastes are denied with the system alert sound. Cmd-click on a terminal URL sends `GHOSTTY_ACTION_OPEN_URL`; Combe opens `http`, `https`, and `mailto` in the default handler.
 
+Search lives in libghostty. `GHOSTTY_ACTION_START_SEARCH` adds a find bar as a subview in the top-right corner of that surface; every edit sends `search:<needle>` through `ghostty_surface_binding_action`, and `SEARCH_TOTAL` / `SEARCH_SELECTED` feed the match counter. `END_SEARCH` removes the bar and returns focus to the surface.
+
 | Key | Action |
 | --- | --- |
-| Cmd-Q | Quit |
+| Cmd-Q | Quit. Asks first when any terminal still runs a foreground process |
 | Cmd-H | Hide Combe |
 | Opt-Cmd-H | Hide other applications |
 | Cmd-M | Minimize the window |
 | Cmd-T | New tab |
-| Cmd-W | Close pane, or the tab when it is the last pane. The last tab of a workspace ends that session; the window closes only when no sessions remain |
+| Cmd-W | Close pane, or the tab when it is the last pane. Asks first when the pane, or any pane of the tab, still runs a foreground process. The last tab of a workspace ends that session; the window closes only when no sessions remain |
 | Opt-Cmd-W | Close every titled window |
 | Cmd-D | Split right |
 | Cmd-Shift-D | Split down |
 | Cmd-Shift-Return | Zoom the focused split, or restore its layout |
-| Cmd-Alt-Left / Right | Previous / next tab |
+| Cmd-Shift-[ / ] | Previous / next tab |
+| Cmd-1 … Cmd-8 / Cmd-9 | Jump to tab N / the last tab, through Ghostty's `goto_tab` and `last_tab` bindings |
+| Cmd-Alt-Arrows | Focus the neighbouring split in that direction |
+| Cmd-[ / ] | Focus the previous / next split, through Ghostty's `goto_split` binding |
+| Cmd-F | Open the find bar on the focused pane, through Ghostty's `start_search`. Return / Shift-Return step through matches, Escape or × closes it |
+| Cmd-G / Cmd-Shift-G | Next / previous match |
 | Cmd-B | Fold or unfold the sidebar |
-| Cmd-C / Cmd-V | Copy / paste through `ghostty_surface_binding_action` |
+| Cmd-C / Cmd-V | Copy / paste through `ghostty_surface_binding_action`; while a text field such as the find bar has focus they act on that field |
 | Ctrl-Cmd-F | Toggle full screen, the standard `toggleFullScreen:` item in a View menu |
 
 ## CLI
@@ -127,7 +134,7 @@ One binary, two entry points, separated by `argv[0]`. Running it as `<something>
 
 `argv[0]` rather than `current_exe()`, because `make install` symlinks `combe` onto `PATH` and `current_exe()` resolves that symlink back into the bundle.
 
-`list`, `add`, `remove`, and `cleanup` read and write `state.json` and never touch AppKit. `cleanup` drops registered repo paths and pins whose directory no longer exists, which is the recovery path for a checkout deleted outside Combe.
+`list`, `add`, `remove`, and `cleanup` read and write `state.json` and never touch AppKit. `cleanup` drops registered repo paths whose directory no longer exists, which is the recovery path for a checkout deleted outside Combe.
 
 Both the GUI and CLI stop state edits when reading the state file fails. Saves atomically replace the file, preserving the previous contents if writing fails.
 
@@ -139,11 +146,11 @@ A **repo** is a path the user added. A **worktree** is one record from `git work
 2. For each repo, `git -C <path> worktree list --porcelain`
 3. If the registered path is not a directory, skip it and keep the rest. Leave it in `state.json`.
 4. If `git rev-parse --git-dir` fails, emit one folder row
-5. Merge pins
+5. Skip worktrees Git reports as `prunable`; their directory is gone
 
-Identity is the resolved worktree path. Pins are a set of those paths.
+Identity is the resolved worktree path.
 
-The window refreshes the catalog on startup, when the app becomes active, and after adding repos or opening a new tab. Tab selection and session marks reuse that catalog without running Git.
+The window loads the catalog synchronously on startup so the first workspace can open at once. Every later refresh, when the app becomes active, after adding repos or opening a new tab, or when the user clicks an empty part of the sidebar, runs Git on a background thread and applies the result on the main queue; a refresh requested during a scan runs once more after it. Tab selection and session marks reuse that catalog without running Git.
 
 `crates/combe-catalog` has no AppKit dependency. `cargo test -p combe-catalog` is the fast loop.
 
@@ -173,7 +180,7 @@ The quota panel owns its cached usage, polling state, and views. The window moun
 
 1. **Window.** Window, sidebar, one working zsh. Done.
 2. **Desk.** Tabs, draggable splits, correct focus, hidden tabs stop drawing. Done.
-3. **Habits (current).** Pin toggling from the sidebar, worktree history back and forward, a default split layout in `habits.rs`.
+3. **Habits (current).** Worktree history back and forward, a default split layout in `habits.rs`.
 4. **Stop.** No further features.
 
 ## Decisions

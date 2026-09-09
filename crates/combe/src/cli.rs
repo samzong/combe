@@ -90,8 +90,7 @@ fn list() -> ExitCode {
         }
         println!("{}", repo.path.display());
         for row in rows {
-            let pin = if row.pinned { '*' } else { ' ' };
-            println!("  {pin} {:<28} {}", row.label(), row.path.display());
+            println!("  {:<28} {}", row.label(), row.path.display());
         }
     }
     ExitCode::SUCCESS
@@ -150,9 +149,6 @@ fn clean() -> ExitCode {
         }
         for path in &cleaned.repos {
             println!("dropped repo {}", path.display());
-        }
-        for path in &cleaned.pinned {
-            println!("dropped pin  {}", path.display());
         }
         true
     })

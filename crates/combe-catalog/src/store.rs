@@ -22,8 +22,6 @@ pub enum StoreError {
 pub struct State {
     #[serde(default)]
     pub repos: Vec<Repo>,
-    #[serde(default)]
-    pub pinned: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,16 +93,12 @@ mod tests {
             repos: vec![Repo {
                 path: PathBuf::from("/tmp/repo"),
             }],
-            pinned: vec![PathBuf::from("/tmp/repo")],
         };
         save_state(&path, &state).unwrap();
         assert_eq!(load_state(&path).unwrap(), state);
 
         let mut previous = std::fs::File::open(&path).unwrap();
-        let updated = State {
-            pinned: Vec::new(),
-            ..state.clone()
-        };
+        let updated = State { repos: Vec::new() };
         save_state(&path, &updated).unwrap();
         assert_eq!(load_state(&path).unwrap(), updated);
 

@@ -15,6 +15,7 @@ use objc2_foundation::{
     MainThreadMarker, NSArray, NSAttributedString, NSPoint, NSRange, NSRect, NSSize, NSString,
 };
 
+use crate::find_bar::FindBar;
 use crate::ghostty;
 
 const NX_DEVICE_RSHIFT: usize = 0x00000004;
@@ -29,6 +30,7 @@ pub struct SurfaceIvars {
     marked_text: RefCell<String>,
     key_text: RefCell<Option<Vec<String>>>,
     content_size: Cell<NSSize>,
+    find: RefCell<Option<Retained<FindBar>>>,
 }
 
 define_class!(
@@ -303,6 +305,7 @@ impl SurfaceView {
             marked_text: RefCell::new(String::new()),
             key_text: RefCell::new(None),
             content_size: Cell::new(frame.size),
+            find: RefCell::new(None),
         };
         let this = Self::alloc(mtm).set_ivars(ivars);
         unsafe { msg_send![super(this), initWithFrame: frame] }
@@ -341,6 +344,48 @@ impl SurfaceView {
             return;
         }
         *self.ivars().title.borrow_mut() = Some(title.to_owned());
+    }
+
+    pub fn needs_confirm_quit(&self) -> bool {
+        self.handle()
+            .is_some_and(|surface| unsafe { sys::ghostty_surface_needs_confirm_quit(surface) })
+    }
+
+    pub fn start_search(&self, needle: &str) {
+        let bar = self.ivars().find.borrow().clone();
+        let bar = match bar {
+            Some(bar) => bar,
+            None => {
+                let mtm = MainThreadMarker::from(self);
+                let bar = FindBar::new(mtm, self.bounds().size);
+                self.addSubview(&bar);
+                *self.ivars().find.borrow_mut() = Some(bar.clone());
+                bar
+            }
+        };
+        bar.focus(needle);
+    }
+
+    pub fn end_search(&self) {
+        let Some(bar) = self.ivars().find.borrow_mut().take() else {
+            return;
+        };
+        bar.removeFromSuperview();
+        if let Some(window) = self.window() {
+            window.makeFirstResponder(Some(self));
+        }
+    }
+
+    pub fn set_search_total(&self, total: Option<usize>) {
+        if let Some(bar) = self.ivars().find.borrow().as_ref() {
+            bar.set_total(total);
+        }
+    }
+
+    pub fn set_search_selected(&self, selected: Option<usize>) {
+        if let Some(bar) = self.ivars().find.borrow().as_ref() {
+            bar.set_selected(selected);
+        }
     }
 
     pub fn binding_action(&self, action: &str) {

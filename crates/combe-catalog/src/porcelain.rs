@@ -11,6 +11,7 @@ pub struct WorktreeRecord {
     pub branch: Option<String>,
     pub head: Option<String>,
     pub bare: bool,
+    pub prunable: bool,
 }
 
 pub fn parse_worktree_list(output: &str) -> Vec<WorktreeRecord> {
@@ -19,22 +20,19 @@ pub fn parse_worktree_list(output: &str) -> Vec<WorktreeRecord> {
 
     for raw in output.split('\n') {
         if raw.is_empty() {
-            if let Some(record) = current.take() {
-                records.push(record);
-            }
+            push(&mut records, current.take());
             continue;
         }
 
         if let Some(path) = raw.strip_prefix("worktree ") {
-            if let Some(record) = current.take() {
-                records.push(record);
-            }
+            push(&mut records, current.take());
             current = Some(WorktreeRecord {
                 path: std::path::PathBuf::from(path),
                 kind: WorktreeKind::Git,
                 branch: None,
                 head: None,
                 bare: false,
+                prunable: false,
             });
             continue;
         }
@@ -51,13 +49,19 @@ pub fn parse_worktree_list(output: &str) -> Vec<WorktreeRecord> {
             record.branch = Some("(detached)".to_string());
         } else if raw == "bare" {
             record.bare = true;
+        } else if raw == "prunable" || raw.starts_with("prunable ") {
+            record.prunable = true;
         }
     }
 
-    if let Some(record) = current {
+    push(&mut records, current);
+    records
+}
+
+fn push(records: &mut Vec<WorktreeRecord>, record: Option<WorktreeRecord>) {
+    if let Some(record) = record.filter(|record| !record.prunable) {
         records.push(record);
     }
-    records
 }
 
 #[cfg(test)]
@@ -93,8 +97,14 @@ bare
 worktree /tmp/detached
 HEAD fedcba9876543210fedcba9876543210fedcba98
 detached
+
+worktree /tmp/deleted
+HEAD fedcba9876543210fedcba9876543210fedcba98
+branch refs/heads/gone
+prunable gitdir file points to non-existent location
 ";
         let records = parse_worktree_list(output);
+        assert_eq!(records.len(), 2);
         assert!(records[0].bare);
         assert_eq!(records[1].branch.as_deref(), Some("(detached)"));
     }

@@ -9,7 +9,6 @@ Use these words in code, commits, and docs. If a new domain word sticks, add it 
 | Worktree | One row from `git worktree list --porcelain` for a registered git repo. |
 | Folder workspace | A registered path that is not a git checkout. Shown as a single row. |
 | Workspace | The selected worktree or folder workspace. The shell cwd of a tab. |
-| Pin | A persisted flag on a workspace path. Survives refresh. |
 | Catalog | The merge of `state.json` + git porcelain + folder fallback. Missing registered paths are skipped. |
 | Sidebar | The left catalog list. Folded with ⌘B. |
 | Session mark | Sidebar dot on a worktree row. Green when that workspace has a tab this app run; dim when it does not. |

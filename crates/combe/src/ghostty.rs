@@ -9,6 +9,9 @@ use objc2_app_kit::{NSBeep, NSPasteboard, NSPasteboardTypeString, NSWorkspace};
 use objc2_foundation::{MainThreadMarker, NSString, NSURL};
 
 use crate::habits;
+use crate::surface::SurfaceView;
+use crate::window::{SplitTarget, TabTarget};
+use objc2::rc::Retained;
 
 thread_local! {
     static APP: Cell<sys::ghostty_app_t> = const { Cell::new(ptr::null_mut()) };
@@ -59,6 +62,11 @@ pub fn set_focus(focused: bool) {
     if !handle.is_null() {
         unsafe { sys::ghostty_app_set_focus(handle, focused) };
     }
+}
+
+pub fn needs_confirm_quit() -> bool {
+    let handle = app();
+    !handle.is_null() && unsafe { sys::ghostty_app_needs_confirm_quit(handle) }
 }
 
 pub fn color_scheme() -> sys::ghostty_color_scheme_e {
@@ -145,32 +153,100 @@ unsafe extern "C" fn action(
     target: sys::ghostty_target_s,
     action: sys::ghostty_action_s,
 ) -> bool {
-    if action.tag == sys::GHOSTTY_ACTION_OPEN_URL {
-        return open_url_action(action);
+    match action.tag {
+        sys::GHOSTTY_ACTION_OPEN_URL => open_url_action(action),
+        sys::GHOSTTY_ACTION_SET_TITLE | sys::GHOSTTY_ACTION_SET_TAB_TITLE => {
+            let Some(view) = surface_view(target) else {
+                return false;
+            };
+            let title = unsafe { action.action.set_title.title };
+            if title.is_null() {
+                return false;
+            }
+            view.set_title(&unsafe { CStr::from_ptr(title) }.to_string_lossy());
+            crate::window::refresh_labels();
+            true
+        }
+        sys::GHOSTTY_ACTION_GOTO_TAB => {
+            if surface_view(target).is_none() {
+                return false;
+            }
+            let tab = match unsafe { action.action.goto_tab } {
+                sys::GHOSTTY_GOTO_TAB_PREVIOUS => TabTarget::Previous,
+                sys::GHOSTTY_GOTO_TAB_NEXT => TabTarget::Next,
+                sys::GHOSTTY_GOTO_TAB_LAST => TabTarget::Last,
+                index if index > 0 => TabTarget::Index(index as usize),
+                _ => return false,
+            };
+            crate::window::goto_tab(tab)
+        }
+        sys::GHOSTTY_ACTION_GOTO_SPLIT => {
+            let Some(view) = surface_view(target) else {
+                return false;
+            };
+            let split = match unsafe { action.action.goto_split } {
+                sys::GHOSTTY_GOTO_SPLIT_PREVIOUS => SplitTarget::Previous,
+                sys::GHOSTTY_GOTO_SPLIT_NEXT => SplitTarget::Next,
+                sys::GHOSTTY_GOTO_SPLIT_UP => SplitTarget::Up,
+                sys::GHOSTTY_GOTO_SPLIT_LEFT => SplitTarget::Left,
+                sys::GHOSTTY_GOTO_SPLIT_DOWN => SplitTarget::Down,
+                sys::GHOSTTY_GOTO_SPLIT_RIGHT => SplitTarget::Right,
+                _ => return false,
+            };
+            crate::window::goto_split(&view, split)
+        }
+        sys::GHOSTTY_ACTION_START_SEARCH => {
+            let Some(view) = surface_view(target) else {
+                return false;
+            };
+            let needle = unsafe { action.action.start_search.needle };
+            let needle = if needle.is_null() {
+                String::new()
+            } else {
+                unsafe { CStr::from_ptr(needle) }
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            view.start_search(&needle);
+            true
+        }
+        sys::GHOSTTY_ACTION_END_SEARCH => {
+            let Some(view) = surface_view(target) else {
+                return false;
+            };
+            view.end_search();
+            true
+        }
+        sys::GHOSTTY_ACTION_SEARCH_TOTAL => {
+            let Some(view) = surface_view(target) else {
+                return false;
+            };
+            let total = unsafe { action.action.search_total.total };
+            view.set_search_total(usize::try_from(total).ok());
+            true
+        }
+        sys::GHOSTTY_ACTION_SEARCH_SELECTED => {
+            let Some(view) = surface_view(target) else {
+                return false;
+            };
+            let selected = unsafe { action.action.search_selected.selected };
+            view.set_search_selected(usize::try_from(selected).ok());
+            true
+        }
+        _ => false,
     }
-    if action.tag != sys::GHOSTTY_ACTION_SET_TITLE
-        && action.tag != sys::GHOSTTY_ACTION_SET_TAB_TITLE
-    {
-        return false;
-    }
+}
+
+fn surface_view(target: sys::ghostty_target_s) -> Option<Retained<SurfaceView>> {
     if target.tag != sys::GHOSTTY_TARGET_SURFACE || MainThreadMarker::new().is_none() {
-        return false;
+        return None;
     }
     let surface = unsafe { target.target.surface };
     if surface.is_null() {
-        return false;
+        return None;
     }
     let userdata = unsafe { sys::ghostty_surface_userdata(surface) };
-    let Some(view) = crate::surface::view_from_userdata(userdata) else {
-        return false;
-    };
-    let title = unsafe { action.action.set_title.title };
-    if title.is_null() {
-        return false;
-    }
-    view.set_title(&unsafe { CStr::from_ptr(title) }.to_string_lossy());
-    crate::window::refresh_labels();
-    true
+    crate::surface::view_from_userdata(userdata)
 }
 
 fn open_url_action(action: sys::ghostty_action_s) -> bool {

@@ -445,6 +445,7 @@ fn request_quota(force: bool) {
             return;
         }
         if !STATE.with(|state| state.borrow().as_ref().is_some_and(|state| (state.live)())) {
+            schedule_poll();
             return;
         }
     }
@@ -503,7 +504,11 @@ fn apply_quota() {
     if let Some(layout) = STATE.with(|state| state.borrow().as_ref().map(|state| state.layout)) {
         layout();
     }
-    let epoch = QUOTA_EPOCH.load(Ordering::Relaxed);
+    schedule_poll();
+}
+
+fn schedule_poll() {
+    let epoch = QUOTA_EPOCH.fetch_add(1, Ordering::Relaxed) + 1;
     std::thread::Builder::new()
         .name("combe-quota-wait".into())
         .spawn(move || {

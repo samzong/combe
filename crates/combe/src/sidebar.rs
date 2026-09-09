@@ -5,7 +5,6 @@ use combe_catalog::{State, add_repo, catalog, load_state, save_state, state_path
 pub struct Row {
     pub label: String,
     pub path: PathBuf,
-    pub pinned: bool,
 }
 
 pub struct Repo {
@@ -38,7 +37,6 @@ pub fn repos() -> Vec<Repo> {
             .map(|row| Row {
                 label: row.label(),
                 path: row.path.clone(),
-                pinned: row.pinned,
             })
             .collect();
         if rows.is_empty() {

@@ -2,23 +2,25 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::ffi::c_void;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{ClassType, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSAccessibility, NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
-    NSApplication, NSApplicationDelegate, NSAutoresizingMaskOptions, NSBackingStoreType, NSButton,
-    NSColor, NSEventModifierFlags, NSFont, NSImage, NSMenu, NSMenuItem, NSOpenPanel, NSScrollView,
-    NSSplitView, NSSplitViewDelegate, NSSplitViewDividerStyle, NSTextField, NSView, NSWindow,
-    NSWindowStyleMask, NSWindowTitleVisibility,
+    NSAccessibility, NSAlert, NSAlertFirstButtonReturn, NSAlertStyle, NSAppearanceCustomization,
+    NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication, NSApplicationDelegate,
+    NSApplicationTerminateReply, NSAutoresizingMaskOptions, NSBackingStoreType, NSButton, NSColor,
+    NSEvent, NSEventModifierFlags, NSFont, NSImage, NSMenu, NSMenuItem, NSOpenPanel, NSScrollView,
+    NSSplitView, NSSplitViewDelegate, NSSplitViewDividerStyle, NSText, NSView, NSWindow,
+    NSWindowDelegate, NSWindowStyleMask, NSWindowTitleVisibility,
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSInteger, NSNotification, NSPoint, NSRect, NSSize, NSString,
 };
 
-use crate::chrome_view::{ClickView, FlippedView};
+use crate::chrome_view::ClickView;
 use crate::ghostty;
 use crate::habits;
 use crate::quota_panel;
@@ -47,10 +49,14 @@ const FILL: NSAutoresizingMaskOptions = NSAutoresizingMaskOptions(
 
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+    static SIDEBAR_SCANNING: Cell<bool> = const { Cell::new(false) };
+    static SIDEBAR_DIRTY: Cell<bool> = const { Cell::new(false) };
 }
+static SIDEBAR_INCOMING: Mutex<Option<Vec<sidebar::Repo>>> = Mutex::new(None);
 
 struct State {
     window: Retained<NSWindow>,
+    _window_delegate: Retained<WindowDelegate>,
     split: Retained<SplitView>,
     _split_delegate: Retained<SplitDelegate>,
     sidebar_pane: Retained<NSView>,
@@ -73,6 +79,23 @@ enum Click {
     NewTab,
     AddRepo,
     ToggleRepo(PathBuf),
+}
+
+pub enum TabTarget {
+    Previous,
+    Next,
+    Last,
+    Index(usize),
+}
+
+#[derive(Clone, Copy)]
+pub enum SplitTarget {
+    Previous,
+    Next,
+    Up,
+    Left,
+    Down,
+    Right,
 }
 
 define_class!(
@@ -110,12 +133,47 @@ define_class!(
 
         #[unsafe(method(previousTab:))]
         fn previous_tab(&self, _sender: Option<&AnyObject>) {
-            step_tab(-1);
+            goto_tab(TabTarget::Previous);
         }
 
         #[unsafe(method(nextTab:))]
         fn next_tab(&self, _sender: Option<&AnyObject>) {
-            step_tab(1);
+            goto_tab(TabTarget::Next);
+        }
+
+        #[unsafe(method(find:))]
+        fn find(&self, _sender: Option<&AnyObject>) {
+            surface_action("start_search");
+        }
+
+        #[unsafe(method(findNext:))]
+        fn find_next(&self, _sender: Option<&AnyObject>) {
+            surface_action("navigate_search:next");
+        }
+
+        #[unsafe(method(findPrevious:))]
+        fn find_previous(&self, _sender: Option<&AnyObject>) {
+            surface_action("navigate_search:previous");
+        }
+
+        #[unsafe(method(focusSplitLeft:))]
+        fn focus_split_left(&self, _sender: Option<&AnyObject>) {
+            focus_split(SplitTarget::Left);
+        }
+
+        #[unsafe(method(focusSplitRight:))]
+        fn focus_split_right(&self, _sender: Option<&AnyObject>) {
+            focus_split(SplitTarget::Right);
+        }
+
+        #[unsafe(method(focusSplitUp:))]
+        fn focus_split_up(&self, _sender: Option<&AnyObject>) {
+            focus_split(SplitTarget::Up);
+        }
+
+        #[unsafe(method(focusSplitDown:))]
+        fn focus_split_down(&self, _sender: Option<&AnyObject>) {
+            focus_split(SplitTarget::Down);
         }
 
         #[unsafe(method(toggleSidebar:))]
@@ -125,16 +183,12 @@ define_class!(
 
         #[unsafe(method(copyText:))]
         fn copy_text(&self, _sender: Option<&AnyObject>) {
-            if let Some(view) = focused_surface() {
-                view.binding_action("copy_to_clipboard");
-            }
+            clipboard_action("copy_to_clipboard", sel!(copy:));
         }
 
         #[unsafe(method(pasteText:))]
         fn paste_text(&self, _sender: Option<&AnyObject>) {
-            if let Some(view) = focused_surface() {
-                view.binding_action("paste_from_clipboard");
-            }
+            clipboard_action("paste_from_clipboard", sel!(paste:));
         }
 
         #[unsafe(method(addRepo:))]
@@ -164,6 +218,21 @@ define_class!(
             true
         }
 
+        #[unsafe(method(applicationShouldTerminate:))]
+        fn should_terminate(&self, _app: &NSApplication) -> NSApplicationTerminateReply {
+            let open = STATE.with(|state| {
+                state
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|state| state.window.isVisible() || state.window.isMiniaturized())
+            });
+            if !open || confirm_quit() {
+                NSApplicationTerminateReply::TerminateNow
+            } else {
+                NSApplicationTerminateReply::TerminateCancel
+            }
+        }
+
         #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
         fn should_handle_reopen(&self, _app: &NSApplication, _has_visible_windows: bool) -> bool {
             reveal_window();
@@ -190,6 +259,23 @@ impl AppDelegate {
         unsafe { msg_send![super(this), init] }
     }
 }
+
+define_class!(
+    #[unsafe(super(NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "CombeWindowDelegate"]
+    #[ivars = ()]
+    struct WindowDelegate;
+
+    unsafe impl NSObjectProtocol for WindowDelegate {}
+
+    unsafe impl NSWindowDelegate for WindowDelegate {
+        #[unsafe(method(windowShouldClose:))]
+        fn window_should_close(&self, _sender: &NSWindow) -> bool {
+            confirm_quit()
+        }
+    }
+);
 
 pub fn install_delegate(mtm: MainThreadMarker, app: &NSApplication) -> Retained<AppDelegate> {
     let delegate = AppDelegate::new(mtm);
@@ -259,7 +345,7 @@ pub fn install_menu(mtm: MainThreadMarker, app: &NSApplication) {
     menubar.addItem(&terminal_item);
     let terminal_menu = NSMenu::new(mtm);
     terminal_menu.setTitle(&NSString::from_str("Terminal"));
-    let entries: [(&str, objc2::runtime::Sel, &str, NSEventModifierFlags); 10] = [
+    let entries: [(&str, objc2::runtime::Sel, &str, NSEventModifierFlags); 17] = [
         (
             "Zoom Split",
             sel!(toggleSplitZoom:),
@@ -286,22 +372,59 @@ pub fn install_menu(mtm: MainThreadMarker, app: &NSApplication) {
             NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
         ),
         (
-            "Previous Tab",
-            sel!(previousTab:),
+            "Focus Split Left",
+            sel!(focusSplitLeft:),
             "\u{F702}",
             NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
         ),
         (
-            "Next Tab",
-            sel!(nextTab:),
+            "Focus Split Right",
+            sel!(focusSplitRight:),
             "\u{F703}",
             NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
+        ),
+        (
+            "Focus Split Up",
+            sel!(focusSplitUp:),
+            "\u{F700}",
+            NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
+        ),
+        (
+            "Focus Split Down",
+            sel!(focusSplitDown:),
+            "\u{F701}",
+            NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
+        ),
+        (
+            "Previous Tab",
+            sel!(previousTab:),
+            "[",
+            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
+        ),
+        (
+            "Next Tab",
+            sel!(nextTab:),
+            "]",
+            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
         ),
         (
             "Toggle Sidebar",
             sel!(toggleSidebar:),
             "b",
             NSEventModifierFlags::Command,
+        ),
+        ("Find", sel!(find:), "f", NSEventModifierFlags::Command),
+        (
+            "Find Next",
+            sel!(findNext:),
+            "g",
+            NSEventModifierFlags::Command,
+        ),
+        (
+            "Find Previous",
+            sel!(findPrevious:),
+            "g",
+            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
         ),
         ("Copy", sel!(copyText:), "c", NSEventModifierFlags::Command),
         (
@@ -517,9 +640,15 @@ pub fn open(mtm: MainThreadMarker) {
     split.setDelegate(Some(ProtocolObject::from_ref(&*split_delegate)));
     split.setPosition_ofDividerAtIndex(habits::SIDEBAR_WIDTH, 0);
 
+    let window_delegate = WindowDelegate::alloc(mtm).set_ivars(());
+    let window_delegate: Retained<WindowDelegate> =
+        unsafe { msg_send![super(window_delegate), init] };
+    window.setDelegate(Some(ProtocolObject::from_ref(&*window_delegate)));
+
     STATE.with(|state| {
         *state.borrow_mut() = Some(State {
             window: window.clone(),
+            _window_delegate: window_delegate,
             split: split.clone(),
             _split_delegate: split_delegate,
             sidebar_pane: sidebar_pane.clone(),
@@ -544,7 +673,7 @@ pub fn open(mtm: MainThreadMarker) {
     window.center();
     window.makeKeyAndOrderFront(None);
 
-    refresh_sidebar();
+    set_repos(sidebar::repos());
     quota_panel::start();
     if let Some(first) = first_row() {
         dispatch(Click::Open(first.0, first.1));
@@ -709,19 +838,57 @@ fn request_close_tab(id: u64) {
     let Some((last, current, other)) = plan else {
         return;
     };
-    if last && current {
-        if let Some(other) = other {
-            close_tab(id);
-            activate_tab(other);
-        } else {
-            close_window();
-        }
+    if last && current && other.is_none() {
+        close_window();
+        return;
+    }
+    if !confirm_close_tab(id) {
         return;
     }
     close_tab(id);
-    if last {
+    if let Some(other) = other {
+        activate_tab(other);
+    } else if last {
         rebuild_sidebar();
     }
+}
+
+fn confirm_close_tab(id: u64) -> bool {
+    let running = STATE.with(|state| {
+        let state = state.borrow();
+        let Some(tab) = state.as_ref().and_then(|state| state.tabs.get(id)) else {
+            return false;
+        };
+        split::surfaces(&tab.root)
+            .iter()
+            .any(|view| view.needs_confirm_quit())
+    });
+    !running
+        || confirm(
+            "Close this tab?",
+            "A process is still running in one of its panes.",
+            "Close",
+        )
+}
+
+fn confirm_quit() -> bool {
+    !ghostty::needs_confirm_quit()
+        || confirm(
+            "Quit Combe?",
+            "A process is still running in one of the terminals.",
+            "Quit",
+        )
+}
+
+fn confirm(message: &str, informative: &str, action: &str) -> bool {
+    let mtm = MainThreadMarker::new().expect("main thread");
+    let alert = NSAlert::new(mtm);
+    alert.setAlertStyle(NSAlertStyle::Warning);
+    alert.setMessageText(&NSString::from_str(message));
+    alert.setInformativeText(&NSString::from_str(informative));
+    alert.addButtonWithTitle(&NSString::from_str(action));
+    alert.addButtonWithTitle(&NSString::from_str("Cancel"));
+    alert.runModal() == NSAlertFirstButtonReturn
 }
 
 fn reveal_window() {
@@ -736,11 +903,10 @@ fn reveal_window() {
 }
 
 fn close_window() {
-    STATE.with(|state| {
-        let state = state.borrow();
-        let Some(state) = state.as_ref() else { return };
-        state.window.performClose(None);
-    });
+    let window = STATE.with(|state| state.borrow().as_ref().map(|state| state.window.clone()));
+    if let Some(window) = window {
+        window.performClose(None);
+    }
 }
 
 fn close_all_windows() {
@@ -836,6 +1002,15 @@ fn close_focused() {
         request_close_tab(id);
         return;
     }
+    if view.needs_confirm_quit()
+        && !confirm(
+            "Close this pane?",
+            "A process is still running in it.",
+            "Close",
+        )
+    {
+        return;
+    }
     restore_zoom(&view);
     split::close(&view);
     focus_active();
@@ -856,11 +1031,114 @@ fn divide(vertical: bool) {
     }
 }
 
-fn step_tab(delta: isize) {
-    let next = STATE.with(|state| state.borrow().as_ref().and_then(|s| s.tabs.step(delta)));
-    if let Some(id) = next {
-        activate_tab(id);
+pub fn goto_tab(target: TabTarget) -> bool {
+    let next = STATE.with(|state| {
+        let state = state.borrow();
+        let tabs = &state.as_ref()?.tabs;
+        match target {
+            TabTarget::Previous => tabs.step(-1),
+            TabTarget::Next => tabs.step(1),
+            TabTarget::Last => tabs.visible().last().map(|tab| tab.id),
+            TabTarget::Index(index) => tabs.visible().nth(index.checked_sub(1)?).map(|tab| tab.id),
+        }
+    });
+    let Some(id) = next else { return false };
+    activate_tab(id);
+    true
+}
+
+fn surface_action(action: &str) {
+    if let Some(view) = focused_surface() {
+        view.binding_action(action);
     }
+}
+
+fn clipboard_action(action: &str, native: objc2::runtime::Sel) {
+    let editing = STATE.with(|state| {
+        state
+            .borrow()
+            .as_ref()
+            .and_then(|state| state.window.firstResponder())
+            .is_some_and(|responder| responder.isKindOfClass(NSText::class()))
+    });
+    if editing {
+        let mtm = MainThreadMarker::new().expect("main thread");
+        let app = NSApplication::sharedApplication(mtm);
+        unsafe { app.sendAction_to_from(native, None, None) };
+        return;
+    }
+    surface_action(action);
+}
+
+fn focus_split(target: SplitTarget) {
+    if let Some(view) = focused_surface() {
+        goto_split(&view, target);
+    }
+}
+
+pub fn goto_split(view: &SurfaceView, target: SplitTarget) -> bool {
+    restore_zoom(view);
+    let found = STATE.with(|state| {
+        let state = state.borrow();
+        let state = state.as_ref()?;
+        let tab = state.tabs.items().iter().find(|tab| {
+            split::surfaces(&tab.root)
+                .iter()
+                .any(|leaf| std::ptr::eq(&**leaf, view))
+        })?;
+        let leaves = split::surfaces(&tab.root);
+        let index = leaves.iter().position(|leaf| std::ptr::eq(&**leaf, view))?;
+        let next = match target {
+            SplitTarget::Previous => {
+                Some(leaves[(index + leaves.len() - 1) % leaves.len()].clone())
+            }
+            SplitTarget::Next => Some(leaves[(index + 1) % leaves.len()].clone()),
+            _ => neighbor(&tab.root, view, &leaves, target),
+        };
+        Some(next)
+    });
+    let Some(next) = found else { return false };
+    if let Some(next) = next
+        && let Some(window) = next.window()
+    {
+        window.makeFirstResponder(Some(&*next));
+    }
+    true
+}
+
+fn neighbor(
+    root: &NSView,
+    view: &SurfaceView,
+    leaves: &[Retained<SurfaceView>],
+    target: SplitTarget,
+) -> Option<Retained<SurfaceView>> {
+    let edges = |leaf: &SurfaceView| {
+        let rect = root.convertRect_fromView(leaf.bounds(), Some(leaf));
+        (
+            rect.origin.x,
+            rect.origin.x + rect.size.width,
+            rect.origin.y,
+            rect.origin.y + rect.size.height,
+        )
+    };
+    let overlap = |a0: f64, a1: f64, b0: f64, b1: f64| a1.min(b1) - a0.max(b0);
+    let (fx0, fx1, fy0, fy1) = edges(view);
+    leaves
+        .iter()
+        .filter(|leaf| !std::ptr::eq(&***leaf, view))
+        .filter_map(|leaf| {
+            let (x0, x1, y0, y1) = edges(leaf);
+            let (distance, shared) = match target {
+                SplitTarget::Left => (fx0 - x1, overlap(y0, y1, fy0, fy1)),
+                SplitTarget::Right => (x0 - fx1, overlap(y0, y1, fy0, fy1)),
+                SplitTarget::Up => (y0 - fy1, overlap(x0, x1, fx0, fx1)),
+                SplitTarget::Down => (fy0 - y1, overlap(x0, x1, fx0, fx1)),
+                SplitTarget::Previous | SplitTarget::Next => return None,
+            };
+            (distance >= 0.0 && shared > 0.0).then_some((distance, shared, leaf.clone()))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0).then(b.1.total_cmp(&a.1)))
+        .map(|(_, _, leaf)| leaf)
 }
 
 fn toggle_sidebar() {
@@ -1041,14 +1319,47 @@ fn sync_tabs() {
     });
 }
 
-fn refresh_sidebar() {
-    let repos = sidebar::repos();
+fn set_repos(repos: Vec<sidebar::Repo>) {
     STATE.with(|state| {
         if let Some(state) = state.borrow_mut().as_mut() {
             state.repos = repos;
         }
     });
     rebuild_sidebar();
+}
+
+fn refresh_sidebar() {
+    if SIDEBAR_SCANNING.get() {
+        SIDEBAR_DIRTY.set(true);
+        return;
+    }
+    SIDEBAR_SCANNING.set(true);
+    let spawned = std::thread::Builder::new()
+        .name("combe-catalog".into())
+        .spawn(|| {
+            let repos = sidebar::repos();
+            *SIDEBAR_INCOMING
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner()) = Some(repos);
+            ghostty::on_main(apply_sidebar_on_main);
+        });
+    if spawned.is_err() {
+        SIDEBAR_SCANNING.set(false);
+    }
+}
+
+unsafe extern "C" fn apply_sidebar_on_main(_: *mut c_void) {
+    SIDEBAR_SCANNING.set(false);
+    let repos = SIDEBAR_INCOMING
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .take();
+    if let Some(repos) = repos {
+        set_repos(repos);
+    }
+    if SIDEBAR_DIRTY.replace(false) {
+        refresh_sidebar();
+    }
 }
 
 fn rebuild_sidebar() {
@@ -1068,9 +1379,9 @@ fn rebuild_sidebar() {
         }
         state.sidebar_height.set(height);
 
-        let document = FlippedView::alloc(mtm);
-        let document: Retained<FlippedView> = unsafe {
-            msg_send![document, initWithFrame: NSRect::new(
+        let document = SidebarView::alloc(mtm).set_ivars(());
+        let document: Retained<SidebarView> = unsafe {
+            msg_send![super(document), initWithFrame: NSRect::new(
                 NSPoint::new(0.0, 0.0),
                 NSSize::new(width, height.max(clip.height)),
             )]
@@ -1128,20 +1439,6 @@ fn rebuild_sidebar() {
                     format!("{}, not open", row.label)
                 };
                 view.setAccessibilityLabel(Some(&NSString::from_str(&access)));
-                if row.pinned {
-                    let star = NSTextField::labelWithString(&NSString::from_str("\u{2605}"), mtm);
-                    star.setFrame(NSRect::new(
-                        NSPoint::new(
-                            frame.size.width - 22.0,
-                            (frame.size.height - habits::LINE_HEIGHT) / 2.0,
-                        ),
-                        NSSize::new(habits::LINE_HEIGHT, habits::LINE_HEIGHT),
-                    ));
-                    star.setFont(Some(&NSFont::systemFontOfSize(habits::FONT_SIZE)));
-                    star.setTextColor(Some(&NSColor::systemYellowColor()));
-                    star.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
-                    view.addSubview(&star);
-                }
                 document.addSubview(&view);
                 y += ROW_HEIGHT;
             }
@@ -1170,6 +1467,26 @@ define_class!(
         fn layout(&self) {
             let _: () = unsafe { msg_send![super(self), layout] };
             layout_chrome();
+        }
+    }
+);
+
+define_class!(
+    #[unsafe(super(NSView))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "CombeSidebarView"]
+    #[ivars = ()]
+    struct SidebarView;
+
+    impl SidebarView {
+        #[unsafe(method(isFlipped))]
+        fn is_flipped(&self) -> bool {
+            true
+        }
+
+        #[unsafe(method(mouseDown:))]
+        fn mouse_down(&self, _event: &NSEvent) {
+            refresh_sidebar();
         }
     }
 );

@@ -27,6 +27,7 @@ pub fn scan_repo(path: &Path) -> Result<Vec<WorktreeRecord>, CatalogError> {
             branch: None,
             head: None,
             bare: false,
+            prunable: false,
         }]);
     }
 

@@ -21,7 +21,7 @@ A curated worktree list plus real Ghostty terminals. Do not add agents, an edito
 - Terminal: every leaf is a complete `libghostty` surface. Never write a VT parser, glyph atlas, or renderer.
 - API surface: whatever `vendor/ghostty/include/ghostty.h` declares. Do not invent bindings.
 - Catalog: user's `git` binary, `worktree list --porcelain`, Git 2.25 floor.
-- Persist only repo paths and pins. Every other preference is a constant in `crates/combe/src/habits.rs`.
+- Persist only repo paths. Every other preference is a constant in `crates/combe/src/habits.rs`.
 
 ## Standard shortcuts
 
@@ -32,9 +32,9 @@ Standard macOS key equivalents live on menu items. `setMainMenu` replaces the sy
 | Cmd-H | `hide:` |
 | Opt-Cmd-H | `hideOtherApplications:` |
 | Cmd-M | `performMiniaturize:` |
-| Cmd-W | Close the focused pane, or the tab when it is the last pane. The last tab of a workspace ends that session. If another workspace still has tabs, switch to it; if none remain, close the window (`performClose:`). |
+| Cmd-W | Close the focused pane, or the tab when it is the last pane. Asks first when a foreground process still runs there. The last tab of a workspace ends that session. If another workspace still has tabs, switch to it; if none remain, close the window (`performClose:`). |
 | Opt-Cmd-W | Close every titled window. |
-| Cmd-Q | `terminate:` |
+| Cmd-Q | `terminate:`. `applicationShouldTerminate:` asks first when `ghostty_app_needs_confirm_quit` is true; `windowShouldClose:` asks the same way for the red button and `performClose:`. |
 
 After a menu change, verify Cmd-H, Opt-Cmd-H, Cmd-M, Cmd-Q, Cmd-W, and Opt-Cmd-W.
 

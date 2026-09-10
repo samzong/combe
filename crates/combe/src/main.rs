@@ -3,6 +3,7 @@ mod cli;
 mod find_bar;
 mod ghostty;
 mod habits;
+mod overview;
 mod quota;
 mod quota_panel;
 mod sidebar;

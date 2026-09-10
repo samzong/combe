@@ -14,7 +14,9 @@ ghostty-sys = { path = "../ghostty-sys" }
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-core-foundation = "0.3"
+objc2-core-image = { version = "0.3", default-features = false, features = ["std", "CIContext", "CIImage", "objc2-core-foundation", "objc2-core-graphics", "objc2-io-surface"] }
+objc2-io-surface = { version = "0.3", default-features = false, features = ["std", "IOSurfaceRef", "objc2-core-foundation"] }
 objc2-foundation = "0.3"
-objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CAMediaTimingFunction"] }
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CAAnimation", "CAMediaTiming", "CAMediaTimingFunction", "objc2-core-foundation"] }
 serde.workspace = true
 serde_json.workspace = true

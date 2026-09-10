@@ -13,10 +13,10 @@ use objc2_app_kit::{
     NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication, NSApplicationDelegate,
     NSApplicationTerminateReply, NSAutoresizingMaskOptions, NSBackingStoreType, NSBezierPath,
     NSButton, NSColor, NSEvent, NSEventModifierFlags, NSEventType, NSFont, NSImage, NSImageView,
-    NSMenu, NSMenuItem, NSOpenPanel, NSScrollView, NSShadow, NSSplitView, NSSplitViewDelegate,
-    NSSplitViewDividerStyle, NSText, NSUserInterfaceItemIdentification, NSView,
-    NSViewLayerContentsRedrawPolicy, NSWindow, NSWindowButton, NSWindowDelegate, NSWindowStyleMask,
-    NSWindowTitleVisibility, NSWorkspace,
+    NSMenu, NSMenuItem, NSOpenPanel, NSResponder, NSScrollView, NSShadow, NSSplitView,
+    NSSplitViewDelegate, NSSplitViewDividerStyle, NSText, NSUserInterfaceItemIdentification,
+    NSView, NSViewLayerContentsRedrawPolicy, NSWindow, NSWindowButton, NSWindowDelegate,
+    NSWindowStyleMask, NSWindowTitleVisibility, NSWorkspace,
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{
@@ -28,6 +28,7 @@ use objc2_quartz_core::CAMediaTimingFunction;
 use crate::chrome_view::{self, ClickView};
 use crate::ghostty;
 use crate::habits;
+use crate::overview::Overview;
 use crate::quota_panel;
 use crate::sidebar;
 use crate::split;
@@ -79,6 +80,10 @@ struct State {
     command_held: Cell<bool>,
     toggle: Option<Retained<NSButton>>,
     add_repo: Option<Retained<NSButton>>,
+    overview: Option<Retained<Overview>>,
+    overview_return: Option<Retained<NSResponder>>,
+    overview_tab: Option<u64>,
+    overview_button: Option<Retained<NSButton>>,
     tab_bar: Retained<NSView>,
     tab_scroller: Retained<NSScrollView>,
     content: Retained<NSView>,
@@ -132,6 +137,7 @@ define_class!(
     impl Window {
         #[unsafe(method(sendEvent:))]
         fn send_event(&self, event: &NSEvent) {
+            if handle_overview_event(event) { return; }
             let quota = quota_panel::handle_event(event);
             let sidebar = handle_sidebar_event(event);
             if !quota && !sidebar { let _: () = unsafe { msg_send![super(self), sendEvent: event] }; }
@@ -155,6 +161,9 @@ define_class!(
         fn new_tab(&self, _sender: Option<&AnyObject>) {
             dispatch(Click::NewTab);
         }
+
+        #[unsafe(method(toggleTabOverview:))]
+        fn toggle_tab_overview(&self, _sender: Option<&AnyObject>) { toggle_overview(); }
 
         #[unsafe(method(closeFocused:))]
         fn close_focused(&self, _sender: Option<&AnyObject>) {
@@ -524,6 +533,14 @@ pub fn install_menu(mtm: MainThreadMarker, app: &NSApplication) {
     view_menu.setTitle(&NSString::from_str("View"));
     view_menu.addItem(&item(
         mtm,
+        "Tab Overview",
+        sel!(toggleTabOverview:),
+        Some(&commands),
+        "\\",
+        NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
+    ));
+    view_menu.addItem(&item(
+        mtm,
         "Enter Full Screen",
         sel!(toggleFullScreen:),
         None,
@@ -705,6 +722,17 @@ pub fn open(mtm: MainThreadMarker) {
     }
     root.addSubview(&split);
     root.addSubview(&tab_scroller);
+    let overview_button = icon_button(
+        mtm,
+        "square.grid.2x2",
+        sel!(toggleTabOverview:),
+        NSRect::default(),
+    );
+    if let Some(button) = overview_button.as_ref() {
+        button.setAccessibilityLabel(Some(&NSString::from_str("Tab Overview")));
+        button.setToolTip(Some(&NSString::from_str("Tab Overview (⌘⇧\\)")));
+        root.addSubview(button);
+    }
     let sidebar_glass = NSView::initWithFrame(NSView::alloc(mtm), NSRect::default());
     sidebar_glass.setWantsLayer(true);
     sidebar_glass.setLayerContentsRedrawPolicy(NSViewLayerContentsRedrawPolicy::DuringViewResize);
@@ -781,6 +809,10 @@ pub fn open(mtm: MainThreadMarker) {
             command_held: Cell::new(false),
             toggle,
             add_repo,
+            overview: None,
+            overview_return: None,
+            overview_tab: None,
+            overview_button,
             tab_bar: tab_bar.clone(),
             tab_scroller,
             content: content.clone(),
@@ -846,6 +878,7 @@ fn first_row() -> Option<(String, String)> {
 }
 
 fn dispatch(click: Click) {
+    dismiss_overview(false);
     match click {
         Click::Open(path, label) => {
             open_worktree(&path, &label);
@@ -954,6 +987,7 @@ fn new_tab(path: &str, name: &str) {
 }
 
 fn activate_tab(id: u64) {
+    dismiss_overview(false);
     STATE.with(|state| {
         let mut state = state.borrow_mut();
         let Some(state) = state.as_mut() else { return };
@@ -965,6 +999,7 @@ fn activate_tab(id: u64) {
 }
 
 fn request_close_tab(id: u64) {
+    dismiss_overview(false);
     let plan = STATE.with(|state| {
         let state = state.borrow();
         let state = state.as_ref()?;
@@ -1713,7 +1748,125 @@ pub fn refresh_labels() {
     }
 }
 
+fn toggle_overview() {
+    let open = STATE.with(|state| {
+        state
+            .borrow()
+            .as_ref()
+            .is_some_and(|state| state.overview.is_some())
+    });
+    if open {
+        dismiss_overview(true);
+        return;
+    }
+    let mtm = MainThreadMarker::new().expect("main thread");
+    let mounted = STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let state = state.as_mut()?;
+        let active = state.tabs.active_id()?;
+        let tabs: Vec<_> = state.tabs.visible().collect();
+        let overview = Overview::new(mtm, state.content.bounds(), &tabs, active, activate_tab);
+        state.overview_return = state.window.firstResponder();
+        state.overview_tab = Some(active);
+        Overview::transition(&state.content);
+        state.content.addSubview(&overview);
+        state.overview = Some(overview.clone());
+        if let Some(button) = state.overview_button.as_ref() {
+            button.setAccessibilityExpanded(true);
+        }
+        Some((state.window.clone(), overview))
+    });
+    if let Some((window, overview)) = mounted {
+        window.makeFirstResponder(Some(&*overview));
+    }
+}
+
+fn dismiss_overview(restore: bool) {
+    let removed = STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let state = state.as_mut()?;
+        let view = state.overview.take()?;
+        state.overview_tab = None;
+        if let Some(button) = state.overview_button.as_ref() {
+            button.setAccessibilityExpanded(false);
+        }
+        Some((state.window.clone(), view, state.overview_return.take()))
+    });
+    if let Some((window, view, responder)) = removed {
+        if let Some(parent) = unsafe { view.superview() } {
+            Overview::transition(&parent);
+        }
+        view.removeFromSuperview();
+        if restore {
+            if let Some(responder) = responder {
+                if !window.makeFirstResponder(Some(&*responder)) {
+                    focus_active();
+                }
+            } else {
+                focus_active();
+            }
+        }
+    }
+}
+
+fn handle_overview_event(event: &NSEvent) -> bool {
+    let active = STATE.with(|state| state.borrow().as_ref().and_then(|state| state.overview_tab));
+    let Some(active) = active else { return false };
+    if event.r#type() != NSEventType::KeyDown {
+        return false;
+    }
+    if event
+        .modifierFlags()
+        .contains(NSEventModifierFlags::Command)
+    {
+        let flags = event.modifierFlags();
+        let toggle = flags.contains(NSEventModifierFlags::Shift)
+            && !flags.intersects(NSEventModifierFlags::Option.union(NSEventModifierFlags::Control))
+            && event
+                .charactersIgnoringModifiers()
+                .is_some_and(|key| matches!(key.to_string().as_str(), "\\" | "|"));
+        if !toggle {
+            dismiss_overview(true);
+        }
+        return false;
+    }
+    match event.keyCode() {
+        53 => dismiss_overview(true),
+        36 | 76 => {
+            let card = STATE.with(|state| {
+                let state = state.borrow();
+                let state = state.as_ref()?;
+                let responder = state.window.firstResponder()?;
+                let object: &AnyObject = responder.as_ref();
+                let is_card: bool = unsafe { msg_send![object, isKindOfClass: ClickView::class()] };
+                if !is_card {
+                    return None;
+                }
+                let overview = state.overview.as_ref()?;
+                let inside: bool = unsafe { msg_send![object, isDescendantOf: &**overview] };
+                inside.then_some(responder)
+            });
+            if let Some(card) = card {
+                let _: bool = unsafe { msg_send![&*card, accessibilityPerformPress] };
+            } else {
+                activate_tab(active);
+            }
+        }
+        48 => return false,
+        _ => {}
+    }
+    true
+}
+
 fn focus_active() {
+    if STATE.with(|state| {
+        state
+            .borrow()
+            .as_ref()
+            .is_some_and(|state| state.overview.is_some())
+    }) {
+        return;
+    }
     let Some(view) = STATE.with(|state| {
         let state = state.borrow();
         let state = state.as_ref()?;
@@ -1733,6 +1886,9 @@ fn sync_tabs() {
         let Some(state) = state.as_ref() else { return };
 
         let active = state.tabs.active_id();
+        if let Some(button) = state.overview_button.as_ref() {
+            button.setEnabled(active.is_some());
+        }
         for tab in state.tabs.items() {
             let hidden = Some(tab.id) != active;
             tab.root.setHidden(hidden);
@@ -2337,8 +2493,17 @@ fn layout_chrome() {
         }
         state.tab_scroller.setFrame(NSRect::new(
             NSPoint::new(edge + INSET, size.height - TOP_BAR_HEIGHT),
-            NSSize::new((size.width - edge - 2.0 * INSET).max(0.0), TOP_BAR_HEIGHT),
+            NSSize::new(
+                (size.width - edge - 2.0 * INSET - 48.0).max(0.0),
+                TOP_BAR_HEIGHT,
+            ),
         ));
+        if let Some(button) = state.overview_button.as_ref() {
+            button.setFrame(NSRect::new(
+                NSPoint::new(size.width - INSET - 36.0, size.height - INSET - 36.0),
+                NSSize::new(36.0, 36.0),
+            ));
+        }
         if let Some(right) = unsafe { state.content.superview() } {
             let right_size = right.frame().size;
             let terminal_inset = if pinned { 0.0 } else { INSET };
@@ -2402,6 +2567,7 @@ unsafe extern "C" fn drain_pending(_: *mut c_void) {
 }
 
 fn close_leaf(view: &SurfaceView) {
+    dismiss_overview(false);
     restore_zoom(view);
     let owner = STATE.with(|state| {
         let state = state.borrow();

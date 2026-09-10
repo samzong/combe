@@ -1,7 +1,9 @@
+mod home;
 mod porcelain;
 mod scan;
 mod store;
 
+pub use home::{HOME_LABEL, home_dir, home_workspace, is_home_path, should_inject_home};
 pub use porcelain::{WorktreeKind, WorktreeRecord, parse_worktree_list};
 pub use scan::{CatalogError, scan_repo};
 pub use store::{Repo, State, StoreError, load_state, save_state, state_path};
@@ -19,6 +21,9 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn label(&self) -> String {
+        if self.kind == WorktreeKind::Folder && is_home_path(&self.path) {
+            return HOME_LABEL.to_string();
+        }
         if let Some(branch) = &self.branch {
             return branch.clone();
         }
@@ -32,6 +37,9 @@ impl Workspace {
     }
 
     pub fn repo_label(&self) -> String {
+        if is_home_path(&self.repo_path) {
+            return HOME_LABEL.to_string();
+        }
         self.repo_path
             .file_name()
             .and_then(|name| name.to_str())
@@ -184,6 +192,12 @@ mod tests {
         let live = std::fs::canonicalize(&live).unwrap();
         assert_eq!(state.repos, vec![Repo { path: live }]);
         assert_eq!(cleaned.repos.len(), 1);
+    }
+
+    #[test]
+    fn catalog_does_not_inject_home() {
+        let found = catalog(&State::default()).unwrap();
+        assert!(found.rows.is_empty());
     }
 
     #[test]

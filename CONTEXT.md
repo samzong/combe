@@ -8,8 +8,9 @@ Use these words in code, commits, and docs. If a new domain word sticks, add it 
 | Repo | A filesystem path the user registered. Not discovered by walking the disk. |
 | Worktree | One row from `git worktree list --porcelain` for a registered git repo. |
 | Folder workspace | A registered path that is not a git checkout. Shown as a single row. |
-| Workspace | The selected worktree or folder workspace. The shell cwd of a tab. |
-| Catalog | The merge of `state.json` + git porcelain + folder fallback. Missing registered paths are skipped. |
+| Workspace | The selected worktree, folder workspace, or Home workspace. The shell cwd of a tab. |
+| Home workspace | Built-in folder workspace at `$HOME`. Not a registered repo. Forced folder even if `$HOME` is a git checkout. Injected first in the sidebar catalog unless a catalog row already owns that path. Label `~`. |
+| Catalog | The merge of `state.json` + git porcelain + folder fallback + the Home workspace when `$HOME` is not already a row. Missing registered paths are skipped. |
 | Sidebar | The catalog shown as a workspace chip, transient panel, or pinned sidebar. ⌘B toggles pinned and chip states. |
 | Session mark | Sidebar dot on a worktree row. Green when that workspace has a tab this app run; dim when it does not. |
 | Tab | One split tree, opened on one workspace. |

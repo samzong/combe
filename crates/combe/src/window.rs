@@ -2359,6 +2359,15 @@ fn sync_appearance() {
         let color = hex(habits::background(dark)).CGColor();
         let _: () = unsafe { msg_send![&*layer, setBackgroundColor: &*color] };
     }
+    STATE.with(|state| {
+        if let Some(overview) = state
+            .borrow()
+            .as_ref()
+            .and_then(|state| state.overview.as_ref())
+        {
+            overview.setNeedsDisplay(true);
+        }
+    });
     window.invalidateShadow();
     ghostty::set_appearance(dark);
     for surface in surfaces {

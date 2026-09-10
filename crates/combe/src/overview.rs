@@ -51,7 +51,15 @@ define_class!(
 
         #[unsafe(method(drawRect:))]
         fn draw_rect(&self, _dirty: NSRect) {
-            NSColor::windowBackgroundColor().setFill();
+            let Some(color) = self.window()
+                .and_then(|window| window.contentView())
+                .and_then(|view| view.layer())
+                .and_then(|layer| {
+                    let color: Option<&_> = unsafe { msg_send![&*layer, backgroundColor] };
+                    color.and_then(NSColor::colorWithCGColor)
+                })
+            else { return };
+            color.setFill();
             NSBezierPath::fillRect(self.bounds());
         }
     }

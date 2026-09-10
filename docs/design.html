@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Combe — Interface design</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      color-scheme: dark;
+      --page: #242527;
+      --text-soft: #c3c4c7;
+      --text-strong: #e6e7e9;
+      --line: #ffffff10;
+      --hover: #ffffff15;
+      --selection: #ffffff12;
+      --hint: #ffffff0d;
+      --idle: #ffffff04;
+      --prompt: #8dbfac;
+      --cursor: #2f81f7;
+      --quota-glass: linear-gradient(145deg, #ffffff08, #ffffff00 48%, #ffffff03), #3b3d411a;
+      --quota-open: linear-gradient(145deg, #ffffff14, #ffffff02 48%, #ffffff07), #292b2f70;
+      --solid: #37393e;
+      --bg: #161719;
+      --fg: #f1f1f2;
+      --muted: #9c9ea3;
+      --green: #65c888;
+      --blue: #3478dc;
+      --ease: cubic-bezier(.22, .8, .2, 1);
+      --inset: 12px;
+      --radius-row: 16px;
+      --radius-window: 34px;
+      --radius-control: 18px;
+      --glass-control: linear-gradient(145deg, #ffffff12, #ffffff00 48%, #ffffff06), #3b3d4140;
+      --glass-panel: linear-gradient(145deg, #ffffff1f, #ffffff03 44%, #ffffff0b), #35373b9e;
+      --glass-edge: inset 0 0 0 .75px #ffffff20, inset 0 1px .5px #ffffff18;
+      --glass-filter: blur(28px) saturate(145%) brightness(1.16);
+      --font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", sans-serif;
+    }
+    :root[data-appearance="light"] {
+      color-scheme: light;
+      --page: #e7e8eb;
+      --bg: #f5f5f7;
+      --fg: #24292f;
+      --muted: #656970;
+      --text-soft: #555960;
+      --text-strong: #292d33;
+      --green: #248247;
+      --blue: #0969da;
+      --line: #0000000d;
+      --hover: #00000009;
+      --selection: #00000008;
+      --hint: #00000006;
+      --idle: #00000003;
+      --prompt: #28654e;
+      --cursor: #0969da;
+      --glass-control: linear-gradient(145deg, #ffffffa6, #ffffff26 48%, #ffffff70), #dfe1e650;
+      --glass-panel: linear-gradient(145deg, #ffffffbf, #ffffff40 44%, #ffffff80), #e1e3e8b0;
+      --glass-edge: inset 0 0 0 .75px #ffffffb0, inset 0 1px .5px #ffffffd0;
+      --glass-filter: blur(28px) saturate(135%);
+      --quota-glass: linear-gradient(145deg, #ffffff70, #ffffff10 48%, #ffffff30), #d9dce31a;
+      --quota-open: linear-gradient(145deg, #ffffffa0, #ffffff30 48%, #ffffff70), #e1e3e89e;
+      --solid: #eceef1;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background: var(--page);
+      color: var(--fg);
+      font: var(--font);
+      -webkit-font-smoothing: antialiased;
+      padding: 32px 28px 48px;
+    }
+    button { font: inherit; color: inherit; cursor: default; }
+    button:focus-visible, .tab:focus-visible { outline: 2px solid #83b9ff; outline-offset: -3px; }
+    button, svg { -webkit-user-select: none; user-select: none; }
+    svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+    .page { width: min(1200px, 100%); margin: auto; }
+    .note { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin: 0 2px 20px; color: var(--muted); font-size: 12px; }
+    .note strong { color: var(--fg); font-size: 14px; font-weight: 500; margin-right: 18px; }
+    .note .hint { color: var(--muted); }
+    .stage { width: 100%; aspect-ratio: 1200 / 760; position: relative; }
+    .window {
+      position: absolute;
+      width: 1200px;
+      height: 760px;
+      overflow: hidden;
+      border-radius: var(--radius-window);
+      background: linear-gradient(145deg, #ffffff0c, #ffffff00 48%, #ffffff04), var(--bg);
+      box-shadow: var(--glass-edge), 0 30px 80px #00000050, 0 4px 12px #00000025;
+      transform-origin: top left;
+      --chip-width: 228px;
+      --menu-right: 312px;
+      --list-height: 300px;
+      --traffic-space: 0px;
+    }
+    .window.peek, .window.pinned { --traffic-space: 72px; }
+    .traffic { position: absolute; top: 12px; left: calc(-64px + var(--traffic-space)); display: flex; gap: 8px; z-index: 1; transition: left 380ms var(--ease); }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 .5px #00000020; }
+    .traffic i:nth-child(1) { background: #ff6059; }
+    .traffic i:nth-child(2) { background: #ffbd2e; }
+    .traffic i:nth-child(3) { background: #28c840; }
+    .menu {
+      position: absolute;
+      left: calc(84px - var(--traffic-space));
+      top: var(--inset);
+      z-index: 8;
+      width: calc(var(--chip-width) + var(--traffic-space));
+      transform-origin: top left;
+      transition: left 380ms var(--ease), top 380ms var(--ease), width 380ms var(--ease);
+    }
+    .platter {
+      position: relative;
+      height: 36px;
+      width: 100%;
+      overflow: hidden;
+      border-radius: var(--radius-control);
+      background: var(--glass-control);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
+      box-shadow: var(--glass-edge), 0 2px 6px #00000012;
+      transition: height 380ms var(--ease), border-radius 380ms var(--ease), background 300ms ease, box-shadow 380ms var(--ease);
+    }
+    .window.peek .platter, .window.pinned .platter {
+      height: calc(36px + var(--list-height));
+      border-radius: var(--radius-control);
+      background: var(--glass-panel);
+      box-shadow: inset 0 0 0 .75px #ffffff2e, inset 0 1px .5px #ffffff32, inset 0 -1px .5px #00000030, 0 22px 48px #0000004d, 0 5px 14px #0000002b;
+    }
+    .window.pinned .platter { height: calc(760px - 2 * var(--inset)); }
+    .sidebar-resize { display: none; position: absolute; right: -4px; top: 44px; bottom: 16px; width: 4px; cursor: col-resize; }
+    .window.pinned .sidebar-resize { display: block; }
+    .menu-header { position: relative; height: 36px; display: flex; align-items: center; padding-right: 4px; padding-left: var(--traffic-space); transition: padding-left 380ms var(--ease); }
+    .trigger {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      flex: 1;
+      align-self: stretch;
+      gap: 8px;
+      padding: 0 10px 0 12px;
+      border: 0;
+      border-radius: var(--radius-control);
+      background: transparent;
+      text-align: left;
+      font-size: 12px;
+    }
+    .trigger .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+    .trigger .chev { width: 10px; height: 10px; margin-left: auto; color: var(--muted); transition: transform 300ms var(--ease); }
+    .window.peek .trigger .chev { transform: rotate(180deg); }
+    .window.pinned .trigger .chev { opacity: 0; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: #85878d; }
+    .dot.live { background: var(--green); }
+    .tools { display: flex; align-items: center; flex: none; gap: 4px; }
+    .icon { width: 28px; height: 28px; padding: 6px; display: grid; place-items: center; background: transparent; border: 0; border-radius: 50%; color: var(--text-soft); }
+    .icon svg { width: 15px; height: 15px; }
+    .icon:hover { background: var(--hover); color: var(--fg); }
+    .icon[aria-pressed="true"] { background: var(--selection); color: var(--fg); }
+    .catalog {
+      width: 100%;
+      padding: 8px 6px 12px;
+      opacity: 0;
+      transform: translate(8px, 6px);
+      transition: opacity 140ms ease, transform 300ms var(--ease);
+    }
+    .window.peek .catalog, .window.pinned .catalog { opacity: 1; transform: translate(0, 0); transition-delay: 65ms, 0ms; }
+    .window.pinned .catalog { max-height: calc(724px - 2 * var(--inset)); overflow-y: auto; scrollbar-width: thin; }
+    .group + .group { margin-top: 8px; padding-top: 8px; border-top: .5px solid var(--line); }
+    .group-head, .row { display: flex; align-items: center; width: 100%; border: 0; background: transparent; text-align: left; }
+    .group-head { height: 30px; padding: 0 12px; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 500; border-radius: var(--radius-row); }
+    .group-head > svg:first-child { width: 14px; height: 14px; color: var(--muted); }
+    .group-head .arrow { margin-left: auto; width: 10px; height: 10px; opacity: .7; }
+    .group-head:hover { background: var(--hover); }
+    .group.shut .rows { display: none; }
+    .group.shut .arrow { transform: rotate(-90deg); }
+    .row { position: relative; height: 34px; padding: 0 12px 0 32px; gap: 10px; border-radius: var(--radius-row); margin: 2px 0; color: var(--fg); }
+    .row .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .check { margin-left: auto; width: 13px; height: 13px; opacity: 0; }
+    .row.on { background: var(--selection); }
+    .row.on .check { opacity: .85; }
+    .row .shortcut { position: absolute; right: 10px; top: 8px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 9px; background: var(--hint); color: var(--text-soft); font: 11px/normal -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; opacity: 0; }
+    .window.command-held .row[data-shortcut] .shortcut { opacity: 1; }
+    .window.command-held .row[data-shortcut] .check { opacity: 0; }
+    .row:hover, .row:focus-visible { background: var(--selection); }
+    .right { position: absolute; inset: 0; border-radius: inherit; display: grid; grid-template-rows: calc(36px + 2 * var(--inset)) minmax(0, 1fr) calc(28px + var(--inset)); }
+    .tabs { display: flex; gap: var(--inset); align-items: center; padding: var(--inset); padding-left: calc(var(--menu-right) + var(--inset)); }
+    .tab { display: flex; align-items: center; justify-content: space-between; gap: 20px; height: 36px; width: 180px; padding: 0 14px; border-radius: var(--radius-control); color: var(--muted); font-size: 12px; white-space: nowrap; background: var(--idle); }
+    .tab.on { background: var(--glass-control); color: var(--text-strong); box-shadow: var(--glass-edge), 0 2px 6px #00000012; backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter); }
+    .tab:hover { box-shadow: inset 0 0 0 100px var(--selection); }
+    .tab.on:hover { box-shadow: inset 0 0 0 100px var(--selection), var(--glass-edge), 0 2px 6px #00000012; }
+    .tab .label { overflow: hidden; text-overflow: ellipsis; }
+    .tab .x { color: var(--muted); font-size: 15px; }
+    .newtab { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-control); background: transparent; color: var(--muted); font-size: 20px; font-weight: 300; }
+    .term { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; margin: 0 var(--inset); overflow: hidden; transition: margin-left 380ms var(--ease); }
+    .window.pinned .term, .window.pinned .status-line { margin-left: calc(var(--menu-right) + var(--inset)); }
+    .term.single { grid-template-columns: 1fr; }
+    .pane { padding: 8px; border-left: .5px solid var(--line); color: var(--text-soft); font: 13px/16px "Fira Code", "Noto Sans Mono CJK SC", Menlo, monospace; white-space: pre-wrap; overflow: hidden; }
+    .pane:first-child { border-left: 0; }
+    .pane [data-prompt] { color: var(--prompt); }
+    .caret { display: inline-block; width: 7px; height: 14px; background: var(--cursor); transform: translateY(3px); }
+    .status-line { position: relative; margin: 0 var(--inset) var(--inset); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; transition: margin-left 380ms var(--ease); }
+    .quota { position: absolute; left: 0; bottom: 0; width: 176px; height: 28px; border-radius: 14px; overflow: hidden; background: var(--quota-glass); box-shadow: inset 0 0 0 .5px #ffffff12; backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter); transform-origin: bottom left; transition: width 340ms var(--ease), height 340ms var(--ease), box-shadow 340ms var(--ease), background 260ms ease; }
+    .quota.open { width: 304px; height: calc(28px + var(--quota-details-height, 222px)); background: var(--quota-open); box-shadow: inset 0 0 0 .75px #ffffff20, inset 0 1px .5px #ffffff18, 0 -6px 32px #00000030, 0 6px 18px #00000020; }
+    .quota-trigger { position: absolute; bottom: 0; left: 0; display: flex; align-items: center; gap: 18px; width: 176px; height: 28px; padding: 0 8px; border: 0; border-radius: 14px; background: transparent; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .quota-trigger > span { display: flex; gap: 6px; white-space: nowrap; }
+    .quota-trigger b { color: var(--text-soft); font-weight: 500; }
+    .quota-details { position: absolute; left: 0; bottom: 28px; width: 304px; padding: 16px 16px 12px; opacity: 0; transform: translateY(8px); transition: opacity 140ms ease, transform 300ms var(--ease); }
+    .quota.open .quota-details { opacity: 1; transform: translateY(0); transition-delay: 65ms, 0ms; }
+    .quota-row { display: grid; grid-template-columns: 50px 1fr 74px; align-items: center; column-gap: 8px; }
+    .quota-reset { text-align: right; }
+    .quota-provider + .quota-provider { margin-top: 16px; }
+    .quota-provider h2 { margin: 0 0 8px; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--fg); }
+    .quota-row { height: 30px; color: var(--muted); }
+    .quota-row strong { font-size: 13px; font-weight: 500; color: var(--fg); }
+    .quota-reset { color: var(--muted); }
+    .footnote { margin: 18px 2px 0; color: var(--muted); font-size: 11px; display: flex; justify-content: space-between; }
+    .footnote kbd { font: inherit; color: var(--text-soft); }
+    .toast { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); background: var(--solid); border: .5px solid #ffffff22; padding: 9px 15px; border-radius: 10px; z-index: 10; box-shadow: 0 8px 24px #0004; color: var(--fg); }
+    .preview-tools { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .preview-tools label { display: flex; align-items: center; gap: 8px; }
+    select, input { font: inherit; color: var(--fg); background: var(--solid); border: .5px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+    .tab { position: relative; padding-right: 34px; flex: none; border: 0; text-align: left; cursor: default; }
+    .tab .x { position: absolute; right: 8px; top: 7px; width: 22px; height: 22px; padding: 0; border: 0; background: transparent; border-radius: 50%; }
+    .newtab { flex: none; border: 0; }
+    .tabs { overflow-x: auto; scrollbar-width: none; }
+    .term.down { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+    .term.down .pane + .pane { border-left: 0; border-top: .5px solid var(--line); }
+    .pane { position: relative; }
+    .find-bar { position: absolute; right: 12px; top: 8px; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--glass-panel); box-shadow: var(--glass-edge), 0 6px 20px #0002; border-radius: 12px; font: var(--font); }
+    .find-bar input { width: 120px; }
+    .find-bar button { border: 0; background: transparent; }
+    .find-bar [data-count] { color: var(--muted); font-size: 11px; }
+    .window dialog { color: var(--fg); background: var(--solid); border: .5px solid var(--line); border-radius: 18px; width: 340px; padding: 24px; box-shadow: 0 20px 80px #0005; font: var(--font); }
+    dialog::backdrop { background: #0003; }
+    dialog h2 { font-size: 14px; margin-top: 0; }
+    dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+    dialog button { border: 0; border-radius: 7px; padding: 6px 14px; background: var(--hover); }
+    dialog button[value="close"] { color: white; background: var(--blue); }
+    .components { color: var(--muted); margin: 24px 2px 0; font-size: 12px; }
+    .components p { max-width: 760px; line-height: 1.6; }
+    .components a { color: var(--text-strong); }
+    .spacing-toggle { white-space: nowrap; }
+    .spacing-toggle input { accent-color: #0b94b6; }
+    .spacing-overlay { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; overflow: visible; }
+    .spacing-overlay[hidden], .spacing-inspector[hidden] { display: none; }
+    .spacing-overlay text { font: 11px -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; fill: #fff; stroke: none; }
+    .spacing-overlay .measure-line { fill: none; stroke: #26bfd6; stroke-width: 1; }
+    .spacing-overlay .measure-box { fill: #26bfd612; stroke: #26bfd6; stroke-width: .75; stroke-dasharray: 3 3; }
+    .spacing-overlay .measure-label { fill: #07566a; stroke: #8adee9; stroke-width: .5; }
+    .spacing-overlay .measure-leader { stroke: #26bfd6; stroke-width: .6; opacity: .65; }
+    .spacing-inspector { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
+    .spacing-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .spacing-controls label { display: flex; align-items: center; gap: 8px; }
+    .spacing-toolbar { margin: -4px 0 14px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 12px; }
+    .spacing-toolbar[hidden] { display: none; }
+    #spacing-metric { max-width: 410px; }
+    .spacing-readout { flex-basis: 100%; color: var(--text-strong); line-height: 1.6; font-variant-numeric: tabular-nums; }
+    .spacing-controls button { border: 1px solid var(--line); border-radius: 6px; background: var(--solid); padding: 5px 10px; }
+    .spacing-inspector p { margin: 10px 0; max-width: 1000px; color: var(--muted); font-size: 12px; }
+    .spacing-inspector a { color: var(--text-strong); }
+    .spacing-selection { border-left: 2px solid #26bfd6; padding-left: 10px; min-height: 20px; }
+    .spacing-table-wrap { overflow-x: auto; }
+    .spacing-inspector table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .spacing-inspector th, .spacing-inspector td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 8px 10px; }
+    .spacing-inspector th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+    .spacing-inspector th:first-child, .spacing-inspector td:first-child { padding-left: 0; width: 58px; }
+    .spacing-inspector td:nth-child(n+3) { min-width: 120px; }
+    .spacing-inspector td small { display: block; color: var(--muted); margin-top: 3px; }
+    .spacing-inspector td button { padding: 0; border: 0; background: transparent; color: #39bad0; font: inherit; text-align: left; }
+    :root[data-appearance="light"] .spacing-inspector td button { color: #00687c; }
+    .spacing-inspector tr[aria-selected="true"] { background: #26bfd60d; }
+    .spacing-empty { color: var(--muted); }
+    .quota[data-provider="claude"] { width: 92px; }
+    .quota[data-provider="claude"].open { width: 304px; }
+    .quota[data-provider="claude"] .quota-trigger { width: 92px; }
+    .quota[data-provider="claude"] .quota-provider:last-child, .quota[data-provider="claude"] .quota-trigger > span:last-child { display: none; }
+    @media (max-width: 800px) { body { padding: 24px 16px; } .note { align-items: start; flex-direction: column; gap: 8px; } .note .hint { display: none; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; transition-delay: 0ms !important; } }
+    @media (prefers-reduced-transparency: reduce) { .platter, .window.peek .platter, .window.pinned .platter, .tab.on, .quota, .quota.open { background: var(--solid); backdrop-filter: none; -webkit-backdrop-filter: none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="note"><span><strong>Combe</strong>Interface design</span><div class="preview-tools"><label>Appearance <select id="appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><label>Component <select id="component"><option value="workspace">Workspace</option><option value="typography">Typography</option><option value="find">Find bar</option><option value="down">Split down</option><option value="zoom">Zoomed pane</option><option value="confirm">Close confirmation</option><option value="claude">One provider</option><option value="none">No quota snapshot</option></select></label><label class="spacing-toggle"><input id="spacing-toggle" type="checkbox" aria-controls="spacing-inspector">Show spacing</label></div></div>
+    <div id="spacing-toolbar" class="spacing-controls spacing-toolbar" hidden><label>Area <select id="spacing-area"><option value="window">Window</option><option value="header">Workspace header</option><option value="tabs">Tabs</option><option value="sidebar">Sidebar catalog</option><option value="terminal" selected>Terminal and splits</option><option value="quota">Quota</option><option value="find">Find bar</option><option value="system">System controls</option><option value="radii">Corner radii</option><option value="all">All areas</option></select></label><label>Measure <select id="spacing-metric"></select></label><label>Sidebar <select id="spacing-sidebar"><option value="closed">Closed</option><option value="open">Transient</option><option value="pinned">Pinned</option></select></label><button type="button" id="spacing-all">Area overview</button><output id="spacing-active" class="spacing-readout"></output></div>
+    <div class="stage">
+      <div class="window" id="win">
+        <aside class="menu" id="hot" aria-label="Workspace catalog">
+          <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="platter">
+            <div class="menu-header">
+              <button class="trigger" id="trigger" type="button" aria-expanded="false" aria-controls="catalog">
+                <span class="name" id="current">gmc / main</span>
+                <svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg>
+              </button>
+              <div class="tools">
+                <button class="icon" id="add" type="button" title="Add repo" aria-label="Add repo"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+                <button class="icon" id="pin" type="button" title="Pin sidebar" aria-label="Pin sidebar" aria-pressed="false"><svg viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M6.5 3v10"/></svg></button>
+              </div>
+            </div>
+            <nav class="catalog" id="catalog" aria-label="Workspaces" inert><div class="list" id="list"></div></nav>
+          </div>
+          <div class="sidebar-resize" role="separator" aria-label="Sidebar width" aria-orientation="vertical" aria-valuemin="160" aria-valuemax="420" aria-valuenow="300" tabindex="0"></div>
+        </aside>
+        <section class="right" aria-label="Terminal preview">
+          <div class="tabs" id="tabs"></div>
+          <div class="term"><div class="pane" id="left"></div><div class="pane" id="right"></div></div>
+          <footer class="status-line" aria-label="Usage status">
+            <div class="quota" id="quota">
+              <div class="quota-details" id="quota-details" role="region" aria-label="Quota details" tabindex="-1" inert>
+                <section class="quota-provider" aria-labelledby="quota-claude">
+                  <h2 id="quota-claude">Claude</h2>
+                  <div class="quota-row" role="group" aria-label="5 hours, 83 percent remaining, resets in 0 minutes"><span>5h</span><strong>83%</strong><span class="quota-reset">0m</span></div>
+                  <div class="quota-row" role="group" aria-label="7 days, 84 percent remaining, resets in 4 days 4 hours"><span>7d</span><strong>84%</strong><span class="quota-reset">4d 4h</span></div>
+                </section>
+                <section class="quota-provider" aria-labelledby="quota-codex">
+                  <h2 id="quota-codex">Codex</h2>
+                  <div class="quota-row" role="group" aria-label="7 days, 49 percent remaining, resets in 4 days 23 hours"><span>7d</span><strong>49%</strong><span class="quota-reset">4d 23h</span></div>
+                </section>
+              </div>
+              <button class="quota-trigger" id="quota-trigger" type="button" aria-expanded="false" aria-controls="quota-details">
+                <span>Claude <b>83%</b></span><span>Codex <b>49%</b></span>
+              </button>
+            </div>
+          </footer>
+        </section>
+        <dialog id="close-confirm"><form method="dialog"><h2>Close terminal?</h2><p>A process is still running in this terminal.</p><div class="actions"><button value="cancel" autofocus>Cancel</button><button value="close">Close</button></div></form></dialog>
+        <div class="toast" id="toast" role="status" hidden></div>
+      </div>
+    </div>
+    <div class="footnote"><span>HTML interaction reference · sample terminal and quota data</span><span><kbd>esc</kbd> Dismiss · <kbd>⌘ B</kbd> Pin / unpin</span></div>
+    <section id="spacing-inspector" class="spacing-inspector" aria-label="Spacing inspection" hidden>
+      <a href="spacing.md">Complete spacing inventory</a>
+      <p>Canvas labels measure this prototype in unscaled CSS px. Native values are AppKit pt; N marks a difference. Text edges mean layout boxes, not glyph ink. Click an ID to isolate one measurement. Hidden states remain listed.</p>
+      <p>For corner radii, select <strong>Corner radii</strong>. R01–R26 separate visible surfaces, transparent targets, focus rings and system-owned shapes. Tab glass and hover use18 pt, Tab focus uses16 pt, and list rows use16 pt. Other native shapes are unchanged. See the <a href="radii.md">radius inventory</a>.</p>
+      <p>Applied: terminal padding 8 pt; header text left inset 12 pt; Add–Pin gap and Pin right inset 4 pt; quota summary inset 8 pt; details inset 16/16/12/16 pt and gaps 8 pt. Other values remain unchanged.</p>
+      <p>Native baseline: normal window, 1200 × 780 pt root content, 300 pt sidebar, tabs at scroll start. Narrow headers clamp text frames; full screen changes traffic-light reservation. The prototype canvas is 1200 × 760 px. G means current glass height; W/H mean root content width/height.</p>
+      <p id="spacing-selection" class="spacing-selection" role="status"></p>
+      <div class="spacing-table-wrap"><table><thead><tr><th>ID</th><th>Relationship</th><th>Native source · pt</th><th>Prototype live · px</th><th>Recommended · pt</th></tr></thead><tbody id="spacing-rows"></tbody></table></div>
+    </section>
+    <details class="components"><summary>Component contract</summary><p>The native app uses AppKit controls and complete Ghostty surfaces. This page demonstrates chrome states; shell execution, search results, native directory selection, and process confirmation come from the real app. Tabs and workspace selections retain their preview state. See <a href="DESIGN.md">DESIGN.md</a> for the behavior and verification contract.</p><p>Chrome: system font, 12–13 pt. Terminal: Fira Code, Noto Sans Mono CJK SC fallback, 13 pt. Appearance changes colors and materials while font family, size, weight, metrics, and terminal state remain stable.</p></details>
+  </main>
+  <script>
+    const repos = [
+      { name: "gmc", open: true, rows: [{ id: "gmc-main", label: "main", path: "~/projects/gmc", live: true }] },
+      { name: "confer", open: true, rows: [
+        { id: "confer-main", label: "main", path: "~/projects/confer", live: false },
+        { id: "confer-old", label: "old-man", path: "~/projects/confer-old-man", live: false }
+      ] },
+      { name: "combe", open: true, rows: [{ id: "combe-main", label: "main", path: "~/projects/combe", live: false }] }
+    ];
+    const win = document.getElementById("win");
+    const hot = document.getElementById("hot");
+    const trigger = document.getElementById("trigger");
+    const catalog = document.getElementById("catalog");
+    const list = document.getElementById("list");
+    const current = document.getElementById("current");
+    const pin = document.getElementById("pin");
+    const tabs = document.getElementById("tabs");
+    const left = document.getElementById("left");
+    const right = document.getElementById("right");
+    const chevron = '<svg class="arrow" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg>';
+    const folder = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5V3.8c0-.7.5-1.3 1.2-1.3h3L8 4h4.8c.7 0 1.2.5 1.2 1.2v6.6c0 .7-.5 1.2-1.2 1.2H3.2c-.7 0-1.2-.5-1.2-1.2Z"/></svg>';
+    const check = '<svg class="check" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8 3 3 6-6"/></svg>';
+    let selected = "gmc-main";
+    let mode = "closed";
+    let enteredList = false;
+    let menuTimer;
+    let menuKeyboard = false;
+    let toastTimer;
+    const sessions = new Map();
+    let nextTab = 0;
+    const appearance = document.getElementById("appearance");
+    const systemAppearance = matchMedia("(prefers-color-scheme: dark)");
+    function applyAppearance() {
+      document.documentElement.dataset.appearance = appearance.value === "system" ? (systemAppearance.matches ? "dark" : "light") : appearance.value;
+    }
+    appearance.addEventListener("change", applyAppearance);
+    systemAppearance.addEventListener("change", applyAppearance);
+    applyAppearance();
+
+    function rowOf(id) {
+      for (const repo of repos) {
+        const row = repo.rows.find(row => row.id === id);
+        if (row) return { repo, row };
+      }
+    }
+
+    function renderList() {
+      list.replaceChildren();
+      for (const repo of repos) {
+        const group = document.createElement("div");
+        group.className = "group" + (repo.open ? "" : " shut");
+        const head = document.createElement("button");
+        head.className = "group-head";
+        head.type = "button";
+        head.setAttribute("aria-expanded", String(repo.open));
+        head.innerHTML = `${folder}<span>${repo.name}</span>${chevron}`;
+        const rows = document.createElement("div");
+        rows.className = "rows";
+        head.addEventListener("click", () => {
+          repo.open = !repo.open;
+          group.classList.toggle("shut", !repo.open);
+          head.setAttribute("aria-expanded", String(repo.open));
+          updateShortcuts();
+        });
+        for (const row of repo.rows) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "row";
+          button.dataset.id = row.id;
+          button.title = row.path;
+          button.innerHTML = `<i class="dot" aria-hidden="true"></i><span class="label">${row.label}</span>${check}<kbd class="shortcut" aria-hidden="true"></kbd>`;
+          button.addEventListener("click", () => select(row.id));
+          rows.append(button);
+        }
+        group.append(head, rows);
+        list.append(group);
+      }
+      updateShortcuts();
+    }
+
+    function updateShortcuts() {
+      let index = 0;
+      for (const button of list.querySelectorAll(".row")) {
+        const number = !button.closest(".group").classList.contains("shut") && index < 9 ? String(++index) : "";
+        button.querySelector(".shortcut").textContent = number;
+        if (number) {
+          button.dataset.shortcut = number;
+          button.setAttribute("aria-keyshortcuts", `Meta+${number}`);
+        } else {
+          delete button.dataset.shortcut;
+          button.removeAttribute("aria-keyshortcuts");
+        }
+      }
+    }
+
+    function select(id) {
+      selected = id;
+      const { repo, row } = rowOf(id);
+      row.live = true;
+      current.textContent = `${repo.name} / ${row.label}`;
+      for (const button of list.querySelectorAll(".row")) {
+        const item = rowOf(button.dataset.id).row;
+        button.classList.toggle("on", item.id === selected);
+        button.setAttribute("aria-current", String(item.id === selected));
+        button.querySelector(".dot").classList.toggle("live", item.live);
+      }
+      if (!sessions.has(id)) {
+        const items = Array.from({ length: id === "gmc-main" ? 2 : 1 }, () => ({ id: ++nextTab, label: `${repo.name} — zsh`, split: id === "gmc-main" }));
+        sessions.set(id, { items, active: items[0].id });
+      }
+      renderTabs();
+    }
+
+    function renderTabs() {
+      const { row } = rowOf(selected);
+      const session = sessions.get(selected);
+      tabs.replaceChildren();
+      for (const item of session.items) {
+        const tab = document.createElement("div");
+        tab.className = "tab" + (item.id === session.active ? " on" : "");
+        tab.setAttribute("role", "tab");
+        tab.setAttribute("aria-selected", String(item.id === session.active));
+        tab.tabIndex = item.id === session.active ? 0 : -1;
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = item.label;
+        const close = document.createElement("button");
+        close.className = "x";
+        close.textContent = "×";
+        close.setAttribute("aria-label", `Close ${item.label}`);
+        close.addEventListener("click", event => {
+          event.stopPropagation();
+          const index = session.items.indexOf(item);
+          session.items.splice(index, 1);
+          if (!session.items.length) {
+            sessions.delete(selected);
+            row.live = false;
+            const fallback = sessions.keys().next().value;
+            if (fallback) select(fallback);
+            else {
+              document.getElementById("toast").textContent = "The native window closes when no sessions remain.";
+              document.getElementById("toast").hidden = false;
+              tabs.replaceChildren();
+              left.textContent = "";
+              right.hidden = true;
+            }
+            return;
+          }
+          if (item.id === session.active) session.active = session.items[Math.min(index, session.items.length - 1)].id;
+          renderTabs();
+        });
+        tab.append(label, close);
+        tab.addEventListener("click", () => { session.active = item.id; renderTabs(); });
+        tab.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); session.active = item.id; renderTabs(); }
+        });
+        tabs.append(tab);
+      }
+      const plus = document.createElement("button");
+      plus.className = "newtab";
+      plus.textContent = "+";
+      plus.setAttribute("aria-label", "New tab");
+      plus.addEventListener("click", () => {
+        const item = { id: ++nextTab, label: `${rowOf(selected).repo.name} — zsh`, split: false };
+        session.items.push(item);
+        session.active = item.id;
+        renderTabs();
+      });
+      tabs.append(plus);
+      const content = `Last login: Tue Sep 8 00:12:27 on ttys002\n\n<span data-prompt>${row.path}  ${row.label}</span>\n❯ <span class="caret"></span>`;
+      left.innerHTML = content;
+      right.innerHTML = content.replace("ttys002", "ttys013");
+      right.hidden = !session.items.find(item => item.id === session.active)?.split;
+      document.querySelector(".term").classList.toggle("single", right.hidden);
+      applyComponent();
+    }
+
+    function applyComponent() {
+      const value = document.getElementById("component").value;
+      const term = document.querySelector(".term");
+      left.querySelector(".find-bar")?.remove();
+      term.classList.toggle("down", value === "down");
+      if (value === "down") { right.hidden = false; term.classList.remove("single"); }
+      if (value === "zoom") { right.hidden = true; term.classList.add("single"); }
+      if (value === "typography") left.innerHTML += '\n\nLatin ABC — 0123456789\n中文排版 — 日本語 — 한국어\n<strong>Bold text</strong>  <span data-prompt>ANSI color</span>';
+      if (value === "find") {
+        const bar = document.createElement("div");
+        bar.className = "find-bar";
+        bar.innerHTML = '<input type="search" aria-label="Find in terminal" placeholder="Find"><span data-count>1 / 3</span><button aria-label="Previous match">↑</button><button aria-label="Next match">↓</button><button aria-label="Close find bar">×</button>';
+        bar.querySelector('button:last-child').addEventListener("click", () => bar.remove());
+        left.append(bar);
+      }
+      document.querySelector('.status-line').hidden = value === "none";
+      document.querySelector('.right').style.gridTemplateRows = value === "none" ? "60px minmax(0, 1fr)" : "";
+      document.getElementById("quota").dataset.provider = value === "claude" ? "claude" : "all";
+      const dialog = document.getElementById("close-confirm");
+      if (value === "confirm" && !dialog.open) dialog.showModal();
+    }
+    document.getElementById("component").addEventListener("change", renderTabs);
+
+    function setMode(next) {
+      clearTimeout(menuTimer);
+      mode = next;
+      if (mode === "closed") menuKeyboard = false;
+      enteredList = false;
+      win.classList.toggle("peek", mode === "open");
+      win.classList.toggle("pinned", mode === "pinned");
+      trigger.setAttribute("aria-expanded", String(mode !== "closed"));
+      catalog.inert = mode === "closed";
+      pin.setAttribute("aria-pressed", String(mode === "pinned"));
+      pin.title = mode === "pinned" ? "Unpin sidebar" : "Pin sidebar";
+      pin.setAttribute("aria-label", pin.title);
+    }
+
+    function closeMenuFromPointer() {
+      if (mode === "open" && !(menuKeyboard && hot.contains(document.activeElement))) setMode("closed");
+    }
+
+    trigger.addEventListener("pointerenter", event => {
+      clearTimeout(menuTimer);
+      if (event.pointerType === "touch" || event.buttons || mode === "pinned") return;
+      if (mode === "closed") menuTimer = setTimeout(() => setMode("open"), 150);
+      else if (enteredList) menuTimer = setTimeout(() => setMode("closed"), 150);
+    });
+    trigger.addEventListener("pointerleave", () => clearTimeout(menuTimer));
+    catalog.addEventListener("pointerenter", () => { enteredList = true; });
+    hot.addEventListener("pointerenter", event => {
+      clearTimeout(menuTimer);
+      win.classList.toggle("command-held", event.metaKey);
+    });
+    hot.addEventListener("pointerleave", () => {
+      clearTimeout(menuTimer);
+      if (mode === "open") menuTimer = setTimeout(closeMenuFromPointer, 250);
+    });
+    hot.addEventListener("keydown", () => {
+      menuKeyboard = true;
+      if (mode !== "closed") clearTimeout(menuTimer);
+    });
+    hot.addEventListener("pointerdown", () => { menuKeyboard = false; });
+    hot.addEventListener("focusout", event => {
+      if (menuKeyboard && !hot.contains(event.relatedTarget)) {
+        menuKeyboard = false;
+        if (mode === "open") setMode("closed");
+      }
+    });
+    trigger.addEventListener("click", event => {
+      if (mode === "pinned") return;
+      if (event.detail === 0 || event.pointerType === "touch") setMode(mode === "closed" ? "open" : "closed");
+      else setMode("open");
+      menuKeyboard = mode !== "closed" && event.detail === 0;
+    });
+    trigger.addEventListener("keydown", event => {
+      if (event.key !== "ArrowDown") return;
+      event.preventDefault();
+      if (mode !== "pinned") setMode("open");
+      const active = list.querySelector('.row[aria-current="true"]');
+      (active.getClientRects().length ? active : list.querySelector("button")).focus({ preventScroll: true });
+    });
+    catalog.addEventListener("keydown", event => {
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const buttons = [...list.querySelectorAll("button")].filter(button => button.getClientRects().length);
+      const index = buttons.indexOf(document.activeElement);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[next]?.focus({ preventScroll: true });
+    });
+    pin.addEventListener("click", () => setMode(mode === "pinned" ? "closed" : "pinned"));
+    const resize = document.querySelector(".sidebar-resize");
+    function resizeSidebar(width) {
+      width = Math.max(160, Math.min(420, width));
+      win.style.setProperty("--chip-width", `${width - 72}px`);
+      win.style.setProperty("--menu-right", `${width + 12}px`);
+      resize.setAttribute("aria-valuenow", String(width));
+    }
+    resize.addEventListener("pointerdown", event => { event.preventDefault(); resize.setPointerCapture(event.pointerId); });
+    resize.addEventListener("pointermove", event => {
+      if (!resize.hasPointerCapture(event.pointerId)) return;
+      const bounds = win.getBoundingClientRect();
+      resizeSidebar((event.clientX - bounds.left) * 1200 / bounds.width - 12);
+    });
+    resize.addEventListener("keydown", event => {
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      resizeSidebar(Number(resize.getAttribute("aria-valuenow")) + (event.key === "ArrowRight" ? 10 : -10));
+    });
+    document.addEventListener("pointerdown", event => {
+      clearTimeout(menuTimer);
+      if (mode === "open" && !hot.contains(event.target)) setMode("closed");
+    });
+    document.addEventListener("keydown", event => {
+      win.classList.toggle("command-held", event.metaKey);
+      if (mode !== "closed" && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.isComposing && /^[1-9]$/.test(event.key)) {
+        event.preventDefault();
+        const row = list.querySelector(`.row[data-shortcut="${event.key}"]`);
+        if (row) {
+          clearTimeout(menuTimer);
+          select(row.dataset.id);
+          row.focus({ preventScroll: true });
+          menuKeyboard = true;
+        }
+      }
+      if (event.key === "Escape") {
+        clearTimeout(menuTimer);
+        if (mode === "open") {
+          setMode("closed");
+          trigger.focus({ preventScroll: true });
+        }
+      }
+      if (event.metaKey && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        setMode(mode === "pinned" ? "closed" : "pinned");
+      }
+    });
+    document.addEventListener("keyup", event => win.classList.toggle("command-held", event.metaKey));
+    window.addEventListener("blur", () => {
+      win.classList.remove("command-held");
+      clearTimeout(menuTimer);
+      clearTimeout(quotaTimer);
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        win.classList.remove("command-held");
+        clearTimeout(menuTimer);
+        clearTimeout(quotaTimer);
+      }
+    });
+    document.getElementById("add").addEventListener("click", () => {
+      const toast = document.getElementById("toast");
+      toast.textContent = "Combe opens the native directory picker here.";
+      toast.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.hidden = true; }, 2200);
+    });
+    const quota = document.getElementById("quota");
+    const quotaTrigger = document.getElementById("quota-trigger");
+    const quotaDetails = document.getElementById("quota-details");
+    let quotaTimer;
+    let quotaKeyboard = false;
+
+    function setQuotaOpen(open) {
+      clearTimeout(quotaTimer);
+      if (!open) quotaKeyboard = false;
+      quota.classList.toggle("open", open);
+      quotaTrigger.setAttribute("aria-expanded", String(open));
+      quotaDetails.inert = !open;
+    }
+
+    quota.addEventListener("pointerenter", event => {
+      clearTimeout(quotaTimer);
+      if (event.pointerType === "touch" || event.buttons || quota.classList.contains("open")) return;
+      quotaTimer = setTimeout(() => setQuotaOpen(true), 150);
+    });
+    quota.addEventListener("pointerleave", () => {
+      clearTimeout(quotaTimer);
+      if (quota.classList.contains("open")) {
+        quotaTimer = setTimeout(() => {
+          if (!(quotaKeyboard && quota.contains(document.activeElement))) setQuotaOpen(false);
+        }, 250);
+      }
+    });
+    quota.addEventListener("keydown", () => {
+      quotaKeyboard = true;
+      if (quota.classList.contains("open")) clearTimeout(quotaTimer);
+    });
+    quota.addEventListener("pointerdown", () => { quotaKeyboard = false; });
+    quota.addEventListener("focusout", event => {
+      if (!quota.contains(event.relatedTarget)) setQuotaOpen(false);
+    });
+    quotaTrigger.addEventListener("click", event => {
+      setQuotaOpen(event.detail === 0 || event.pointerType === "touch" ? !quota.classList.contains("open") : true);
+      quotaKeyboard = quota.classList.contains("open") && event.detail === 0;
+    });
+    quotaTrigger.addEventListener("keydown", event => {
+      if (event.key !== "ArrowUp") return;
+      event.preventDefault();
+      setQuotaOpen(true);
+      quotaDetails.focus({ preventScroll: true });
+    });
+    document.addEventListener("pointerdown", event => {
+      clearTimeout(quotaTimer);
+      if (!quota.contains(event.target)) setQuotaOpen(false);
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape") return;
+      clearTimeout(quotaTimer);
+      if (!quota.classList.contains("open")) return;
+      setQuotaOpen(false);
+      quotaTrigger.focus({ preventScroll: true });
+    });
+    new ResizeObserver(() => {
+      quota.style.setProperty("--quota-details-height", `${quotaDetails.offsetHeight}px`);
+    }).observe(quotaDetails);
+    new ResizeObserver(() => {
+      win.style.setProperty("--list-height", `${catalog.offsetHeight}px`);
+    }).observe(list);
+    const stage = document.querySelector(".stage");
+    new ResizeObserver(() => { win.style.transform = `scale(${stage.clientWidth / 1200})`; }).observe(stage);
+    renderList();
+    select(selected);
+  </script>
+  <script src="design.spacing.js"></script>
+</body>
+</html>

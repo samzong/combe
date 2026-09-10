@@ -1,0 +1,490 @@
+export default async function checkCatalog() {
+  const trigger = document.querySelector('#trigger');
+  const catalog = document.querySelector('#catalog');
+  const hot = document.querySelector('#hot');
+  const pin = document.querySelector('#pin');
+  const add = document.querySelector('#add');
+  const platter = document.querySelector('.platter');
+  const traffic = document.querySelector('.traffic');
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const pointer = (element, type) => element.dispatchEvent(new PointerEvent(type, { pointerType: 'mouse' }));
+  const results = [];
+  const assert = (condition, name) => { if (!condition) throw new Error(name); results.push(name); };
+  const isOpen = () => trigger.getAttribute('aria-expanded') === 'true';
+  const samples = [];
+  async function sampleAnimation() {
+    const frames = [];
+    await new Promise(resolve => {
+      const start = performance.now();
+      function frame() {
+        const r = platter.getBoundingClientRect();
+        const chip = trigger.getBoundingClientRect();
+        const lights = traffic.getBoundingClientRect();
+        const pinRect = pin.getBoundingClientRect();
+        const addRect = add.getBoundingClientRect();
+        const tab = document.querySelector('.tab').getBoundingClientRect();
+        frames.push({ x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, radius: getComputedStyle(platter).borderRadius, tabX: tab.x, tabY: tab.y, chipX: chip.x, chipY: chip.y, trafficX: lights.x, trafficY: lights.y, pinX: pinRect.x, pinY: pinRect.y, addX: addRect.x, addY: addRect.y });
+        if (performance.now() - start < 600) requestAnimationFrame(frame);
+        else resolve();
+      }
+      requestAnimationFrame(frame);
+    });
+    samples.push(...frames);
+    return frames;
+  }
+  if (pin.getAttribute('aria-pressed') === 'true') pin.click();
+  document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  await wait(450);
+  const origin = platter.getBoundingClientRect();
+  const radius = getComputedStyle(platter).borderRadius;
+  const tabOrigin = document.querySelector('.tab').getBoundingClientRect();
+  const chipOrigin = trigger.getBoundingClientRect();
+  const trafficOrigin = traffic.getBoundingClientRect();
+  const pinOrigin = pin.getBoundingClientRect();
+  const addOrigin = add.getBoundingClientRect();
+  pointer(trigger, 'pointerenter');
+  const frames = await sampleAnimation();
+  assert(frames.every(r => Math.abs(r.chipX - chipOrigin.x) < .5 && Math.abs(r.chipY - chipOrigin.y) < .5), 'Expansion keeps the chip top-left fixed');
+  assert(frames.every(r => Math.abs(r.trafficX - trafficOrigin.x) < .5 && Math.abs(r.trafficY - trafficOrigin.y) < .5), 'Traffic lights stay in their window positions during expansion');
+  assert(frames.at(-1).h > origin.height, 'Menu grows down');
+  const glass = platter.getBoundingClientRect();
+  const lights = traffic.getBoundingClientRect();
+  assert(glass.left < lights.left && glass.top < lights.top && glass.right > lights.right && glass.bottom > lights.bottom, 'Expanded glass contains the traffic lights');
+  assert(frames.some(r => r.h > origin.height + 1 && r.h < frames.at(-1).h - 1), 'Expansion has intermediate animation frames');
+  const tools = document.querySelector('.tools').getBoundingClientRect();
+  const tab = document.querySelector('.tab').getBoundingClientRect();
+  assert(tools.right < tab.left, 'Header controls stay clear of terminal tabs');
+  pointer(catalog, 'pointerenter');
+  document.querySelector('[data-id="confer-old"]').click();
+  assert(isOpen() && document.querySelector('#current').textContent === 'confer / old-man', 'Selecting switches workspace and keeps the menu open');
+  pointer(trigger, 'pointerenter');
+  await sampleAnimation();
+  assert(!isOpen() && catalog.inert, 'Returning to the chip closes and removes hidden rows from focus');
+  await wait(250);
+  assert(!isOpen(), 'Menu stays closed while resting on the chip');
+  pointer(trigger, 'pointerenter');
+  await wait(450);
+  pin.click();
+  await sampleAnimation();
+  pointer(hot, 'pointerleave');
+  await wait(250);
+  assert(pin.getAttribute('aria-pressed') === 'true' && isOpen(), 'Pinned catalog survives pointer exit');
+  document.querySelector('[data-id="combe-main"]').click();
+  assert(pin.getAttribute('aria-pressed') === 'true' && document.querySelector('#current').textContent === 'combe / main', 'Pinned workspace switching preserves the panel');
+  const panel = platter.getBoundingClientRect();
+  const win = document.querySelector('#win').getBoundingClientRect();
+  const term = document.querySelector('.term').getBoundingClientRect();
+  assert(panel.left > win.left && panel.bottom < win.bottom && panel.right < term.left, 'Pinned glass has outer spacing and clears terminal content');
+  assert(panel.left < lights.left && panel.top < lights.top && panel.right > lights.right && panel.bottom > lights.bottom, 'Pinned glass also contains the traffic lights');
+  pin.click();
+  await sampleAnimation();
+  assert(!isOpen(), 'Unpin returns to the chip');
+  assert(samples.every(r => Math.abs(r.right - origin.right) < .5), 'Glass right edge stays fixed through opening, closing, pinning and unpinning');
+  assert(samples.every(r => r.radius === radius), 'Glass keeps the chip corner radius throughout every transition');
+  assert(samples.every(r => Math.abs(r.tabX - tabOrigin.x) < .5 && Math.abs(r.tabY - tabOrigin.y) < .5), 'Terminal tabs stay in their window positions throughout every transition');
+  assert(samples.every(r => Math.abs(r.pinX - pinOrigin.x) < .5 && Math.abs(r.pinY - pinOrigin.y) < .5), 'Pin button stays fixed throughout every transition');
+  assert(samples.every(r => Math.abs(r.addX - addOrigin.x) < .5 && Math.abs(r.addY - addOrigin.y) < .5), 'Add button stays fixed throughout every transition');
+  trigger.focus();
+  trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+  assert(isOpen() && document.activeElement.matches('.row'), 'Keyboard opens and focuses the selected workspace');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert(!isOpen() && document.activeElement === trigger, 'Escape restores focus to the chip');
+  pointer(trigger, 'pointerenter');
+  await wait(200);
+  pointer(hot, 'pointerleave');
+  await wait(300);
+  assert(!isOpen(), 'Pointer exit dismisses the transient menu');
+  pointer(trigger, 'pointerenter');
+  await wait(450);
+  document.querySelector('[data-id="gmc-main"]').click();
+  document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  assert(!isOpen(), 'Outside press dismisses the transient menu');
+  return { passed: results.length, results, animationFrames: samples.length };
+}
+
+export async function checkQuota() {
+  const quota = document.querySelector('#quota');
+  const trigger = document.querySelector('#quota-trigger');
+  const details = document.querySelector('#quota-details');
+  const pin = document.querySelector('#pin');
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const pointer = (element, type) => element.dispatchEvent(new PointerEvent(type, { pointerType: 'mouse', bubbles: type === 'pointerdown' }));
+  const results = [];
+  const assert = (condition, name) => { if (!condition) throw new Error(name); results.push(name); };
+  const open = () => trigger.getAttribute('aria-expanded') === 'true';
+  if (pin.getAttribute('aria-pressed') === 'true') pin.click();
+  pointer(document.body, 'pointerdown');
+  await wait(450);
+  const origin = quota.getBoundingClientRect();
+  const chipOrigin = trigger.getBoundingClientRect();
+  const frames = [];
+  pointer(quota, 'pointerenter');
+  await new Promise(resolve => {
+    const start = performance.now();
+    function frame() {
+      const panel = quota.getBoundingClientRect();
+      const chip = trigger.getBoundingClientRect();
+      frames.push({ left: panel.left, top: panel.top, bottom: panel.bottom, chipLeft: chip.left, chipTop: chip.top });
+      if (performance.now() - start < 550) requestAnimationFrame(frame);
+      else resolve();
+    }
+    requestAnimationFrame(frame);
+  });
+  assert(open() && !details.inert, 'Hover reveals accessible quota details');
+  assert(frames.every(r => Math.abs(r.left - origin.left) < .5 && Math.abs(r.bottom - origin.bottom) < .5), 'Quota panel keeps its bottom-left anchor throughout expansion');
+  assert(frames.at(-1).top < origin.top && frames.some(r => r.top < origin.top - 1 && r.top > frames.at(-1).top + 1), 'Quota expands upward through intermediate frames');
+  assert(frames.every(r => Math.abs(r.chipLeft - chipOrigin.left) < .5 && Math.abs(r.chipTop - chipOrigin.top) < .5), 'Summary stays in place while details expand');
+  pointer(details, 'pointerdown');
+  assert(open(), 'Interacting inside details keeps the panel open');
+  pointer(quota, 'pointerleave');
+  await wait(70);
+  pointer(quota, 'pointerenter');
+  await wait(220);
+  assert(open(), 'Returning during the exit delay preserves the panel');
+  pointer(quota, 'pointerleave');
+  await wait(300);
+  assert(!open() && details.inert, 'Leaving hides details and removes them from focus');
+  pin.click();
+  await wait(450);
+  pointer(quota, 'pointerenter');
+  await wait(550);
+  assert(quota.getBoundingClientRect().left > document.querySelector('.platter').getBoundingClientRect().right, 'Expanded quota remains outside the pinned sidebar');
+  trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+  assert(open() && document.activeElement === details, 'Arrow Up opens and focuses quota details');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert(!open() && document.activeElement === trigger && pin.getAttribute('aria-pressed') === 'true', 'Escape returns focus without unpinning the sidebar');
+  pointer(quota, 'pointerenter');
+  pointer(document.body, 'pointerdown');
+  assert(!open(), 'Outside press dismisses quota details');
+  trigger.dispatchEvent(new PointerEvent('click', { pointerType: 'touch', detail: 1 }));
+  assert(open(), 'Touch opens quota details');
+  trigger.dispatchEvent(new PointerEvent('click', { pointerType: 'touch', detail: 1 }));
+  assert(!open(), 'Second touch closes quota details');
+  const component = document.querySelector('#component');
+  const originalComponent = component.value;
+  try {
+    for (const scene of ['claude', 'workspace']) {
+      component.value = scene;
+      component.dispatchEvent(new Event('change'));
+      trigger.click();
+      await wait(550);
+      const panel = details.getBoundingClientRect();
+      const rows = [...details.querySelectorAll('.quota-row')].filter(row => row.getClientRects().length);
+      assert(rows.every(row => {
+        const rect = row.getBoundingClientRect();
+        return rect.left >= panel.left && rect.right <= panel.right && rect.top >= panel.top && rect.bottom < panel.bottom;
+      }), `${scene}: every quota row fits inside the expanded panel`);
+      assert(rows.every(row => [...row.children].every(cell => cell.scrollWidth <= cell.clientWidth)), `${scene}: quota values and reset labels remain visible`);
+      const chip = trigger.getBoundingClientRect();
+      assert([...trigger.children].filter(span => span.getClientRects().length).every(span => {
+        const rect = span.getBoundingClientRect();
+        return rect.left > chip.left && rect.right < chip.right;
+      }), `${scene}: summary content fits its clickable area`);
+      trigger.click();
+      await wait(400);
+    }
+  } finally {
+    component.value = originalComponent;
+    component.dispatchEvent(new Event('change'));
+  }
+  pin.click();
+  return { passed: results.length, results, animationFrames: frames.length };
+}
+
+export async function checkShortcuts() {
+  const win = document.querySelector('#win');
+  const trigger = document.querySelector('#trigger');
+  const pin = document.querySelector('#pin');
+  const list = document.querySelector('#list');
+  const active = () => list.querySelector('.row[aria-current="true"]').dataset.id;
+  const hints = () => [...list.querySelectorAll('.group:not(.shut) .shortcut')];
+  const key = (value, options = {}, type = 'keydown') => {
+    const event = new KeyboardEvent(type, { key: value, bubbles: true, cancelable: true, ...options });
+    document.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const results = [];
+  const assert = (condition, name) => { if (!condition) throw new Error(name); results.push(name); };
+  if (pin.getAttribute('aria-pressed') === 'true') pin.click();
+  document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  key('Meta', {}, 'keyup');
+  list.querySelector('[data-id="gmc-main"]').click();
+  assert(!key('3', { metaKey: true }) && active() === 'gmc-main', 'Closed sidebar leaves number shortcuts alone');
+  trigger.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse', metaKey: true }));
+  await new Promise(resolve => setTimeout(resolve, 600));
+  assert(hints().every(hint => getComputedStyle(hint).opacity === '1'), 'Opening while Command is held reveals the hints');
+  const labels = [...list.querySelectorAll('.row .label')];
+  const positions = labels.map(label => label.getBoundingClientRect().x);
+  assert(key('3', { metaKey: true }) && active() === 'confer-old' && document.querySelector('#left').textContent.includes('confer-old-man'), 'Command digit switches the workspace and its terminal preview');
+  assert(trigger.getAttribute('aria-expanded') === 'true', 'Shortcut selection keeps the transient sidebar open');
+  key('3', { metaKey: true }, 'keyup');
+  assert(hints().every(hint => getComputedStyle(hint).opacity === '1'), 'Releasing the digit keeps hints visible while Command is held');
+  key('Meta', {}, 'keyup');
+  assert(hints().every(hint => getComputedStyle(hint).opacity === '0') && getComputedStyle(list.querySelector('.row.on .check')).opacity !== '0', 'Releasing Command restores the selection check');
+  assert(labels.every((label, index) => Math.abs(label.getBoundingClientRect().x - positions[index]) < .5), 'Showing and hiding hints does not shift row labels');
+  assert(!key('1') && !key('1', { metaKey: true, shiftKey: true }) && !key('1', { metaKey: true, altKey: true }) && !key('1', { metaKey: true, ctrlKey: true }) && active() === 'confer-old', 'Plain digits and other modifier chords do not switch workspaces');
+  const group = list.querySelectorAll('.group-head')[1];
+  group.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  group.click();
+  assert(hints().map(hint => hint.textContent).join(',') === '1,2' && key('2', { metaKey: true }) && active() === 'combe-main', 'Collapsing a group renumbers visible rows and shortcut targets together');
+  assert(key('9', { metaKey: true }) && active() === 'combe-main', 'Unassigned numbers in an open sidebar keep the current workspace');
+  group.click();
+  pin.click();
+  key('2', { metaKey: true });
+  assert(active() === 'confer-main' && pin.getAttribute('aria-pressed') === 'true', 'Number switching preserves the pinned sidebar');
+  window.dispatchEvent(new Event('blur'));
+  assert(hints().every(hint => getComputedStyle(hint).opacity === '0'), 'Losing window focus clears held Command hints');
+  key('1', { metaKey: true });
+  key('Meta', {}, 'keyup');
+  pin.click();
+  return { passed: results.length, results };
+}
+
+export async function checkHoverIntent() {
+  const pin = document.querySelector('#pin');
+  const hot = document.querySelector('#hot');
+  const trigger = document.querySelector('#trigger');
+  const quota = document.querySelector('#quota');
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const pointer = (element, type, buttons = 0) => element.dispatchEvent(new PointerEvent(type, { pointerType: 'mouse', buttons, bubbles: type === 'pointerdown' }));
+  const key = (element, value, options = {}) => element.dispatchEvent(new KeyboardEvent('keydown', { key: value, bubbles: true, ...options }));
+  const click = element => {
+    pointer(element, 'pointerdown', 1);
+    element.dispatchEvent(new PointerEvent('click', { pointerType: 'mouse', detail: 1, bubbles: true }));
+  };
+  const results = [];
+  const assert = (condition, name) => { if (!condition) throw new Error(name); results.push(name); };
+  if (pin.getAttribute('aria-pressed') === 'true') pin.click();
+  pointer(document.body, 'pointerdown');
+  for (const [name, panel, hover, button, arrow] of [
+    ['Sidebar', hot, trigger, trigger, 'ArrowDown'],
+    ['Quota', quota, quota, document.querySelector('#quota-trigger'), 'ArrowUp']
+  ]) {
+    const open = () => button.getAttribute('aria-expanded') === 'true';
+    pointer(hover, 'pointerenter');
+    await wait(70);
+    assert(!open(), `${name}: brief entry does not open the panel`);
+    pointer(hover, 'pointerleave');
+    pointer(panel, 'pointerleave');
+    await wait(200);
+    assert(!open(), `${name}: sweeping past cancels the pending opening`);
+    pointer(hover, 'pointerenter', 1);
+    await wait(200);
+    assert(!open(), `${name}: dragging across does not open the panel`);
+    pointer(hover, 'pointerleave');
+    pointer(hover, 'pointerenter');
+    await wait(70);
+    pointer(button, 'pointerdown', 1);
+    await wait(180);
+    assert(!open(), `${name}: starting a drag cancels a pending opening`);
+    pointer(hover, 'pointerleave');
+    pointer(hover, 'pointerenter');
+    key(document, 'Escape');
+    await wait(200);
+    assert(!open(), `${name}: Escape cancels a pending opening`);
+    pointer(hover, 'pointerenter');
+    window.dispatchEvent(new Event('blur'));
+    await wait(200);
+    assert(!open(), `${name}: losing window focus cancels a pending opening`);
+    pointer(hover, 'pointerenter');
+    click(button);
+    assert(open(), `${name}: clicking opens immediately`);
+    await wait(200);
+    assert(open(), `${name}: the old hover timer cannot undo a click`);
+    pointer(panel, 'pointerleave');
+    await wait(180);
+    assert(open(), `${name}: a short exit keeps the panel open`);
+    pointer(panel, 'pointerenter');
+    await wait(120);
+    assert(open(), `${name}: reentry cancels closing`);
+    pointer(panel, 'pointerleave');
+    await wait(70);
+    button.focus();
+    key(button, arrow);
+    assert(open() && panel.contains(document.activeElement), `${name}: keyboard entry is immediate and focuses the panel`);
+    await wait(300);
+    pointer(panel, 'pointerleave');
+    await wait(300);
+    assert(open(), `${name}: keyboard focus survives pending and subsequent pointer exits`);
+    pointer(panel, 'pointerdown');
+    pointer(panel, 'pointerleave');
+    await wait(300);
+    assert(!open(), `${name}: returning to mouse input restores delayed closing`);
+  }
+  click(trigger);
+  pointer(document.querySelector('#catalog'), 'pointerenter');
+  pointer(trigger, 'pointerenter');
+  await wait(70);
+  pointer(trigger, 'pointerleave');
+  await wait(180);
+  assert(trigger.getAttribute('aria-expanded') === 'true', 'Crossing the chip toward a header button does not close the sidebar');
+  pointer(trigger, 'pointerenter');
+  await wait(200);
+  assert(trigger.getAttribute('aria-expanded') === 'false', 'Resting on the chip deliberately closes the sidebar');
+  click(trigger);
+  pointer(document.querySelector('#catalog'), 'pointerenter');
+  pointer(trigger, 'pointerenter');
+  click(pin);
+  await wait(200);
+  assert(pin.getAttribute('aria-pressed') === 'true', 'Pinning cancels a pending return-to-chip close');
+  click(pin);
+  click(trigger);
+  pointer(hot, 'pointerleave');
+  key(document, '3', { metaKey: true });
+  await wait(300);
+  assert(trigger.getAttribute('aria-expanded') === 'true' && document.activeElement.dataset.id === 'confer-old', 'A number shortcut cancels pending closing and retains keyboard focus');
+  key(document, '1', { metaKey: true });
+  document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Meta', bubbles: true }));
+  key(document, 'Escape');
+  return { passed: results.length, results };
+}
+
+export async function checkAppearanceAndComponents() {
+  const appearance = document.querySelector('#appearance');
+  const component = document.querySelector('#component');
+  const results = [];
+  const assert = (condition, name) => { if (!condition) throw new Error(name); results.push(name); };
+  const change = (element, value) => { element.value = value; element.dispatchEvent(new Event('change')); };
+  const metrics = () => [...document.querySelectorAll('#current, .tab .label, .pane')].map(element => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return [element.textContent, style.fontFamily, style.fontSize, style.fontWeight, style.lineHeight, style.letterSpacing, rect.width, rect.height];
+  });
+  const initialAppearance = appearance.value;
+  const initialComponent = component.value;
+  change(component, 'typography');
+  change(appearance, 'dark');
+  const before = JSON.stringify(metrics());
+  const dark = getComputedStyle(document.querySelector('.pane')).color;
+  change(appearance, 'light');
+  assert(before === JSON.stringify(metrics()), 'Appearance preserves text, typography, tab and terminal geometry');
+  assert(dark !== getComputedStyle(document.querySelector('.pane')).color, 'Light appearance updates terminal text contrast');
+  change(component, 'find');
+  assert(document.querySelector('.find-bar input[aria-label="Find in terminal"]'), 'Find component exposes a labelled search field');
+  document.querySelector('.find-bar button:last-child').click();
+  assert(!document.querySelector('.find-bar'), 'Find component can be dismissed');
+  change(component, 'down');
+  assert(document.querySelector('.term').classList.contains('down') && !document.querySelector('#right').hidden, 'Vertical split component shows both panes');
+  change(component, 'zoom');
+  assert(document.querySelector('#right').hidden, 'Zoom component isolates one pane');
+  change(component, 'confirm');
+  assert(document.querySelector('#close-confirm').open, 'Close confirmation is a native modal dialog in the reference');
+  document.querySelector('#close-confirm button[value="cancel"]').click();
+  assert(!document.querySelector('#close-confirm').open, 'Cancelling confirmation retains the workspace');
+  change(component, 'claude');
+  assert(getComputedStyle(document.querySelector('.quota-provider:last-child')).display === 'none', 'One-provider component removes the missing provider');
+  change(component, 'none');
+  assert(document.querySelector('.status-line').hidden, 'Missing quota removes the status row');
+  change(component, 'workspace');
+  const tabs = document.querySelectorAll('.tab').length;
+  document.querySelector('.newtab').click();
+  assert(document.querySelectorAll('.tab').length === tabs + 1, 'New tab creates and selects a tab');
+  const active = document.querySelector('.tab[aria-selected="true"]').textContent;
+  const current = document.querySelector('.row[aria-current="true"]').dataset.id;
+  document.querySelector('.row:not([aria-current="true"])').click();
+  document.querySelector(`.row[data-id="${current}"]`).click();
+  assert(document.querySelectorAll('.tab').length === tabs + 1 && document.querySelector('.tab[aria-selected="true"]').textContent === active, 'Workspace switching preserves its tab set and selection');
+  document.querySelector('.tab[aria-selected="true"] .x').click();
+  assert(document.querySelectorAll('.tab').length === tabs, 'Closing a tab retains its workspace siblings');
+  change(component, initialComponent);
+  change(appearance, initialAppearance);
+  return { passed: results.length, results };
+}
+
+export async function checkSpacing() {
+  const $ = selector => document.querySelector(selector);
+  const wait = () => new Promise(resolve => setTimeout(resolve, 500));
+  const change = (selector, value) => { const element = $(selector); element.value = value; element.dispatchEvent(new Event('change')); };
+  const results = [];
+  const assert = (condition, name) => { if (!condition) throw new Error(name); results.push(name); };
+  const initialComponent = $('#component').value;
+  const initialMode = $('#pin').getAttribute('aria-pressed') === 'true' ? 'pinned' : $('#trigger').getAttribute('aria-expanded') === 'true' ? 'open' : 'closed';
+  const stage = $('.stage');
+  const initialWidth = stage.style.width;
+  const measure = id => combeSpacing.measure(combeSpacing.metrics.find(metric => metric.id === id));
+  const geometry = () => {
+    const origin = $('#win').getBoundingClientRect();
+    return ['.platter','#trigger','#add','#pin','.tabs','.term','.status-line'].map(selector => {
+      const box = $(selector).getBoundingClientRect();
+      return [box.x - origin.x, box.y - origin.y, box.width, box.height];
+    });
+  };
+  try {
+    if ($('#spacing-toggle').checked) $('#spacing-toggle').click();
+    await wait();
+    const before = JSON.stringify(geometry());
+    $('#spacing-toggle').click();
+    await wait();
+    assert(JSON.stringify(geometry()) === before, 'Showing measurements preserves all app layout boxes');
+    assert(getComputedStyle($('.spacing-overlay')).pointerEvents === 'none', 'Measurement overlay does not capture app pointer input');
+    assert(new Set(combeSpacing.metrics.map(metric => metric.id)).size === combeSpacing.metrics.length, 'Every measurement has a unique request ID');
+    change('#spacing-area', 'all');
+    change('#spacing-metric', 'H11');
+    await wait();
+    assert([...$('.spacing-overlay').querySelectorAll('text')].every(label => label.textContent.startsWith('H11')), 'Selecting one ID isolates that measurement');
+    change('#spacing-metric', 'W05');
+    await wait();
+    assert(measure('W05').segments[0].value === 0 && $('.spacing-overlay').textContent.includes('W05 0'), 'Zero gaps are measured and drawn');
+    const unscaled = measure('E01').segments.map(segment => segment.value);
+    stage.style.width = '600px';
+    await wait();
+    assert(measure('E01').segments.every((segment,index) => Math.abs(segment.value - unscaled[index]) < .1), 'Measurements stay in unscaled units when the preview shrinks');
+    stage.style.width = initialWidth;
+    change('#spacing-sidebar', 'pinned');
+    await wait();
+    const pinnedBottom = measure('H17').segments.find(segment => segment.key === 'B').value;
+    change('#spacing-sidebar', 'closed');
+    await wait();
+    assert(pinnedBottom > 500 && measure('H17').segments.find(segment => segment.key === 'B').value === 4, 'Whole-glass bottom distance follows sidebar state');
+    assert(measure('S03') === null && measure('E04') === null, 'Hidden catalog and pinned-only relationships are not reported as live distances');
+    change('#component', 'down');
+    await wait();
+    const divider = measure('P02').segments[0];
+    assert(!divider.horizontal && divider.value === 0, 'Vertical split measures the bottom-to-top pane boundary');
+    const win = $('#win').getBoundingClientRect();
+    const pane = $('#right').getBoundingClientRect();
+    const expected = (win.bottom - pane.bottom) / (win.width / 1200) + parseFloat(getComputedStyle($('#right')).paddingBottom);
+    assert(Math.abs(measure('E06').segments[0].value - expected) < .1, 'Bottom text inset uses the bottom pane after a vertical split');
+    change('#component', 'zoom');
+    await wait();
+    assert(measure('P02') === null && measure('P03') === null, 'Single visible pane has no adjacent-pane measurement');
+    change('#spacing-area', 'quota');
+    await wait();
+    assert(measure('Q12') !== null && $('#quota-trigger').getAttribute('aria-expanded') === 'true', 'Quota inspection reveals the measured details');
+    change('#spacing-area', 'find');
+    await wait();
+    assert(measure('F01') !== null, 'Find inspection reveals the measured search bar');
+    change('#spacing-area', 'all');
+    change('#spacing-metric', 'P04');
+    await wait();
+    assert(measure('P04') !== null && measure('Q01') === null, 'No-quota inspection removes quota measurements');
+    assert(combeSpacing.metrics.every(metric => {
+      const result = combeSpacing.measure(metric);
+      return !result || result.segments.every(segment => Number.isFinite(segment.value));
+    }), 'All active relationships return finite measurements');
+    change('#spacing-area', 'radii');
+    change('#spacing-metric', 'R11');
+    await wait();
+    const circle = measure('R11').segments[0].value;
+    assert(Math.abs(circle * 2 - $('.dot').getBoundingClientRect().width / ($('#win').getBoundingClientRect().width / 1200)) < .1, 'Percentage circle radius uses the unscaled component size');
+    stage.style.width = '600px';
+    await wait();
+    assert(Math.abs(measure('R11').segments[0].value - circle) < .1, 'Radius measurements are independent of preview scaling');
+    stage.style.width = initialWidth;
+    const heading = $('.group-head'), oldRadius = heading.style.borderRadius;
+    try {
+      heading.style.borderRadius = '999px';
+      const limit = heading.getBoundingClientRect().height / ($('#win').getBoundingClientRect().width / 1200) / 2;
+      assert(Math.abs(measure('R04').segments[0].value - limit) < .1, 'Oversized uniform CSS corners are constrained by the shorter edge');
+    } finally { heading.style.borderRadius = oldRadius; }
+    $('#spacing-toggle').click();
+    assert(getComputedStyle($('.spacing-overlay')).display === 'none' && $('#spacing-inspector').hidden && $('#spacing-toolbar').hidden, 'Hiding measurements removes every inspection surface');
+    return {passed:results.length,results};
+  } finally {
+    stage.style.width = initialWidth;
+    change('#component', initialComponent);
+    change('#spacing-sidebar', initialMode);
+    change('#spacing-area', 'terminal');
+    if ($('#spacing-toggle').checked) $('#spacing-toggle').click();
+  }
+}

@@ -39,6 +39,7 @@ const HEADER_HEIGHT: f64 = 30.0;
 const TOP_BAR_HEIGHT: f64 = 60.0;
 const TAB_HEIGHT: f64 = 36.0;
 const TAB_WIDTH: f64 = 180.0;
+const TAB_RADIUS: f64 = 18.0;
 const TRAFFIC_INSET: f64 = 84.0;
 const FULLSCREEN_INSET: f64 = 12.0;
 const TOGGLE_WIDTH: f64 = 28.0;
@@ -1753,11 +1754,12 @@ fn sync_tabs() {
             let view = ClickView::new(mtm, frame, &tab.label, 12.0, 28.0, move || {
                 dispatch(Click::SelectTab(id))
             });
+            view.set_corner_radius(TAB_RADIUS);
             if Some(tab.id) != active {
                 view.dim_when_idle();
             }
             if Some(tab.id) == active {
-                let glass = chrome_view::glass(mtm, frame, 18.0);
+                let glass = chrome_view::glass(mtm, frame, TAB_RADIUS);
                 state.tab_bar.addSubview(&glass);
             }
             view.setAccessibilitySelected(Some(tab.id) == active);

@@ -4,24 +4,23 @@ use objc2::rc::{Retained, Weak};
 use objc2::runtime::{ProtocolObject, Sel};
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSAutoresizingMaskOptions, NSBezierPath, NSColor, NSControl,
-    NSControlTextEditingDelegate, NSEvent, NSEventModifierFlags, NSFont, NSSearchField,
-    NSSearchFieldDelegate, NSTextAlignment, NSTextField, NSTextFieldDelegate, NSTextView, NSView,
+    NSApplication, NSAutoresizingMaskOptions, NSColor, NSControl, NSControlTextEditingDelegate,
+    NSEvent, NSEventModifierFlags, NSFont, NSSearchField, NSSearchFieldDelegate, NSTextAlignment,
+    NSTextField, NSTextFieldDelegate, NSTextView, NSView,
 };
 use objc2_foundation::{
     MainThreadMarker, NSNotification, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
 };
 
-use crate::chrome_view::ClickView;
+use crate::chrome_view::{self, ClickView};
 use crate::habits;
 use crate::surface::SurfaceView;
 
 pub const WIDTH: f64 = 340.0;
-pub const HEIGHT: f64 = 34.0;
+pub const HEIGHT: f64 = 38.0;
 const INSET: f64 = 6.0;
 const COUNT_WIDTH: f64 = 64.0;
 const BUTTON_WIDTH: f64 = 22.0;
-const RADIUS: f64 = 8.0;
 
 type Action = fn(&FindBar);
 
@@ -82,20 +81,6 @@ define_class!(
     unsafe impl NSSearchFieldDelegate for FindBar {}
 
     impl FindBar {
-        #[unsafe(method(drawRect:))]
-        fn draw_rect(&self, _dirty: NSRect) {
-            NSColor::windowBackgroundColor().setFill();
-            NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(self.bounds(), RADIUS, RADIUS)
-                .fill();
-            let bounds = self.bounds();
-            let inner = NSRect::new(
-                NSPoint::new(bounds.origin.x + 0.5, bounds.origin.y + 0.5),
-                NSSize::new(bounds.size.width - 1.0, bounds.size.height - 1.0),
-            );
-            NSColor::separatorColor().setStroke();
-            NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(inner, RADIUS, RADIUS).stroke();
-        }
-
         #[unsafe(method(mouseDown:))]
         fn mouse_down(&self, _event: &NSEvent) {}
 
@@ -129,9 +114,15 @@ impl FindBar {
             NSAutoresizingMaskOptions::ViewMinXMargin | NSAutoresizingMaskOptions::ViewMinYMargin,
         );
 
+        let material = chrome_view::glass(mtm, this.bounds(), 12.0);
+        material.setAutoresizingMask(
+            NSAutoresizingMaskOptions::ViewWidthSizable
+                | NSAutoresizingMaskOptions::ViewHeightSizable,
+        );
+        this.addSubview(&material);
         let buttons = 3.0 * BUTTON_WIDTH;
         let field_width = (width - INSET * 3.0 - COUNT_WIDTH - buttons).max(0.0);
-        let field_height = habits::LINE_HEIGHT + 6.0;
+        let field_height = habits::CHROME_LINE_HEIGHT + 6.0;
         let y = (HEIGHT - field_height) / 2.0;
 
         let field = NSSearchField::initWithFrame(
@@ -142,17 +133,20 @@ impl FindBar {
             ),
         );
         field.setPlaceholderString(Some(&NSString::from_str("Find")));
-        field.setFont(Some(&NSFont::systemFontOfSize(habits::FONT_SIZE + 1.0)));
+        field.setFont(Some(&NSFont::systemFontOfSize(habits::CHROME_FONT_SIZE)));
         field.setSendsSearchStringImmediately(true);
         unsafe { field.setDelegate(Some(ProtocolObject::from_ref(&*this))) };
         this.addSubview(&field);
 
         let count = NSTextField::labelWithString(&NSString::from_str(""), mtm);
         count.setFrame(NSRect::new(
-            NSPoint::new(INSET + field_width, (HEIGHT - habits::LINE_HEIGHT) / 2.0),
-            NSSize::new(COUNT_WIDTH, habits::LINE_HEIGHT),
+            NSPoint::new(
+                INSET + field_width,
+                (HEIGHT - habits::CHROME_LINE_HEIGHT) / 2.0,
+            ),
+            NSSize::new(COUNT_WIDTH, habits::CHROME_LINE_HEIGHT),
         ));
-        count.setFont(Some(&NSFont::systemFontOfSize(habits::FONT_SIZE)));
+        count.setFont(Some(&NSFont::systemFontOfSize(habits::CHROME_FONT_SIZE)));
         count.setAlignment(NSTextAlignment::Center);
         count.setTextColor(Some(&NSColor::secondaryLabelColor()));
         this.addSubview(&count);
@@ -178,7 +172,7 @@ impl FindBar {
                     }
                 },
             );
-            button.set_font(&NSFont::systemFontOfSize(habits::FONT_SIZE + 4.0));
+            button.set_font(&NSFont::systemFontOfSize(habits::CHROME_FONT_SIZE + 2.0));
             this.addSubview(&button);
             x += BUTTON_WIDTH;
         }

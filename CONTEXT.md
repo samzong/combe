@@ -10,7 +10,7 @@ Use these words in code, commits, and docs. If a new domain word sticks, add it 
 | Folder workspace | A registered path that is not a git checkout. Shown as a single row. |
 | Workspace | The selected worktree or folder workspace. The shell cwd of a tab. |
 | Catalog | The merge of `state.json` + git porcelain + folder fallback. Missing registered paths are skipped. |
-| Sidebar | The left catalog list. Folded with ⌘B. |
+| Sidebar | The catalog shown as a workspace chip, transient panel, or pinned sidebar. ⌘B toggles pinned and chip states. |
 | Session mark | Sidebar dot on a worktree row. Green when that workspace has a tab this app run; dim when it does not. |
 | Tab | One split tree, opened on one workspace. |
 | Pane | One node of a tab's split tree. Either an `NSSplitView` or a surface. |
@@ -18,7 +18,7 @@ Use these words in code, commits, and docs. If a new domain word sticks, add it 
 | Split | A cut that reparents the focused surface into a new pane beside a fresh sibling. |
 | Chrome | Everything AppKit draws: window, sidebar, tab bar, status line, splits. Never the terminal. |
 | Status line | Bottom chrome row on the right pane. Present only while a quota chip is shown. |
-| Quota | One status-line block of locally recorded CLI subscription snapshots. Each name is followed by remaining percent of its tightest 5h/7d window. A click opens one NSPopover with every available provider's windows. |
+| Quota | One status-line block of locally recorded CLI subscription snapshots. Each name is followed by remaining percent of its tightest 5h/7d window. Hover or activation expands the chip upward with every available provider's windows. |
 | Habits | Compiled-in preferences in `crates/combe/src/habits.rs`. There is no config file. |
 | Occlusion | A hidden tab's surfaces are told to stop drawing via `ghostty_surface_set_occlusion`. |
 | State file | `~/Library/Application Support/combe/state.json` |

@@ -890,6 +890,14 @@ fn icon_button(
     Some(button)
 }
 
+fn chip_title(repo: &sidebar::Repo, row: &sidebar::Row) -> String {
+    if repo.name == combe_catalog::HOME_LABEL && row.label == combe_catalog::HOME_LABEL {
+        combe_catalog::HOME_LABEL.to_string()
+    } else {
+        format!("{} / {}", repo.name, row.label)
+    }
+}
+
 fn first_row() -> Option<(String, String)> {
     STATE.with(|state| {
         let state = state.borrow();
@@ -2153,7 +2161,7 @@ fn rebuild_sidebar() {
             repo.rows
                 .iter()
                 .find(|row| current == Some(row.path.to_string_lossy().as_ref()))
-                .map(|row| format!("{} / {}", repo.name, row.label))
+                .map(|row| chip_title(repo, row))
         });
         state
             .workspace_chip

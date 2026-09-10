@@ -345,6 +345,7 @@
   </main>
   <script>
     const repos = [
+      { name: "~", open: true, rows: [{ id: "home", label: "~", path: "~", live: false }] },
       { name: "gmc", open: true, rows: [{ id: "gmc-main", label: "main", path: "~/projects/gmc", live: true }] },
       { name: "confer", open: true, rows: [
         { id: "confer-main", label: "main", path: "~/projects/confer", live: false },
@@ -442,7 +443,7 @@
       selected = id;
       const { repo, row } = rowOf(id);
       row.live = true;
-      current.textContent = `${repo.name} / ${row.label}`;
+      current.textContent = repo.name === "~" && row.label === "~" ? "~" : `${repo.name} / ${row.label}`;
       for (const button of list.querySelectorAll(".row")) {
         const item = rowOf(button.dataset.id).row;
         button.classList.toggle("on", item.id === selected);

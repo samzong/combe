@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use combe_catalog::{State, add_repo, catalog, load_state, save_state, state_path};
+use combe_catalog::{
+    HOME_LABEL, State, Workspace, add_repo, catalog, home_dir, is_home_path, load_state,
+    save_state, should_inject_home, state_path,
+};
 
 pub struct Row {
     pub label: String,
@@ -15,13 +18,13 @@ pub struct Repo {
 
 pub fn repos() -> Vec<Repo> {
     let Some(state) = read_state() else {
-        return Vec::new();
+        return home_catalog();
     };
     let found = match catalog(&state) {
         Ok(found) => found,
         Err(err) => {
             eprintln!("combe: {err}");
-            return Vec::new();
+            return home_catalog();
         }
     };
     for err in &found.errors {
@@ -48,7 +51,35 @@ pub fn repos() -> Vec<Repo> {
             rows,
         });
     }
+    with_home(repos, &found.rows)
+}
+
+fn home_catalog() -> Vec<Repo> {
+    match home_dir() {
+        Some(home) => vec![synthetic_home(home)],
+        None => Vec::new(),
+    }
+}
+
+fn with_home(mut repos: Vec<Repo>, rows: &[Workspace]) -> Vec<Repo> {
+    let Some(home) = home_dir() else {
+        return repos;
+    };
+    if should_inject_home(rows, &home) {
+        repos.insert(0, synthetic_home(home));
+    }
     repos
+}
+
+fn synthetic_home(home: PathBuf) -> Repo {
+    Repo {
+        path: home.clone(),
+        name: HOME_LABEL.to_string(),
+        rows: vec![Row {
+            label: HOME_LABEL.to_string(),
+            path: home,
+        }],
+    }
 }
 
 pub fn add(paths: &[PathBuf]) {
@@ -85,6 +116,9 @@ fn read_state() -> Option<State> {
 }
 
 fn repo_name(path: &Path) -> String {
+    if is_home_path(path) {
+        return HOME_LABEL.to_string();
+    }
     path.file_name()
         .and_then(|name| name.to_str())
         .unwrap_or_else(|| path.to_str().unwrap_or("repo"))

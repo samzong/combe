@@ -7,9 +7,11 @@ pub const FONT_FAMILY: &str = "Fira Code";
 pub const FONT_FAMILY_CJK: &str = "Noto Sans Mono CJK SC";
 pub const CJK_CODEPOINTS: &str = "U+2E80-U+2FFF,U+3000-U+303F,U+31C0-U+31EF,U+3400-U+4DBF,U+4E00-U+9FFF,U+F900-U+FAFF,U+FF00-U+FFEF";
 pub const FONT_SIZE: f64 = 10.0;
-pub const LINE_HEIGHT: f64 = FONT_SIZE + 6.0;
 
-pub const BACKGROUND: &str = "0d1117";
+pub const CHROME_FONT_SIZE: f64 = 12.0;
+pub const CHROME_LINE_HEIGHT: f64 = 18.0;
+
+pub const BACKGROUND: &str = "161719";
 pub const FOREGROUND: &str = "e6edf3";
 pub const CURSOR_COLOR: &str = "2f81f7";
 pub const CURSOR_TEXT: &str = "6fc1ff";
@@ -27,11 +29,11 @@ pub const LIGHT_PALETTE: [&str; 16] = [
 ];
 
 pub fn background(dark: bool) -> &'static str {
-    if dark { BACKGROUND } else { "ffffff" }
+    if dark { BACKGROUND } else { "f5f5f7" }
 }
 
-pub const PADDING_X: u16 = 8;
-pub const PADDING_Y: u16 = 6;
+pub const PADDING_X: u16 = 20;
+pub const PADDING_Y: u16 = 20;
 pub const PADDING_BALANCE: bool = true;
 
 pub const CURSOR_STYLE: &str = "block";
@@ -45,8 +47,8 @@ pub const SCROLLBACK_LINES: usize = 10_000;
 pub const WINDOW_WIDTH: f64 = 1200.0;
 pub const WINDOW_HEIGHT: f64 = 780.0;
 
-pub const SIDEBAR_WIDTH: f64 = 220.0;
-pub const SIDEBAR_VISIBLE: bool = true;
+pub const SIDEBAR_WIDTH: f64 = 300.0;
+pub const SIDEBAR_VISIBLE: bool = false;
 
 pub const QUOTA_POLL: Duration = Duration::from_secs(15 * 60);
 pub const QUOTA_FRESH: Duration = Duration::from_secs(5 * 60);

@@ -1,6 +1,8 @@
 # Combe
 
-Read [CONTEXT.md](CONTEXT.md) and [DESIGN.md](docs/DESIGN.md) before changing behavior. Code wins if they disagree; update the docs in the same change.
+Read [CONTEXT.md](CONTEXT.md), [DESIGN.md](docs/DESIGN.md), and [the interactive prototype](docs/design.html) before changing behavior. Approved design decisions define the target; live code and runtime establish current behavior. Resolve mismatches explicitly.
+
+Before changing GUI code, update the affected prototype tokens, components, and interaction states, then the design contract. Implement that contract in AppKit and verify the real window in light and dark appearances. Keep the HTML and design document in the same change; neither may be replaced by a scratch mockup.
 
 ## Scope
 

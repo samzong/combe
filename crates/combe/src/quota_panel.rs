@@ -106,7 +106,7 @@ pub(crate) fn layout(width: f64, content_inset: f64) -> f64 {
         let shown = state.chip.is_some();
         state
             .panel
-            .setFrameOrigin(NSPoint::new(content_inset + 6.0, 12.0));
+            .setFrameOrigin(NSPoint::new(content_inset, 12.0));
         let height = state
             .details
             .as_ref()
@@ -394,11 +394,11 @@ fn rebuild_status() {
             mtm,
             NSRect::new(
                 NSPoint::new(0.0, 0.0),
-                NSSize::new(measure.frame().size.width + 28.0, CHIP_HEIGHT),
+                NSSize::new(measure.frame().size.width + 16.0, CHIP_HEIGHT),
             ),
             &text,
-            14.0,
-            14.0,
+            8.0,
+            8.0,
             activate_quota,
         );
         chip.dim_when_idle();
@@ -537,10 +537,10 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
         .map(|quota| (quota, quota::details(quota, now)))
         .filter(|(_, rows)| !rows.is_empty())
         .collect();
-    let height = 32.0
+    let height = 28.0
         + groups
             .iter()
-            .map(|(_, rows)| 24.0 + rows.len() as f64 * 30.0)
+            .map(|(_, rows)| 26.0 + rows.len() as f64 * 30.0)
             .sum::<f64>()
         + groups.len().saturating_sub(1) as f64 * 16.0;
     let view = DetailsView::alloc(mtm);
@@ -554,23 +554,23 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
     let font =
         NSFont::monospacedDigitSystemFontOfSize_weight(STATUS_FONT, unsafe { NSFontWeightRegular });
     let heading = NSFont::systemFontOfSize_weight(13.0, unsafe { NSFontWeightSemibold });
-    let mut y = 18.0;
+    let mut y = 16.0;
     for (quota, rows) in groups {
         add_label(
             mtm,
             &view,
             quota.provider.name(),
-            NSRect::new(NSPoint::new(18.0, y), NSSize::new(268.0, 18.0)),
+            NSRect::new(NSPoint::new(16.0, y), NSSize::new(272.0, 18.0)),
             &heading,
             &NSColor::labelColor(),
         );
-        y += 24.0;
+        y += 26.0;
         for row in rows {
             let label = add_label(
                 mtm,
                 &view,
                 &row.label,
-                NSRect::new(NSPoint::new(18.0, y + 6.0), NSSize::new(50.0, 18.0)),
+                NSRect::new(NSPoint::new(16.0, y + 6.0), NSSize::new(50.0, 18.0)),
                 &font,
                 &NSColor::secondaryLabelColor(),
             );
@@ -582,7 +582,7 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
                 mtm,
                 &view,
                 &row.percent,
-                NSRect::new(NSPoint::new(78.0, y + 6.0), NSSize::new(124.0, 18.0)),
+                NSRect::new(NSPoint::new(74.0, y + 6.0), NSSize::new(132.0, 18.0)),
                 &NSFont::monospacedDigitSystemFontOfSize_weight(13.0, unsafe {
                     objc2_app_kit::NSFontWeightMedium
                 }),
@@ -593,7 +593,7 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
                 mtm,
                 &view,
                 &row.reset,
-                NSRect::new(NSPoint::new(212.0, y + 6.0), NSSize::new(74.0, 18.0)),
+                NSRect::new(NSPoint::new(214.0, y + 6.0), NSSize::new(74.0, 18.0)),
                 &font,
                 &NSColor::secondaryLabelColor(),
             );

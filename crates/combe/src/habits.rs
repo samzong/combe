@@ -6,7 +6,7 @@ pub const SHELL: &str = "/bin/zsh -l";
 pub const FONT_FAMILY: &str = "Fira Code";
 pub const FONT_FAMILY_CJK: &str = "Noto Sans Mono CJK SC";
 pub const CJK_CODEPOINTS: &str = "U+2E80-U+2FFF,U+3000-U+303F,U+31C0-U+31EF,U+3400-U+4DBF,U+4E00-U+9FFF,U+F900-U+FAFF,U+FF00-U+FFEF";
-pub const FONT_SIZE: f64 = 10.0;
+pub const FONT_SIZE: f64 = 13.0;
 
 pub const CHROME_FONT_SIZE: f64 = 12.0;
 pub const CHROME_LINE_HEIGHT: f64 = 18.0;

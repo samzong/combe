@@ -100,6 +100,14 @@ A tab is named by the focused pane's terminal title, and falls back to the workt
 
 Splitting reparents the focused surface into a fresh `NSSplitView` and adds a sibling. Closing removes the leaf and, when a pane is left with a single child, collapses that pane into its parent. Ghostty asks for a close through `close_surface_cb`, which queues the surface and drains it on the main queue.
 
+### Tab Overview
+
+The grid button at the right of the tab bar and Cmd-Shift-Backslash toggle an overview of the current workspace only. The View menu exposes the same command. Each card contains the whole tab's last rendered terminal image, including its visible split arrangement or zoomed pane, and its title. Images are static, may lag behind background output, live only in memory, and are released when the overview closes. A surface without a rendered image uses its terminal background until it has a frame.
+
+Clicking a card enters that tab. Return enters the tab focused before opening the overview, or a card reached through normal keyboard focus. Escape returns without switching tabs. There is no arrow-key navigation, reordering, closing, or cross-workspace aggregation in the overview. Other unmodified keys must not reach the terminal while the overview is open. Command shortcuts dismiss the overview before following the existing application command path.
+
+The overview enters and exits with a 180 ms ease-in-out crossfade. Reduce Motion switches immediately. Repeated toggles replace the current transition; focus and tab selection update immediately without waiting for animation. The overview covers the terminal area without reparenting or resizing terminal surfaces. The sidebar and tab bar retain their positions. Cards use 8 pt padding, 24 pt grid gaps and outer padding, a 20 pt title line, and the selected-row neutral fill. The grid scrolls vertically as needed and follows light and dark appearance. Opening or dismissing it preserves sessions, split geometry and zoom; Escape restores the prior responder when it is still available.
+
 Zooming moves the focused surface above its hidden split tree and leaves a placeholder at its original position. Toggling again restores that position without recreating terminals. Zoom is retained per tab; closing a pane or adding a split restores the tree first. A tab with one surface is unchanged.
 
 Command-modified keys belong to the app and never reach the PTY. Control sequences always reach the PTY. Releasing a selection on a surface copies that text to the system clipboard (`copy-on-select`). Cmd-C still copies. Terminal clipboard reads are denied by default; ordinary paste remains available, while unsafe pastes are denied with the system alert sound. Cmd-click on a terminal URL sends `GHOSTTY_ACTION_OPEN_URL`; Combe opens `http`, `https`, and `mailto` in the default handler.
@@ -117,6 +125,7 @@ Search lives in libghostty. `GHOSTTY_ACTION_START_SEARCH` adds a find bar as a s
 | Opt-Cmd-W | Close every titled window |
 | Cmd-D | Split right |
 | Cmd-Shift-D | Split down |
+| Cmd-Shift-Backslash | Toggle Tab Overview |
 | Cmd-Shift-Return | Zoom the focused split, or restore its layout |
 | Cmd-Shift-[ / ] | Previous / next tab |
 | Cmd-1 … Cmd-8 / Cmd-9 | Jump to tab N / the last tab, through Ghostty's `goto_tab` and `last_tab` bindings |
@@ -166,6 +175,7 @@ crates/combe
   surface.rs           one NSView per libghostty surface
   split.rs             NSSplitView tree: leaf, divide, close, collapse
   tabs.rs              tabs keyed by worktree, active tab per worktree
+  overview.rs          static tab images and overview grid
   window.rs            window, chrome, menu, sidebar, dispatch
   chrome_view.rs       shared clickable and flipped AppKit views
   sidebar.rs           catalog adapter

@@ -1,0 +1,25 @@
+{
+  "name": "combe-promo-video",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.21.0",
+  "scripts": {
+    "dev": "remotion studio src/index.ts --no-open",
+    "check": "tsc --noEmit && node src/manifest.test.ts",
+    "render": "remotion render src/index.ts CombeFilm ../.local/promo-video/exports/combe.mp4",
+    "render:preview": "remotion render src/index.ts CombeFilm ../.local/promo-video/exports/combe-preview.mp4 --scale=1",
+    "still": "remotion still src/index.ts CombeFilm ../.local/promo-video/exports/combe-cover.png --frame=2100"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.522",
+    "@remotion/media": "4.0.522",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.522"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "typescript": "5.7.3"
+  },
+  "type": "module"
+}

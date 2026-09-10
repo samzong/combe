@@ -1,0 +1,79 @@
+{
+  "hero": "captures/hero.png",
+  "shots": {
+    "workspace": {
+      "src": "captures/workspace.mp4"
+    },
+    "sidebar": {
+      "src": "captures/sidebar.mp4",
+      "shortcuts": [
+        {
+          "at": 0.6428571428571429,
+          "keys": "⌘ B"
+        },
+        {
+          "at": 2.7142857142857144,
+          "keys": "⌘ B"
+        },
+        {
+          "at": 4.285714285714286,
+          "keys": "⌘ B"
+        }
+      ]
+    },
+    "worktree": {
+      "src": "captures/worktree.mp4"
+    },
+    "splits": {
+      "src": "captures/splits.mp4",
+      "shortcuts": [
+        {
+          "at": 2.8,
+          "keys": "⌘ D"
+        },
+        {
+          "at": 7.988235294117646,
+          "keys": "⌘ ⇧ D"
+        }
+      ]
+    },
+    "resize": {
+      "src": "captures/resize.mp4"
+    },
+    "tabs": {
+      "src": "captures/tabs.mp4",
+      "shortcuts": [
+        {
+          "at": 0.8125,
+          "keys": "⌘ T"
+        }
+      ]
+    },
+    "overview": {
+      "src": "captures/overview.mp4",
+      "shortcuts": [
+        {
+          "at": 0.8928571428571429,
+          "keys": "⌘ ⇧ \\"
+        },
+        {
+          "at": 4.285714285714286,
+          "keys": "⌘ B"
+        }
+      ]
+    },
+    "appearance": {
+      "src": "captures/appearance.mp4"
+    }
+  },
+  "recap": [
+    "captures/workspace.png",
+    "captures/sidebar.png",
+    "captures/worktree.png",
+    "captures/splits.png",
+    "captures/resize.png",
+    "captures/tabs.png",
+    "captures/overview.png",
+    "captures/appearance.png"
+  ]
+}

@@ -114,7 +114,16 @@ The default is Follow System. The native View menu also offers Light and Dark; a
 | Primary terminal text | `#e6edf3` | `#24292f` |
 | Cursor | `#2f81f7` | `#0969da` |
 | Terminal selection | `#e6edf3` with dark text | `#b6e3ff` with dark text |
-| Chrome text and selection | Adaptive AppKit label, secondary-label and accent colors | Same semantic roles, resolved for light appearance |
+| Chrome primary text | `#f1f1f2` | `#24292f` |
+| Active tab title | `#e6e7e9` | `#292d33` |
+| Secondary text and navigation symbols | `#9c9ea3` | `#656970` |
+| Header action symbols and shortcut hints | `#c3c4c7` | `#555960` |
+| Selected and hovered workspace | White at 7.1% | Black at 3.1% |
+| Shortcut hint fill | White at 5.1% | Black at 2.4% |
+| Live session mark | `#65c888` | `#248247` |
+| Inactive session mark | `#85878d` | `#85878d` |
+
+Native material supplies blur and accessibility fallback. An appearance-adaptive neutral tint, diagonal highlight and thin white edge provide the prototype's glass hierarchy: chips and active tabs stay light, while expanded catalog and quota panels gain body. Light glass has a brighter edge; dark glass keeps a restrained highlight. Chrome colors resolve through the effective appearance without changing the window or terminal background. Quota warning thresholds and system warning colors remain unchanged.
 
 Chrome uses the system font: 12 pt for chips, tabs, repo headings and quota values; 13 pt for workspace rows and semibold provider headings. Percentages and shortcut hints use tabular digits. Terminal fonts remain Fira Code with the explicit Noto Sans Mono CJK SC codepoint fallback, at the compiled 13 pt default. Appearance changes never change font family, size, weight, spacing, or CJK fallback. Both ANSI palettes remain compiled in `habits.rs`.
 

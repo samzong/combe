@@ -1,13 +1,15 @@
 use crate::habits;
 use objc2::rc::Retained;
 use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send};
+use objc2_app_kit::NSAppearanceCustomization;
 use objc2_app_kit::{
-    NSAccessibility, NSApplication, NSAutoresizingMaskOptions, NSBezierPath, NSColor, NSEvent,
-    NSEventType, NSFont, NSImage, NSImageView, NSLineBreakMode, NSTextField, NSTrackingArea,
-    NSTrackingAreaOptions, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
-    NSVisualEffectState, NSVisualEffectView,
+    NSAccessibility, NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication,
+    NSAutoresizingMaskOptions, NSBezierPath, NSColor, NSColorSpace, NSEvent, NSEventType, NSFont,
+    NSGradient, NSImage, NSImageView, NSLineBreakMode, NSTextField, NSTrackingArea,
+    NSTrackingAreaOptions, NSView, NSViewLayerContentsRedrawPolicy, NSVisualEffectBlendingMode,
+    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
 };
-use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{MainThreadMarker, NSArray, NSPoint, NSRect, NSSize, NSString};
 use std::cell::{Cell, RefCell};
 
 const PILL_RADIUS: f64 = 16.0;
@@ -19,6 +21,7 @@ pub(crate) struct ClickIvars {
     selected: Cell<bool>,
     opened: Cell<Option<bool>>,
     dim_when_idle: Cell<bool>,
+    text_color: Cell<(u32, u32)>,
     warn: RefCell<Option<Retained<NSColor>>>,
     hovered: Cell<bool>,
     hover_highlight: Cell<bool>,
@@ -44,7 +47,7 @@ define_class!(
         #[unsafe(method(drawRect:))]
         fn draw_rect(&self, _dirty: NSRect) {
             if self.ivars().selected.get() || (self.ivars().hovered.get() && self.ivars().hover_highlight.get()) {
-                NSColor::labelColor().colorWithAlphaComponent(0.08).setFill();
+                color(habits::CHROME_SELECTION).setFill();
                 NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(
                     self.bounds(),
                     self.ivars().corner_radius.get(),
@@ -67,9 +70,9 @@ define_class!(
             let bounds = self.bounds();
             let y = ((bounds.size.height - SESSION_DOT) / 2.0).max(0.0);
             if opened {
-                NSColor::systemGreenColor().setFill();
+                color(habits::CHROME_SESSION).setFill();
             } else {
-                NSColor::tertiaryLabelColor().setFill();
+                color(habits::CHROME_SESSION_IDLE).setFill();
             }
             NSBezierPath::bezierPathWithOvalInRect(NSRect::new(
                 NSPoint::new(32.0, y),
@@ -86,10 +89,10 @@ define_class!(
             if let Some(marker) = marker {
                 let field = NSTextField::labelWithString(&NSString::from_str(&marker), self.mtm());
                 field.setFont(Some(&NSFont::monospacedDigitSystemFontOfSize_weight(11.0, unsafe { objc2_app_kit::NSFontWeightRegular })));
-                field.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                field.setTextColor(Some(&color(habits::CHROME_SOFT)));
                 let frame = NSRect::new(NSPoint::new(bounds.size.width - 27.0, (bounds.size.height - 18.0) / 2.0), NSSize::new(18.0, 18.0));
                 if self.ivars().shortcut.get().is_some() {
-                    NSColor::labelColor().colorWithAlphaComponent(0.05).setFill();
+                    color(habits::CHROME_HINT).setFill();
                     NSBezierPath::bezierPathWithOvalInRect(frame).fill();
                 }
                 field.setFrame(frame);
@@ -184,6 +187,7 @@ impl ClickView {
             selected: Cell::new(false),
             opened: Cell::new(None),
             dim_when_idle: Cell::new(false),
+            text_color: Cell::new(habits::CHROME_TEXT),
             warn: RefCell::new(None),
             hovered: Cell::new(false),
             hover_highlight: Cell::new(true),
@@ -207,6 +211,7 @@ impl ClickView {
             ),
         ));
         label.setFont(Some(&NSFont::systemFontOfSize(habits::CHROME_FONT_SIZE)));
+        label.setTextColor(Some(&color(habits::CHROME_TEXT)));
         label.setLineBreakMode(NSLineBreakMode::ByTruncatingTail);
         label.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
         this.addSubview(&label);
@@ -266,6 +271,11 @@ impl ClickView {
         self.apply_label_color();
     }
 
+    pub(crate) fn set_text_color(&self, value: (u32, u32)) {
+        self.ivars().text_color.set(value);
+        self.apply_label_color();
+    }
+
     pub(crate) fn set_font(&self, font: &NSFont) {
         if let Some(label) = self.ivars().label.borrow().as_ref() {
             label.setFont(Some(font));
@@ -279,24 +289,140 @@ impl ClickView {
         let selected = self.ivars().selected.get();
         let dim = self.ivars().dim_when_idle.get() && !selected;
         let color = if selected {
-            NSColor::labelColor()
+            color(habits::CHROME_TEXT)
         } else if let Some(warn) = self.ivars().warn.borrow().clone() {
             warn
         } else if dim {
-            NSColor::secondaryLabelColor()
+            color(habits::CHROME_MUTED)
         } else {
-            NSColor::labelColor()
+            color(self.ivars().text_color.get())
         };
         label.setTextColor(Some(&color));
     }
 }
 
-pub(crate) fn glass(
-    mtm: MainThreadMarker,
-    frame: NSRect,
+fn is_dark(appearance: &NSAppearance) -> bool {
+    let names = unsafe { NSArray::from_slice(&[NSAppearanceNameDarkAqua, NSAppearanceNameAqua]) };
+    appearance
+        .bestMatchFromAppearancesWithNames(&names)
+        .is_some_and(|name| &*name == unsafe { NSAppearanceNameDarkAqua })
+}
+
+fn rgba(value: u32) -> Retained<NSColor> {
+    NSColor::colorWithSRGBRed_green_blue_alpha(
+        ((value >> 24) & 255) as f64 / 255.0,
+        ((value >> 16) & 255) as f64 / 255.0,
+        ((value >> 8) & 255) as f64 / 255.0,
+        (value & 255) as f64 / 255.0,
+    )
+}
+
+pub(crate) fn color((light, dark): (u32, u32)) -> Retained<NSColor> {
+    let light = rgba(light);
+    let dark = rgba(dark);
+    let provider = block2::RcBlock::new(move |appearance: std::ptr::NonNull<NSAppearance>| {
+        std::ptr::NonNull::from(if is_dark(unsafe { appearance.as_ref() }) {
+            &*dark
+        } else {
+            &*light
+        })
+    });
+    unsafe { NSColor::colorWithName_dynamicProvider(None, &provider) }
+}
+
+pub(crate) struct GlassTintIvars {
     radius: f64,
-) -> Retained<NSVisualEffectView> {
-    let view = NSVisualEffectView::initWithFrame(NSVisualEffectView::alloc(mtm), frame);
+    expanded: Cell<bool>,
+    quota: Cell<bool>,
+}
+
+define_class!(
+    #[unsafe(super(NSView))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "CombeGlassTint"]
+    #[ivars = GlassTintIvars]
+    pub(crate) struct GlassTint;
+
+    impl GlassTint {
+        #[unsafe(method(hitTest:))]
+        fn hit_test(&self, _point: NSPoint) -> *mut NSView { std::ptr::null_mut() }
+
+        #[unsafe(method(viewDidChangeEffectiveAppearance))]
+        fn appearance_changed(&self) {
+            let _: () = unsafe { msg_send![super(self), viewDidChangeEffectiveAppearance] };
+            self.setNeedsDisplay(true);
+        }
+
+        #[unsafe(method(drawRect:))]
+        fn draw_rect(&self, dirty: NSRect) {
+            let _: () = unsafe { msg_send![super(self), drawRect: dirty] };
+            let expanded = self.ivars().expanded.get();
+            let palette = match (self.ivars().quota.get(), expanded) {
+                (false, false) => habits::GLASS_CONTROL,
+                (false, true) => habits::GLASS_PANEL,
+                (true, false) => habits::GLASS_QUOTA,
+                (true, true) => habits::GLASS_QUOTA_PANEL,
+            };
+            let dark = is_dark(&self.effectiveAppearance());
+            let colors = palette.map(|pair| rgba(if dark { pair.1 } else { pair.0 }));
+            let path = NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(
+                self.bounds(), self.ivars().radius, self.ivars().radius,
+            );
+            colors[0].setFill();
+            path.fill();
+            let stops = NSArray::from_slice(&[&*colors[1], &*colors[2], &*colors[3]]);
+            let locations = [0.0, if expanded && !self.ivars().quota.get() { 0.44 } else { 0.48 }, 1.0];
+            if let Some(gradient) = unsafe { NSGradient::initWithColors_atLocations_colorSpace(
+                NSGradient::alloc(), &stops, locations.as_ptr(), &NSColorSpace::sRGBColorSpace(),
+            ) } {
+                gradient.drawInBezierPath_angle(&path, -55.0);
+            }
+            let edge = if expanded { habits::GLASS_PANEL_EDGE } else { habits::GLASS_EDGE };
+            rgba(if dark { edge.1 } else { edge.0 }).setStroke();
+            path.setLineWidth(1.5);
+            path.stroke();
+        }
+    }
+);
+
+define_class!(
+    #[unsafe(super(NSVisualEffectView))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "CombeGlassView"]
+    #[ivars = Retained<GlassTint>]
+    pub(crate) struct GlassView;
+);
+
+impl GlassView {
+    pub(crate) fn set_expanded(&self, expanded: bool) {
+        let tint = self.ivars();
+        if tint.ivars().expanded.replace(expanded) != expanded {
+            tint.setNeedsDisplay(true);
+        }
+    }
+
+    pub(crate) fn set_quota(&self) {
+        self.ivars().ivars().quota.set(true);
+        self.ivars().setNeedsDisplay(true);
+    }
+}
+
+pub(crate) fn glass(mtm: MainThreadMarker, frame: NSRect, radius: f64) -> Retained<GlassView> {
+    let tint = GlassTint::alloc(mtm).set_ivars(GlassTintIvars {
+        radius,
+        expanded: Cell::new(false),
+        quota: Cell::new(false),
+    });
+    let tint: Retained<GlassTint> = unsafe {
+        msg_send![super(tint), initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), frame.size)]
+    };
+    tint.setAutoresizingMask(
+        NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
+    );
+    tint.setWantsLayer(true);
+    tint.setLayerContentsRedrawPolicy(NSViewLayerContentsRedrawPolicy::DuringViewResize);
+    let view = GlassView::alloc(mtm).set_ivars(tint.clone());
+    let view: Retained<GlassView> = unsafe { msg_send![super(view), initWithFrame: frame] };
     view.setBlendingMode(NSVisualEffectBlendingMode::WithinWindow);
     view.setMaterial(NSVisualEffectMaterial::Popover);
     view.setState(NSVisualEffectState::FollowsWindowActiveState);
@@ -304,12 +430,8 @@ pub(crate) fn glass(
     if let Some(layer) = view.layer() {
         let _: () = unsafe { msg_send![&*layer, setCornerRadius: radius] };
         layer.setMasksToBounds(true);
-        let _: () = unsafe { msg_send![&*layer, setBorderWidth: 0.5_f64] };
-        let color = NSColor::whiteColor()
-            .colorWithAlphaComponent(0.15)
-            .CGColor();
-        let _: () = unsafe { msg_send![&*layer, setBorderColor: &*color] };
     }
+    view.addSubview(&tint);
     view
 }
 
@@ -319,7 +441,7 @@ pub(crate) fn symbol(mtm: MainThreadMarker, parent: &NSView, name: &str, frame: 
     {
         let view = NSImageView::initWithFrame(NSImageView::alloc(mtm), frame);
         view.setImage(Some(&image));
-        view.setContentTintColor(Some(&NSColor::secondaryLabelColor()));
+        view.setContentTintColor(Some(&color(habits::CHROME_MUTED)));
         parent.addSubview(&view);
     }
 }

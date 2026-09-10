@@ -11,6 +11,41 @@ pub const FONT_SIZE: f64 = 13.0;
 pub const CHROME_FONT_SIZE: f64 = 12.0;
 pub const CHROME_LINE_HEIGHT: f64 = 18.0;
 
+pub const CHROME_TEXT: (u32, u32) = (0x24292fff, 0xf1f1f2ff);
+pub const CHROME_STRONG: (u32, u32) = (0x292d33ff, 0xe6e7e9ff);
+pub const CHROME_MUTED: (u32, u32) = (0x656970ff, 0x9c9ea3ff);
+pub const CHROME_SOFT: (u32, u32) = (0x555960ff, 0xc3c4c7ff);
+pub const CHROME_SELECTION: (u32, u32) = (0x00000008, 0xffffff12);
+pub const CHROME_HINT: (u32, u32) = (0x00000006, 0xffffff0d);
+pub const CHROME_SESSION: (u32, u32) = (0x248247ff, 0x65c888ff);
+pub const CHROME_SESSION_IDLE: (u32, u32) = (0x85878dff, 0x85878dff);
+pub const GLASS_CONTROL: [(u32, u32); 4] = [
+    (0xdfe1e650, 0x3b3d4140),
+    (0xffffffa6, 0xffffff12),
+    (0xffffff26, 0xffffff00),
+    (0xffffff70, 0xffffff06),
+];
+pub const GLASS_PANEL: [(u32, u32); 4] = [
+    (0xe1e3e8b0, 0x35373b9e),
+    (0xffffffbf, 0xffffff1f),
+    (0xffffff40, 0xffffff03),
+    (0xffffff80, 0xffffff0b),
+];
+pub const GLASS_QUOTA: [(u32, u32); 4] = [
+    (0xd9dce31a, 0x3b3d411a),
+    (0xffffff70, 0xffffff08),
+    (0xffffff10, 0xffffff00),
+    (0xffffff30, 0xffffff03),
+];
+pub const GLASS_QUOTA_PANEL: [(u32, u32); 4] = [
+    (0xe1e3e89e, 0x292b2f70),
+    (0xffffffa0, 0xffffff14),
+    (0xffffff30, 0xffffff02),
+    (0xffffff70, 0xffffff07),
+];
+pub const GLASS_EDGE: (u32, u32) = (0xffffffb0, 0xffffff20);
+pub const GLASS_PANEL_EDGE: (u32, u32) = (0xffffffb0, 0xffffff2e);
+
 pub const BACKGROUND: &str = "161719";
 pub const FOREGROUND: &str = "e6edf3";
 pub const CURSOR_COLOR: &str = "2f81f7";

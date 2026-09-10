@@ -73,6 +73,7 @@ struct State {
     sidebar_pane: Retained<NSView>,
     sidebar: Retained<NSScrollView>,
     sidebar_glass: Retained<NSView>,
+    sidebar_material: Retained<chrome_view::GlassView>,
     workspace_chip: Retained<ClickView>,
     sidebar_mode: Cell<SidebarMode>,
     sidebar_pointer: Cell<u8>,
@@ -820,6 +821,7 @@ pub fn open(mtm: MainThreadMarker) {
             sidebar_pane: sidebar_pane.clone(),
             sidebar: sidebar_view.clone(),
             sidebar_glass,
+            sidebar_material: material,
             workspace_chip,
             sidebar_mode: Cell::new(SidebarMode::Pinned),
             sidebar_pointer: Cell::new(0),
@@ -884,7 +886,7 @@ fn icon_button(
     };
     button.setFrame(frame);
     button.setBordered(false);
-    button.setContentTintColor(Some(&NSColor::secondaryLabelColor()));
+    button.setContentTintColor(Some(&chrome_view::color(habits::CHROME_SOFT)));
     Some(button)
 }
 
@@ -1933,6 +1935,7 @@ fn sync_tabs() {
                 view.dim_when_idle();
             }
             if Some(tab.id) == active {
+                view.set_text_color(habits::CHROME_STRONG);
                 let glass = chrome_view::glass(mtm, frame, TAB_RADIUS);
                 state.tab_bar.addSubview(&glass);
             }
@@ -2422,6 +2425,7 @@ fn layout_chrome() {
         let mode = state.sidebar_mode.get();
         let pinned = mode == SidebarMode::Pinned;
         let open = mode != SidebarMode::Closed;
+        state.sidebar_material.set_expanded(open);
         let width = state.sidebar_width.get();
         let edge = width + INSET;
         let glass_height = if pinned {

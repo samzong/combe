@@ -1,5 +1,6 @@
 mod chrome_view;
 mod cli;
+mod entry;
 mod find_bar;
 mod ghostty;
 mod habits;

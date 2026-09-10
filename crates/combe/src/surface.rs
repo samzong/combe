@@ -26,6 +26,7 @@ const NX_DEVICE_RCMD: usize = 0x00000010;
 pub struct SurfaceIvars {
     surface: Cell<sys::ghostty_surface_t>,
     cwd: RefCell<String>,
+    input: RefCell<Option<String>>,
     title: RefCell<Option<String>>,
     marked_text: RefCell<String>,
     key_text: RefCell<Option<Vec<String>>>,
@@ -297,10 +298,16 @@ define_class!(
 );
 
 impl SurfaceView {
-    pub fn new(mtm: MainThreadMarker, frame: NSRect, cwd: &str) -> Retained<Self> {
+    pub fn new(
+        mtm: MainThreadMarker,
+        frame: NSRect,
+        cwd: &str,
+        input: Option<&str>,
+    ) -> Retained<Self> {
         let ivars = SurfaceIvars {
             surface: Cell::new(ptr::null_mut()),
             cwd: RefCell::new(cwd.to_owned()),
+            input: RefCell::new(input.map(str::to_owned)),
             title: RefCell::new(None),
             marked_text: RefCell::new(String::new()),
             key_text: RefCell::new(None),
@@ -416,6 +423,12 @@ impl SurfaceView {
             .unwrap_or(2.0);
         let cwd =
             CString::new(self.ivars().cwd.borrow().as_str()).expect("cwd has no interior nul");
+        let input = self
+            .ivars()
+            .input
+            .borrow_mut()
+            .take()
+            .and_then(|input| CString::new(format!("{input}\n")).ok());
 
         let mut config = unsafe { sys::ghostty_surface_config_new() };
         config.platform_tag = sys::GHOSTTY_PLATFORM_MACOS;
@@ -423,6 +436,9 @@ impl SurfaceView {
         config.userdata = self as *const Self as *mut c_void;
         config.scale_factor = scale;
         config.working_directory = cwd.as_ptr();
+        if let Some(input) = &input {
+            config.initial_input = input.as_ptr();
+        }
 
         let surface = unsafe { sys::ghostty_surface_new(app, &config) };
         assert!(!surface.is_null(), "ghostty_surface_new failed");

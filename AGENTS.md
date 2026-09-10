@@ -6,7 +6,7 @@ Before changing GUI code, update the affected prototype tokens, components, and 
 
 ## Scope
 
-A curated worktree list plus real Ghostty terminals. Do not add agents, an editor, a browser, SSH, a settings GUI, a theme system, a command palette, or cloud sync.
+A curated worktree list plus real Ghostty terminals. Do not add agents, an editor, a browser, an SSH client or any other remote transport, a settings GUI, a theme system, a command palette, or cloud sync.
 
 ## Interaction reference
 

@@ -25,6 +25,7 @@ pub(crate) struct ClickIvars {
     shortcut: Cell<Option<usize>>,
     tracking: RefCell<Option<Retained<NSTrackingArea>>>,
     focus_visible: Cell<bool>,
+    corner_radius: Cell<f64>,
 }
 
 define_class!(
@@ -46,8 +47,8 @@ define_class!(
                 NSColor::labelColor().colorWithAlphaComponent(0.08).setFill();
                 NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(
                     self.bounds(),
-                    PILL_RADIUS,
-                    PILL_RADIUS,
+                    self.ivars().corner_radius.get(),
+                    self.ivars().corner_radius.get(),
                 )
                 .fill();
             }
@@ -55,7 +56,8 @@ define_class!(
                 let bounds = self.bounds();
                 let frame = NSRect::new(NSPoint::new(2.0, 2.0), NSSize::new((bounds.size.width - 4.0).max(0.0), (bounds.size.height - 4.0).max(0.0)));
                 NSColor::keyboardFocusIndicatorColor().setStroke();
-                let ring = NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(frame, 14.0, 14.0);
+                let radius = self.ivars().corner_radius.get() - 2.0;
+                let ring = NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(frame, radius, radius);
                 ring.setLineWidth(2.0);
                 ring.stroke();
             }
@@ -188,6 +190,7 @@ impl ClickView {
             shortcut: Cell::new(None),
             tracking: RefCell::new(None),
             focus_visible: Cell::new(false),
+            corner_radius: Cell::new(PILL_RADIUS),
         };
         let this = Self::alloc(mtm).set_ivars(ivars);
         let this: Retained<Self> = unsafe { msg_send![super(this), initWithFrame: frame] };
@@ -212,6 +215,11 @@ impl ClickView {
         this.setAccessibilityRole(Some(&NSString::from_str("AXButton")));
         this.setAccessibilityLabel(Some(&NSString::from_str(text)));
         this
+    }
+
+    pub(crate) fn set_corner_radius(&self, radius: f64) {
+        self.ivars().corner_radius.set(radius);
+        self.setNeedsDisplay(true);
     }
 
     pub(crate) fn set_text(&self, text: &str) {

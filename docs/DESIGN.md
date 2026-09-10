@@ -34,6 +34,8 @@ The user curates the repo list by hand. Combe reads `git worktree list --porcela
 
 A worktree is a session, not a shortcut. Each row owns its own set of tabs; selecting a row swaps in that worktree's tabs and returns to the one it was left on. New tabs belong to the selected worktree. Closing the last tab of a workspace ends that session. If another workspace still has tabs, the window switches to it; if none remain, the window closes.
 
+The catalog always includes a Home workspace at `$HOME` unless a row already owns that path. Home is a folder workspace, not a registered repo: it is not written to `state.json`, and `$HOME` is not scanned for git worktrees until the user adds it. Its label is `~`. The workspace chip shows `~` while Home is selected. Startup opens the first catalog row, so a new window lands on Home.
+
 Repos are never discovered by walking the disk.
 
 ## Non-goals
@@ -192,15 +194,16 @@ Both the GUI and CLI stop state edits when reading the state file fails. Saves a
 
 ## Catalog
 
-A **repo** is a path the user added. A **worktree** is one record from `git worktree list --porcelain` for that repo. A **folder workspace** is a registered path that is not a git checkout: one row, no branch.
+A **repo** is a path the user added. A **worktree** is one record from `git worktree list --porcelain` for that repo. A **folder workspace** is a registered path that is not a git checkout: one row, no branch. A **Home workspace** is a built-in folder workspace at `$HOME`.
 
 1. Load `state.json`
 2. For each repo, `git -C <path> worktree list --porcelain`
 3. If the registered path is not a directory, skip it and keep the rest. Leave it in `state.json`.
 4. If `git rev-parse --git-dir` fails, emit one folder row
 5. Skip worktrees Git reports as `prunable`; their directory is gone
+6. If `$HOME` is a directory and no row already owns that path, prepend a folder workspace labelled `~`. Do not write it to `state.json`. Do not scan `$HOME` for git worktrees unless the user registered it.
 
-Identity is the resolved worktree path.
+Identity is the resolved worktree path. `list`, `add`, `remove`, and `cleanup` still operate only on registered repos.
 
 The window loads the catalog synchronously on startup so the first workspace can open at once. Every later refresh, when the app becomes active, after adding repos or opening a new tab, or when the user clicks an empty part of the sidebar, runs Git on a background thread and applies the result on the main queue; a refresh requested during a scan runs once more after it. Tab selection and session marks reuse that catalog without running Git.
 
@@ -210,7 +213,7 @@ The window loads the catalog synchronously on startup so the first workspace can
 
 ```text
 crates/ghostty-sys     zig build + bindgen over vendor/ghostty
-crates/combe-catalog   state.json, git porcelain, folder fallback
+crates/combe-catalog   state.json, git porcelain, folder fallback, Home workspace
 crates/combe
   main.rs              CLI or GUI, GHOSTTY_RESOURCES_DIR, NSApplication
   cli.rs               list, add, remove, cleanup
@@ -238,7 +241,7 @@ Preserve these capabilities when changing chrome. Prototype states demonstrate a
 | Workspace sessions | Switch away and back; tab, split, focused pane, title, shell PID and output survive; repo collapse does not close sessions |
 | Tabs | Create, select, close and navigate by key; keep workspace ownership; closing the last workspace tab selects another live workspace, or closes the window when none remain |
 | Splits and zoom | Split right and down, nest and resize, move focus, zoom and restore, close a leaf and promote its sibling; preserve PTYs and focus |
-| Catalog | Add multiple repos with the native directory picker; include folder workspaces; refresh on activation without blocking input |
+| Catalog | Add multiple repos with the native directory picker; include folder workspaces; Home is present without adding a repo; adding `$HOME` as a repo replaces the built-in row; refresh on activation without blocking input |
 | Hover panels | Check entry, return-to-chip and exit delays; fast pointer sweeps, drag, outside click, Escape, blur, keyboard focus, pinning and resizing |
 | Workspace shortcuts | Command hints, visible-row numbering after repo collapse, Cmd-1 through Cmd-9, and closed-catalog tab shortcuts; no Command input reaches the PTY |
 | Quota | Both providers, each provider alone, missing snapshots, 5h/7d and Fable rows, warning colors and expired reset time; no network or credential access |

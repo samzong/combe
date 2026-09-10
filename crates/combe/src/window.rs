@@ -718,7 +718,7 @@ pub fn open(mtm: MainThreadMarker) {
     material.addSubview(&sidebar_view);
     let workspace_chip = ClickView::new(
         mtm,
-        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(163.0, TAB_HEIGHT)),
+        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(162.0, TAB_HEIGHT)),
         "Workspaces",
         14.0,
         28.0,
@@ -739,7 +739,7 @@ pub fn open(mtm: MainThreadMarker) {
         mtm,
         &workspace_chip,
         "chevron.down",
-        NSRect::new(NSPoint::new(141.0, 13.0), NSSize::new(10.0, 10.0)),
+        NSRect::new(NSPoint::new(140.0, 13.0), NSSize::new(10.0, 10.0)),
     );
     root.addSubview(&workspace_chip);
     let toggle = icon_button(mtm, "sidebar.left", sel!(toggleSidebar:), NSRect::default());
@@ -2291,7 +2291,7 @@ fn layout_chrome() {
         let header_y = size.height - INSET - TAB_HEIGHT;
         state.workspace_chip.setFrame(NSRect::new(
             NSPoint::new(inset, header_y),
-            NSSize::new((edge - inset - 65.0).max(0.0), TAB_HEIGHT),
+            NSSize::new((edge - inset - 66.0).max(0.0), TAB_HEIGHT),
         ));
         state.workspace_chip.setAccessibilityExpanded(open);
         if let Some(view) = state
@@ -2315,7 +2315,7 @@ fn layout_chrome() {
         }
         if let Some(toggle) = &state.toggle {
             toggle.setFrame(NSRect::new(
-                NSPoint::new(edge - 33.0, header_y + 4.0),
+                NSPoint::new(edge - 32.0, header_y + 4.0),
                 NSSize::new(TOGGLE_WIDTH, TOGGLE_HEIGHT),
             ));
             toggle.setToolTip(Some(&NSString::from_str(if pinned {
@@ -2331,7 +2331,7 @@ fn layout_chrome() {
         }
         if let Some(add) = &state.add_repo {
             add.setFrame(NSRect::new(
-                NSPoint::new(edge - 63.0, header_y + 4.0),
+                NSPoint::new(edge - 64.0, header_y + 4.0),
                 NSSize::new(TOGGLE_WIDTH, TOGGLE_HEIGHT),
             ));
         }

@@ -32,8 +32,8 @@ pub fn background(dark: bool) -> &'static str {
     if dark { BACKGROUND } else { "f5f5f7" }
 }
 
-pub const PADDING_X: u16 = 20;
-pub const PADDING_Y: u16 = 20;
+pub const PADDING_X: u16 = 8;
+pub const PADDING_Y: u16 = 8;
 pub const PADDING_BALANCE: bool = true;
 
 pub const CURSOR_STYLE: &str = "block";

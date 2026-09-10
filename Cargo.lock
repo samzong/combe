@@ -76,6 +76,7 @@ dependencies = [
 name = "combe"
 version = "0.1.0"
 dependencies = [
+ "block2",
  "combe-catalog",
  "ghostty-sys",
  "objc2",

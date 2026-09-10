@@ -9,6 +9,7 @@ name = "combe"
 path = "src/main.rs"
 
 [dependencies]
+block2 = "0.6"
 combe-catalog = { path = "../combe-catalog" }
 ghostty-sys = { path = "../ghostty-sys" }
 objc2 = "0.6"

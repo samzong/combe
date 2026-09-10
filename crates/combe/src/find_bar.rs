@@ -4,8 +4,8 @@ use objc2::rc::{Retained, Weak};
 use objc2::runtime::{ProtocolObject, Sel};
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSAutoresizingMaskOptions, NSColor, NSControl, NSControlTextEditingDelegate,
-    NSEvent, NSEventModifierFlags, NSFont, NSSearchField, NSSearchFieldDelegate, NSTextAlignment,
+    NSApplication, NSAutoresizingMaskOptions, NSControl, NSControlTextEditingDelegate, NSEvent,
+    NSEventModifierFlags, NSFont, NSSearchField, NSSearchFieldDelegate, NSTextAlignment,
     NSTextField, NSTextFieldDelegate, NSTextView, NSView,
 };
 use objc2_foundation::{
@@ -148,7 +148,7 @@ impl FindBar {
         ));
         count.setFont(Some(&NSFont::systemFontOfSize(habits::CHROME_FONT_SIZE)));
         count.setAlignment(NSTextAlignment::Center);
-        count.setTextColor(Some(&NSColor::secondaryLabelColor()));
+        count.setTextColor(Some(&chrome_view::color(habits::CHROME_MUTED)));
         this.addSubview(&count);
 
         let weak = Weak::from_retained(&this);

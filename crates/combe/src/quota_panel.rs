@@ -1,4 +1,4 @@
-use crate::chrome_view::{ClickView, glass};
+use crate::chrome_view::{ClickView, GlassView, color, glass};
 use crate::{ghostty, habits, quota};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
@@ -7,7 +7,7 @@ use objc2_app_kit::{
     NSAccessibility, NSAnimatablePropertyContainer, NSAnimationContext, NSApplication,
     NSAutoresizingMaskOptions, NSColor, NSEvent, NSEventModifierFlags, NSEventType, NSFont,
     NSFontWeightRegular, NSFontWeightSemibold, NSTextAlignment, NSTextField, NSView,
-    NSVisualEffectView, NSWindowOrderingMode, NSWorkspace,
+    NSWindowOrderingMode, NSWorkspace,
 };
 use objc2_foundation::{
     MainThreadMarker, NSObjectNSDelayedPerforming, NSPoint, NSRect, NSSize, NSString,
@@ -37,7 +37,7 @@ struct State {
     layout: fn(),
     restore_focus: fn(),
     bar: Retained<StatusView>,
-    panel: Retained<NSVisualEffectView>,
+    panel: Retained<GlassView>,
     chip: Option<Retained<ClickView>>,
     details: Option<Retained<DetailsView>>,
     open: bool,
@@ -67,6 +67,7 @@ pub(crate) fn mount(
     status.setHidden(true);
     parent.addSubview(&status);
     let panel = glass(mtm, NSRect::default(), 14.0);
+    panel.set_quota();
     status.addSubview(&panel);
     STATE.with(|state| {
         *state.borrow_mut() = Some(State {
@@ -411,6 +412,7 @@ fn rebuild_status() {
             "Quota remaining: {text}"
         ))));
         chip.setAccessibilityExpanded(state.open);
+        state.panel.set_expanded(state.open);
         state.panel.addSubview(&chip);
         state.chip = Some(chip);
         rebuild_details(state);
@@ -512,6 +514,7 @@ fn update_panel(animated: bool) {
         state.bar.setFrame(bar_frame);
         state.bar.setHidden(false);
         chip.setAccessibilityExpanded(state.open);
+        state.panel.set_expanded(state.open);
         if let Some(details) = &state.details {
             details.setHidden(!state.open);
         }
@@ -562,7 +565,7 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
             quota.provider.name(),
             NSRect::new(NSPoint::new(16.0, y), NSSize::new(272.0, 18.0)),
             &heading,
-            &NSColor::labelColor(),
+            &color(habits::CHROME_TEXT),
         );
         y += 26.0;
         for row in rows {
@@ -572,7 +575,7 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
                 &row.label,
                 NSRect::new(NSPoint::new(16.0, y + 6.0), NSSize::new(50.0, 18.0)),
                 &font,
-                &NSColor::secondaryLabelColor(),
+                &color(habits::CHROME_MUTED),
             );
             label.setAccessibilityLabel(Some(&NSString::from_str(&format!(
                 "{}, {} remaining, resets in {}",
@@ -586,7 +589,7 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
                 &NSFont::monospacedDigitSystemFontOfSize_weight(13.0, unsafe {
                     objc2_app_kit::NSFontWeightMedium
                 }),
-                &quota_warn_color(row.used).unwrap_or_else(NSColor::labelColor),
+                &quota_warn_color(row.used).unwrap_or_else(|| color(habits::CHROME_TEXT)),
             );
             percent.setAccessibilityElement(false);
             let reset = add_label(
@@ -595,7 +598,7 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
                 &row.reset,
                 NSRect::new(NSPoint::new(214.0, y + 6.0), NSSize::new(74.0, 18.0)),
                 &font,
-                &NSColor::secondaryLabelColor(),
+                &color(habits::CHROME_MUTED),
             );
             reset.setAlignment(NSTextAlignment::Right);
             reset.setAccessibilityElement(false);

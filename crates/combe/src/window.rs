@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::ffi::c_void;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use objc2::rc::Retained;
@@ -13,19 +13,21 @@ use objc2_app_kit::{
     NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication, NSApplicationDelegate,
     NSApplicationTerminateReply, NSAutoresizingMaskOptions, NSBackingStoreType, NSBezierPath,
     NSButton, NSColor, NSEvent, NSEventModifierFlags, NSEventType, NSFont, NSImage, NSImageView,
-    NSMenu, NSMenuItem, NSMenuWillSendActionNotification, NSOpenPanel, NSResponder, NSScrollView,
-    NSShadow, NSSplitView, NSSplitViewDelegate, NSSplitViewDividerStyle, NSText,
-    NSUserInterfaceItemIdentification, NSView, NSViewLayerContentsRedrawPolicy, NSWindow,
-    NSWindowButton, NSWindowDelegate, NSWindowStyleMask, NSWindowTitleVisibility, NSWorkspace,
+    NSMenu, NSMenuItem, NSMenuWillSendActionNotification, NSOpenPanel, NSPasteboard,
+    NSPasteboardTypeString, NSResponder, NSScrollView, NSShadow, NSSplitView, NSSplitViewDelegate,
+    NSSplitViewDividerStyle, NSText, NSUserInterfaceItemIdentification, NSView,
+    NSViewLayerContentsRedrawPolicy, NSWindow, NSWindowButton, NSWindowDelegate, NSWindowStyleMask,
+    NSWindowTitleVisibility, NSWorkspace,
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSInteger, NSNotification, NSNotificationCenter, NSPoint, NSRect,
-    NSSize, NSString, NSTimer,
+    NSSize, NSString, NSTimer, NSURL,
 };
 use objc2_quartz_core::CAMediaTimingFunction;
 
 use crate::chrome_view::{self, ClickView};
+use crate::entry::{self, Entry};
 use crate::ghostty;
 use crate::habits;
 use crate::overview::Overview;
@@ -333,6 +335,11 @@ define_class!(
             true
         }
 
+        #[unsafe(method(application:openURLs:))]
+        fn open_urls(&self, _app: &NSApplication, urls: &NSArray<NSURL>) {
+            open_urls(urls);
+        }
+
         #[unsafe(method(applicationDidBecomeActive:))]
         fn did_become_active(&self, _notification: &AnyObject) {
             ghostty::set_focus(true);
@@ -344,6 +351,20 @@ define_class!(
         fn did_resign_active(&self, _notification: &AnyObject) {
             ghostty::set_focus(false);
             deactivate_chrome();
+        }
+    }
+
+    impl AppDelegate {
+        #[unsafe(method(openTab:userData:error:))]
+        fn open_tab_service(
+            &self,
+            pasteboard: &NSPasteboard,
+            _user_data: Option<&NSString>,
+            _error: *mut *mut NSString,
+        ) {
+            if let Some(text) = unsafe { pasteboard.stringForType(NSPasteboardTypeString) } {
+                open_paths(&text.to_string());
+            }
         }
     }
 );
@@ -380,6 +401,7 @@ define_class!(
 pub fn install_delegate(mtm: MainThreadMarker, app: &NSApplication) -> Retained<AppDelegate> {
     let delegate = AppDelegate::new(mtm);
     app.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
+    unsafe { app.setServicesProvider(Some(delegate.as_ref())) };
     delegate
 }
 
@@ -944,7 +966,7 @@ fn dispatch(click: Click) {
                 })
                 .or_else(first_row);
             if let Some((path, name)) = target {
-                new_tab(&path, &name);
+                new_tab(&path, &name, None);
             }
         }
         Click::AddRepo => add_repo(),
@@ -989,6 +1011,79 @@ fn add_repo() {
     refresh_sidebar();
 }
 
+fn open_urls(urls: &NSArray<NSURL>) {
+    for url in urls {
+        if let Some(entry) = resolve(&url) {
+            accept(entry);
+        }
+    }
+}
+
+fn open_paths(text: &str) {
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(entry) = entry::file(Path::new(line)) {
+            accept(entry);
+        }
+    }
+}
+
+fn resolve(url: &NSURL) -> Option<Entry> {
+    if url.isFileURL() {
+        return entry::file(Path::new(&url.path()?.to_string()));
+    }
+    let host = url.host()?.to_string();
+    match url.scheme()?.to_string().to_ascii_lowercase().as_str() {
+        "ssh" => entry::ssh(
+            url.user().map(|user| user.to_string()).as_deref(),
+            &host,
+            url.port()
+                .and_then(|port| u16::try_from(port.as_i64()).ok()),
+        ),
+        "x-man-page" => {
+            let path = url.path().map(|path| path.to_string());
+            match path.as_deref().map(|path| path.trim_start_matches('/')) {
+                Some(page) if !page.is_empty() => entry::man(Some(&host), page),
+                _ => entry::man(None, &host),
+            }
+        }
+        _ => None,
+    }
+}
+
+fn accept(entry: Entry) {
+    match entry {
+        Entry::Workspace(path) => {
+            sidebar::add(std::slice::from_ref(&path));
+            let repos = sidebar::repos();
+            let label = repos
+                .iter()
+                .flat_map(|repo| repo.rows.iter())
+                .find(|row| row.path == path)
+                .map(|row| row.label.clone())
+                .unwrap_or_else(|| entry::name_of(&path));
+            set_repos(repos);
+            dispatch(Click::Open(path.to_string_lossy().into_owned(), label));
+        }
+        Entry::Run { cwd, name, input } => {
+            if !confirm("Run this command in Combe?", &input, "Run") {
+                return;
+            }
+            let cwd = cwd
+                .map(|cwd| cwd.to_string_lossy().into_owned())
+                .or_else(|| {
+                    STATE.with(|state| state.borrow().as_ref()?.tabs.current().map(str::to_owned))
+                })
+                .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| "/".to_owned()));
+            new_tab(&cwd, &name, Some(&input));
+        }
+    }
+    reveal_window();
+}
+
 fn open_worktree(path: &str, name: &str) {
     let existing = STATE.with(|state| {
         let mut state = state.borrow_mut();
@@ -997,16 +1092,16 @@ fn open_worktree(path: &str, name: &str) {
     });
     match existing {
         Some(id) => activate_tab(id),
-        None => new_tab(path, name),
+        None => new_tab(path, name, None),
     }
 }
 
-fn new_tab(path: &str, name: &str) {
+fn new_tab(path: &str, name: &str, input: Option<&str>) {
     let mtm = MainThreadMarker::new().expect("main thread");
     STATE.with(|state| {
         let mut state = state.borrow_mut();
         let Some(state) = state.as_mut() else { return };
-        let root = split::root(mtm, state.content.bounds(), path);
+        let root = split::root(mtm, state.content.bounds(), path, input);
         state.content.addSubview(&root);
         state.tabs.push(path.to_owned(), name.to_owned(), root);
     });

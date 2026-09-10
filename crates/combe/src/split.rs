@@ -47,16 +47,26 @@ impl Zoom {
     }
 }
 
-pub fn leaf(mtm: MainThreadMarker, frame: NSRect, cwd: &str) -> Retained<SurfaceView> {
-    let view = SurfaceView::new(mtm, frame, cwd);
+pub fn leaf(
+    mtm: MainThreadMarker,
+    frame: NSRect,
+    cwd: &str,
+    input: Option<&str>,
+) -> Retained<SurfaceView> {
+    let view = SurfaceView::new(mtm, frame, cwd, input);
     view.setAutoresizingMask(FILL);
     view
 }
 
-pub fn root(mtm: MainThreadMarker, frame: NSRect, cwd: &str) -> Retained<NSView> {
+pub fn root(
+    mtm: MainThreadMarker,
+    frame: NSRect,
+    cwd: &str,
+    input: Option<&str>,
+) -> Retained<NSView> {
     let container = NSView::initWithFrame(NSView::alloc(mtm), frame);
     container.setAutoresizingMask(FILL);
-    let view = leaf(mtm, container.bounds(), cwd);
+    let view = leaf(mtm, container.bounds(), cwd, input);
     container.addSubview(&view);
     container
 }
@@ -82,7 +92,7 @@ pub fn divide(
     kept.setAutoresizingMask(FILL);
     pane.addSubview(&kept);
 
-    let fresh = leaf(mtm, pane.bounds(), cwd);
+    let fresh = leaf(mtm, pane.bounds(), cwd, None);
     pane.addSubview(&fresh);
     pane.adjustSubviews();
     Some(fresh)

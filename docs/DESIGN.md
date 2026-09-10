@@ -42,7 +42,7 @@ Repos are never discovered by walking the disk.
 
 - Agents, chat overlays, command palettes
 - In-app editor, browser, diffs, PR/issue chrome
-- SSH, WSL, remote hosts, a PTY daemon that survives app updates
+- An SSH client, WSL, remote hosts, a PTY daemon that survives app updates
 - A settings GUI, a theme market, cloud sync, user configuration files
 - Creating or deleting worktrees (that stays with `git` / `gmc`)
 - A hand-written VT parser, glyph atlas, or renderer
@@ -192,6 +192,18 @@ One binary, two entry points, separated by `argv[0]`. Running it as `<something>
 
 Both the GUI and CLI stop state edits when reading the state file fails. Saves atomically replace the file, preserving the previous contents if writing fails.
 
+## System entry points
+
+`Info.plist` registers Combe with LaunchServices so other applications can hand it work. macOS has no default-terminal role: browser and mail are privileged LaunchServices roles, terminals are not. What exists instead:
+
+- Document types. `public.directory` opens the folder as a workspace. `public.unix-executable` and `.command`, `.sh`, `.zsh`, `.bash` open a tab in the file's parent. Both claim `Alternate` rank, so Combe appears in Finder's Open With and Get Info without displacing the current handler.
+- URL schemes. `ssh:` and `x-man-page:`. `telnet:` is not claimed, because macOS ships no `telnet` binary and the handler would always fail.
+- One service, "New Combe Tab Here", for the Finder right-click menu and any application that sends a file path.
+
+`crates/combe/src/entry.rs` is the boundary. It turns a path or URL into either a workspace to open or a shell line to type, rejects hosts, users, man pages, and sections outside a character whitelist, quotes every interpolated value, and separates options from operands with `--`. It has no AppKit dependency, so `cargo test -p combe` covers the injection cases directly.
+
+Executable file paths containing ASCII control characters are rejected before constructing shell input, because terminal line editors interpret those characters before shell quoting applies. Anything that would execute a command asks first. The tab appears only after the user confirms an alert showing the exact line. That line is then written into the new surface as `initial_input`, not run as the surface command, so the tab stays an ordinary long-lived workspace session afterwards.
+
 ## Catalog
 
 A **repo** is a path the user added. A **worktree** is one record from `git worktree list --porcelain` for that repo. A **folder workspace** is a registered path that is not a git checkout: one row, no branch. A **Home workspace** is a built-in folder workspace at `$HOME`.
@@ -217,6 +229,7 @@ crates/combe-catalog   state.json, git porcelain, folder fallback, Home workspac
 crates/combe
   main.rs              CLI or GUI, GHOSTTY_RESOURCES_DIR, NSApplication
   cli.rs               list, add, remove, cleanup
+  entry.rs             external file, URL, and service requests
   ghostty.rs           ghostty_init, app lifecycle, runtime callbacks
   surface.rs           one NSView per libghostty surface
   split.rs             NSSplitView tree: leaf, divide, close, collapse
@@ -268,3 +281,4 @@ Inspect both appearances and the component selector, including Typography. User-
 - User-curated repos over disk scans.
 - Git porcelain over libgit2.
 - Preferences as Rust constants over a config file.
+- `initial_input` plus a confirmation alert over `config.command`: libghostty always runs `command` through `/bin/sh -c`, and an external URL must never reach a shell without the user seeing the line.

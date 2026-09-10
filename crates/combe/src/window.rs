@@ -288,7 +288,7 @@ define_class!(
     unsafe impl NSApplicationDelegate for AppDelegate {
         #[unsafe(method(applicationShouldTerminateAfterLastWindowClosed:))]
         fn should_terminate_after_last_window_closed(&self, _app: &NSApplication) -> bool {
-            true
+            false
         }
 
         #[unsafe(method(applicationShouldTerminate:))]
@@ -720,7 +720,7 @@ pub fn open(mtm: MainThreadMarker) {
         mtm,
         NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(162.0, TAB_HEIGHT)),
         "Workspaces",
-        14.0,
+        12.0,
         28.0,
         || {
             let mode = STATE.with(|state| {

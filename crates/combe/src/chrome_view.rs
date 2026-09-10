@@ -43,11 +43,7 @@ define_class!(
         #[unsafe(method(drawRect:))]
         fn draw_rect(&self, _dirty: NSRect) {
             if self.ivars().selected.get() || (self.ivars().hovered.get() && self.ivars().hover_highlight.get()) {
-                if self.ivars().hovered.get() && self.ivars().opened.get().is_some() {
-                    NSColor::controlAccentColor().setFill();
-                } else {
-                    NSColor::labelColor().colorWithAlphaComponent(0.08).setFill();
-                }
+                NSColor::labelColor().colorWithAlphaComponent(0.08).setFill();
                 NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(
                     self.bounds(),
                     PILL_RADIUS,
@@ -96,7 +92,13 @@ define_class!(
                 }
                 field.setFrame(frame);
                 field.setAlignment(objc2_app_kit::NSTextAlignment::Center);
-                if let Some(cell) = field.cell() { cell.drawWithFrame_inView(frame, self); }
+                let mut text_frame = frame;
+                if self.ivars().shortcut.get().is_some() {
+                    field.sizeToFit();
+                    text_frame.size.height = field.frame().size.height;
+                    text_frame.origin.y += (frame.size.height - text_frame.size.height) / 2.0;
+                }
+                if let Some(cell) = field.cell() { cell.drawWithFrame_inView(text_frame, self); }
             }
         }
 
@@ -268,9 +270,7 @@ impl ClickView {
         };
         let selected = self.ivars().selected.get();
         let dim = self.ivars().dim_when_idle.get() && !selected;
-        let color = if self.ivars().hovered.get() && self.ivars().opened.get().is_some() {
-            NSColor::whiteColor()
-        } else if selected {
+        let color = if selected {
             NSColor::labelColor()
         } else if let Some(warn) = self.ivars().warn.borrow().clone() {
             warn

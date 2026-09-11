@@ -9,8 +9,5 @@
 *.mp4 binary
 
 vendor/** linguist-vendored linguist-detectable=false
-promo-video/** linguist-vendored linguist-detectable=false
 docs/** linguist-documentation linguist-detectable=false
 examples/** linguist-documentation linguist-detectable=false
-
-promo-video/pnpm-lock.yaml linguist-generated

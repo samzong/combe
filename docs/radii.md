@@ -29,9 +29,9 @@ The prototype inspector measures its current uniform circular CSS corners, inclu
 | R05 | Workspace-row selected / hover fill | 16 | CSS 16px; rendered circular radius 16 | Keep16 |
 | R06 | Active-tab glass | 18 | CSS 18px; rendered circular radius 18 | Keep18 |
 | R07 | Tab hover highlight | 18 | CSS 18px; rendered circular radius 18 | Keep18 with active-tab glass |
-| R08 | Tab Close target background | No independent fill | CSS 50%; rendered circular radius 11 | Keep no independent fill |
-| R09 | New-tab target background | No independent fill | CSS 18px; rendered circular radius 18 | Keep no independent fill |
-| R10 | Add / Pin button shape | AppKit; no explicit Combe radius | CSS 50%; rendered circular radius 14 | Keep native button ownership |
+| R08 | Tab Close target background | 10 | CSS 50%; radius10 | Circle, diameter20 |
+| R09 | New-tab target background | 14 | Centered28px pseudo-element; radius14 | Circle, diameter28 |
+| R10 | Add / Pin button shape | 14 | CSS 50%; radius14 | Circle, diameter28 |
 | R11 | Session dot | Circle, diameter6 / radius3 | CSS 50%; rendered circular radius 3 | Keep circle, radius3 |
 | R12 | Command shortcut badge | Circle, diameter18 / radius9 | CSS 9px; rendered circular radius 9 | Keep circle, radius9 |
 | R13 | Quota glass: closed / expanded | 14 | CSS 14px; rendered circular radius 14 | Keep14 in both states |
@@ -51,16 +51,16 @@ The prototype inspector measures its current uniform circular CSS corners, inclu
 
 ## Definitions and sources
 
-- **R01** — Native custom content clipping, not a replacement for system window controls. The prototype right-side wrapper inherits34 but paints no separate rounded surface. [window.rs:47,699–705,2221–2233](../crates/combe/src/window.rs#L47).
-- **R02** — The outer sidebar layer and material use the same radius. A36pt chip is a capsule; expansion keeps its corner radius. [window.rs:48,707–715](../crates/combe/src/window.rs#L48).
-- **R03** — Native hover highlight is disabled. CSS18 is a transparent button shape, not a second visible glass surface. Focus is listed under R17. [window.rs:719–739](../crates/combe/src/window.rs#L719).
-- **R04** — AppKit limits the two arc axes independently; the uniform CSS16 corners scale to15 at height30. This is a current renderer difference, not two design tokens. [chrome_view.rs:13,43–53; window.rs:1883–1889](../crates/combe/src/chrome_view.rs#L13).
+- **R01** — Native custom content clipping, not a replacement for system window controls. The prototype right-side wrapper inherits34 but paints no separate rounded surface. [window.rs:WINDOW_RADIUS,open,layout_chrome](../crates/combe/src/window.rs).
+- **R02** — The outer sidebar layer and material use the same radius. A36pt chip is a capsule; expansion keeps its corner radius. [sidebar_panel.rs:SIDEBAR_RADIUS,mount](../crates/combe/src/sidebar_panel.rs).
+- **R03** — Native hover highlight is disabled. CSS18 is a transparent button shape, not a second visible glass surface. Focus is listed under R17. [sidebar_panel.rs:mount](../crates/combe/src/sidebar_panel.rs).
+- **R04** — AppKit limits the two arc axes independently; the uniform CSS16 corners scale to15 at height30. This is a current renderer difference, not two design tokens. [chrome_view.rs:13,43–53; sidebar_panel.rs:rebuild](../crates/combe/src/chrome_view.rs).
 - **R05** — Rows are34pt high. Selection and hover share this path. HTML uses the radius-row16 token for both list rows and repo headings. [Source](../crates/combe/src/chrome_view.rs).
-- **R06** — Only the active native tab has this glass sibling. It is not the same layer as the hover highlight. [window.rs:1753–1763](../crates/combe/src/window.rs#L1753).
+- **R06** — Only the active native tab has this glass sibling. It is not the same layer as the hover highlight. [tab_bar.rs:TabBar::update](../crates/combe/src/tab_bar.rs).
 - **R07** — Tab titles set their ClickView radius to18, matching the glass. Other ClickViews retain16. [Source](../crates/combe/src/chrome_view.rs).
-- **R08** — Native Close is20×36 and disables hover fill. The transparent HTML22×22 button declares50%;11 is not a native radius. Focus is R17. [window.rs:1766–1779](../crates/combe/src/window.rs#L1766).
-- **R09** — Native36×36 target disables hover fill. HTML declares18 on a transparent button. Focus is R17. [window.rs:1783–1793](../crates/combe/src/window.rs#L1783).
-- **R10** — Both are28×28 borderless NSButtons. That does not establish a native14pt circle. The prototype explicitly uses50%. [window.rs:820–837](../crates/combe/src/window.rs#L820).
+- **R08** — Close background is a20pt circle, visible only during interaction. [Source](../crates/combe/src/chrome_view.rs).
+- **R09** — The36pt target contains a centered28pt circular background. [Source](../crates/combe/src/chrome_view.rs).
+- **R10** — Add and pin share the circular button background. [Source](../crates/combe/src/chrome_view.rs).
 - **R11** — Drawn with an oval in a square frame. A size-derived circle is not a general rounded-rectangle token. [chrome_view.rs:14,66–80](../crates/combe/src/chrome_view.rs#L14).
 - **R12** — The badge background exists only while shortcut hints are shown. Its geometry is reserved while hidden; selecting this ID measures that reserved shape. [chrome_view.rs:85–94](../crates/combe/src/chrome_view.rs#L85).
 - **R13** — The same glass panel grows upward. A28pt chip is a capsule; changing only the expanded radius would introduce a separate shape transition. [quota_panel.rs:69](../crates/combe/src/quota_panel.rs#L69).
@@ -70,10 +70,10 @@ The prototype inspector measures its current uniform circular CSS corners, inclu
 - **R17** — The focus path uses the instance corner radius minus2. Tabs use16; all other ClickViews retain14 before per-axis bounds clipping. Frames, hit tests and focus actions are unchanged. [Source](../crates/combe/src/chrome_view.rs).
 - **R18** — No rounded terminal cards. Panes and split containers rely on the outer window clip; split dividers have no rounded surface. [surface.rs; split.rs; docs/DESIGN.md:66](../crates/combe/src/surface.rs).
 - **R19** — Combe creates NSSearchField without setting its corner radius. HTML input6 is an illustrative browser control. [find_bar.rs:128–140](../crates/combe/src/find_bar.rs#L128).
-- **R20** — The HTML12×12 circle resolves to radius6. It is not a fixed Combe system-button radius. [window.rs:2365–2380](../crates/combe/src/window.rs#L2365).
-- **R21** — The HTML confirmation radius18 is a visual placeholder, not a native NSAlert constant. [window.rs:1017–1028](../crates/combe/src/window.rs#L1017).
-- **R22** — HTML7 is illustrative. Combe does not assign a radius to native confirmation buttons. [window.rs:1017–1028](../crates/combe/src/window.rs#L1017).
-- **R23** — NSOpenPanel, menu items, native scrollbars and SF Symbol ink have no Combe radius token. Text glyph curves, including the selected checkmark, are not rounded component backgrounds. [window.rs:install_menu,dispatch(Click::AddRepo),icon_button](../crates/combe/src/window.rs).
+- **R20** — The HTML12×12 circle resolves to radius6. It is not a fixed Combe system-button radius. [window.rs:layout_chrome](../crates/combe/src/window.rs).
+- **R21** — The HTML confirmation radius18 is a visual placeholder, not a native NSAlert constant. [window.rs:confirm](../crates/combe/src/window.rs).
+- **R22** — HTML7 is illustrative. Combe does not assign a radius to native confirmation buttons. [window.rs:confirm](../crates/combe/src/window.rs).
+- **R23** — NSOpenPanel, menu items, native scrollbars and SF Symbol ink have no Combe radius token. Text glyph curves, including the selected checkmark, are not rounded component backgrounds. [menu.rs:install; sidebar_panel.rs:add_repo; chrome_view.rs:icon_button](../crates/combe/src/menu.rs).
 - **R24** — The repo-picker placeholder toast exists only in the interactive reference. It does not define a native notification component. [docs/design.html:.toast](design.html).
 - **R25** — Appearance, Component and measurement controls belong to the reference page, not the Combe window. [docs/design.html:select,input,.spacing-controls button](design.html).
 - **R26** — Annotation labels exist only in the inspector. Shadow blur and stroke width are separate quantities, not corner radii. [docs/design.spacing.js:draw](design.html).

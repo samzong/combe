@@ -4,12 +4,15 @@ mod entry;
 mod find_bar;
 mod ghostty;
 mod habits;
+mod menu;
 mod overview;
 mod quota;
 mod quota_panel;
 mod sidebar;
+mod sidebar_panel;
 mod split;
 mod surface;
+mod tab_bar;
 mod tabs;
 mod window;
 
@@ -42,7 +45,7 @@ fn main() -> ExitCode {
     ghostty::init();
 
     let _delegate = window::install_delegate(mtm, &app);
-    window::install_menu(mtm, &app);
+    menu::install(mtm, &app);
     window::open(mtm);
 
     app.activate();

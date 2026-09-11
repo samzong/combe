@@ -1,15 +1,18 @@
 use crate::habits;
 use objc2::rc::Retained;
-use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send};
+use objc2::{AnyThread, DefinedClass, MainThreadOnly, Message, define_class, msg_send};
 use objc2_app_kit::NSAppearanceCustomization;
 use objc2_app_kit::{
     NSAccessibility, NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication,
-    NSAutoresizingMaskOptions, NSBezierPath, NSColor, NSColorSpace, NSEvent, NSEventType, NSFont,
-    NSGradient, NSImage, NSImageView, NSLineBreakMode, NSTextField, NSTrackingArea,
+    NSAutoresizingMaskOptions, NSBezierPath, NSButton, NSColor, NSColorSpace, NSEvent, NSEventType,
+    NSFont, NSGradient, NSImage, NSImageView, NSLineBreakMode, NSTextField, NSTrackingArea,
     NSTrackingAreaOptions, NSView, NSViewLayerContentsRedrawPolicy, NSVisualEffectBlendingMode,
     NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
 };
-use objc2_foundation::{MainThreadMarker, NSArray, NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{
+    MainThreadMarker, NSArray, NSMutableAttributedString, NSPoint, NSRange, NSRect, NSSize,
+    NSString,
+};
 use std::cell::{Cell, RefCell};
 
 const PILL_RADIUS: f64 = 16.0;
@@ -17,12 +20,13 @@ const SESSION_DOT: f64 = 6.0;
 
 pub(crate) struct ClickIvars {
     click: Box<dyn Fn()>,
+    hover_button: RefCell<Option<Retained<ActionButton>>>,
     label: RefCell<Option<Retained<NSTextField>>>,
     selected: Cell<bool>,
     opened: Cell<Option<bool>>,
     dim_when_idle: Cell<bool>,
     text_color: Cell<(u32, u32)>,
-    warn: RefCell<Option<Retained<NSColor>>>,
+    warn: RefCell<Vec<(NSRange, Retained<NSColor>)>>,
     hovered: Cell<bool>,
     hover_highlight: Cell<bool>,
     shortcut: Cell<Option<usize>>,
@@ -114,6 +118,11 @@ define_class!(
                 self.addTrackingArea(&area);
                 *self.ivars().tracking.borrow_mut() = Some(area);
             }
+            if self.ivars().hover_button.borrow().is_some() && let Some(window) = self.window() {
+                    let point = self.convertPoint_fromView(window.mouseLocationOutsideOfEventStream(), None);
+                    let bounds = self.bounds();
+                    self.set_hovered(window.isKeyWindow() && point.x >= 0.0 && point.y >= 0.0 && point.x < bounds.size.width && point.y < bounds.size.height);
+            }
             let _: () = unsafe { msg_send![super(self), updateTrackingAreas] };
         }
 
@@ -130,6 +139,7 @@ define_class!(
         fn become_first_responder(&self) -> bool {
             let accepted: bool = unsafe { msg_send![super(self), becomeFirstResponder] };
             self.ivars().focus_visible.set(accepted && NSApplication::sharedApplication(self.mtm()).currentEvent().is_none_or(|event| event.r#type() == NSEventType::KeyDown));
+            self.update_hover_button();
             self.setNeedsDisplay(true);
             accepted
         }
@@ -137,6 +147,7 @@ define_class!(
         #[unsafe(method(resignFirstResponder))]
         fn resign_first_responder(&self) -> bool {
             self.ivars().focus_visible.set(false);
+            self.update_hover_button();
             self.setNeedsDisplay(true);
             unsafe { msg_send![super(self), resignFirstResponder] }
         }
@@ -183,12 +194,13 @@ impl ClickView {
     ) -> Retained<Self> {
         let ivars = ClickIvars {
             click: Box::new(click),
+            hover_button: RefCell::new(None),
             label: RefCell::new(None),
             selected: Cell::new(false),
             opened: Cell::new(None),
             dim_when_idle: Cell::new(false),
             text_color: Cell::new(habits::CHROME_TEXT),
-            warn: RefCell::new(None),
+            warn: RefCell::new(Vec::new()),
             hovered: Cell::new(false),
             hover_highlight: Cell::new(true),
             shortcut: Cell::new(None),
@@ -241,8 +253,20 @@ impl ClickView {
 
     fn set_hovered(&self, hovered: bool) {
         self.ivars().hovered.set(hovered);
+        self.update_hover_button();
         self.apply_label_color();
         self.setNeedsDisplay(true);
+    }
+
+    pub(crate) fn reveal_on_hover(&self, button: &ActionButton) {
+        *self.ivars().hover_button.borrow_mut() = Some(button.retain());
+        self.update_hover_button();
+    }
+
+    fn update_hover_button(&self) {
+        if let Some(button) = self.ivars().hover_button.borrow().as_ref() {
+            button.set_revealed(self.ivars().hovered.get() || self.ivars().focus_visible.get());
+        }
     }
 
     pub(crate) fn disable_hover_highlight(&self) {
@@ -266,8 +290,8 @@ impl ClickView {
         self.setNeedsDisplay(true);
     }
 
-    pub(crate) fn set_warn(&self, color: Option<Retained<NSColor>>) {
-        *self.ivars().warn.borrow_mut() = color;
+    pub(crate) fn set_warn(&self, ranges: Vec<(NSRange, Retained<NSColor>)>) {
+        *self.ivars().warn.borrow_mut() = ranges;
         self.apply_label_color();
     }
 
@@ -290,14 +314,29 @@ impl ClickView {
         let dim = self.ivars().dim_when_idle.get() && !selected;
         let color = if selected {
             color(habits::CHROME_TEXT)
-        } else if let Some(warn) = self.ivars().warn.borrow().clone() {
-            warn
         } else if dim {
             color(habits::CHROME_MUTED)
         } else {
             color(self.ivars().text_color.get())
         };
         label.setTextColor(Some(&color));
+        let ranges = self.ivars().warn.borrow();
+        if !ranges.is_empty() {
+            let text = NSMutableAttributedString::initWithAttributedString(
+                NSMutableAttributedString::alloc(),
+                &label.attributedStringValue(),
+            );
+            for (range, warning) in ranges.iter() {
+                unsafe {
+                    text.addAttribute_value_range(
+                        objc2_app_kit::NSForegroundColorAttributeName,
+                        warning,
+                        *range,
+                    )
+                };
+            }
+            label.setAttributedStringValue(&text);
+        }
     }
 }
 
@@ -435,13 +474,176 @@ pub(crate) fn glass(mtm: MainThreadMarker, frame: NSRect, radius: f64) -> Retain
     view
 }
 
+pub(crate) fn symbol_image(name: &str, size: f64) -> Option<Retained<NSImage>> {
+    let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+        &NSString::from_str(name),
+        None,
+    )?;
+    image.imageWithSymbolConfiguration(
+        &objc2_app_kit::NSImageSymbolConfiguration::configurationWithPointSize_weight(
+            size,
+            unsafe { objc2_app_kit::NSFontWeightRegular },
+        ),
+    )
+}
+
 pub(crate) fn symbol(mtm: MainThreadMarker, parent: &NSView, name: &str, frame: NSRect) {
-    if let Some(image) =
-        NSImage::imageWithSystemSymbolName_accessibilityDescription(&NSString::from_str(name), None)
-    {
+    if let Some(image) = symbol_image(name, frame.size.height.min(14.0)) {
         let view = NSImageView::initWithFrame(NSImageView::alloc(mtm), frame);
         view.setImage(Some(&image));
         view.setContentTintColor(Some(&color(habits::CHROME_MUTED)));
         parent.addSubview(&view);
+    }
+}
+
+pub(crate) fn icon_button(
+    mtm: MainThreadMarker,
+    symbol: &str,
+    target: &objc2::runtime::AnyObject,
+    action: objc2::runtime::Sel,
+    frame: NSRect,
+) -> Option<Retained<NSButton>> {
+    let image = symbol_image(symbol, habits::CHROME_ICON_SIZE)?;
+    let button = ActionButton::init(mtm, frame, None);
+    button.setImage(Some(&image));
+    button.setImagePosition(objc2_app_kit::NSCellImagePosition::ImageOnly);
+    button.setTitle(&NSString::from_str(""));
+    unsafe {
+        button.setTarget(Some(target));
+        button.setAction(Some(action));
+    }
+    Some(button.into_super())
+}
+
+pub(crate) struct ActionIvars {
+    click: Option<Box<dyn Fn()>>,
+    hovered: Cell<bool>,
+    revealed: Cell<bool>,
+    focused: Cell<bool>,
+    tracking: RefCell<Option<Retained<NSTrackingArea>>>,
+}
+
+define_class!(
+    #[unsafe(super(NSButton))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "CombeActionButton"]
+    #[ivars = ActionIvars]
+    pub(crate) struct ActionButton;
+
+    impl ActionButton {
+        #[unsafe(method(drawRect:))]
+        fn draw_rect(&self, dirty: NSRect) {
+            if self.isHighlighted() || self.ivars().hovered.get() || self.state() != 0 {
+                color(if self.isHighlighted() { habits::CHROME_BUTTON_PRESSED } else if self.ivars().hovered.get() { habits::CHROME_BUTTON_HOVER } else { habits::CHROME_SELECTION }).setFill();
+                let bounds = self.bounds();
+                let diameter = bounds.size.width.min(bounds.size.height).min(28.0);
+                NSBezierPath::bezierPathWithOvalInRect(NSRect::new(
+                    NSPoint::new((bounds.size.width - diameter) / 2.0, (bounds.size.height - diameter) / 2.0),
+                    NSSize::new(diameter, diameter),
+                )).fill();
+            }
+            let _: () = unsafe { msg_send![super(self), drawRect: dirty] };
+        }
+
+        #[unsafe(method(updateTrackingAreas))]
+        fn update_tracking_areas(&self) {
+            if self.ivars().tracking.borrow().is_none() {
+                let area = unsafe { NSTrackingArea::initWithRect_options_owner_userInfo(NSTrackingArea::alloc(), self.bounds(), NSTrackingAreaOptions::MouseEnteredAndExited | NSTrackingAreaOptions::ActiveInKeyWindow | NSTrackingAreaOptions::InVisibleRect, Some(self), None) };
+                self.addTrackingArea(&area);
+                *self.ivars().tracking.borrow_mut() = Some(area);
+            }
+            let _: () = unsafe { msg_send![super(self), updateTrackingAreas] };
+        }
+
+        #[unsafe(method(mouseEntered:))]
+        fn mouse_entered(&self, _event: &NSEvent) {
+            self.ivars().hovered.set(true);
+            NSView::setNeedsDisplay(self, true);
+        }
+
+        #[unsafe(method(mouseExited:))]
+        fn mouse_exited(&self, _event: &NSEvent) {
+            self.ivars().hovered.set(false);
+            NSView::setNeedsDisplay(self, true);
+        }
+
+        #[unsafe(method(becomeFirstResponder))]
+        fn become_first_responder(&self) -> bool {
+            let accepted: bool = unsafe { msg_send![super(self), becomeFirstResponder] };
+            self.ivars().focused.set(accepted);
+            self.update_visibility();
+            accepted
+        }
+
+        #[unsafe(method(resignFirstResponder))]
+        fn resign_first_responder(&self) -> bool {
+            let accepted: bool = unsafe { msg_send![super(self), resignFirstResponder] };
+            if accepted { self.ivars().focused.set(false); }
+            self.update_visibility();
+            accepted
+        }
+
+        #[unsafe(method(hitTest:))]
+        fn hit_test(&self, point: NSPoint) -> *mut NSView {
+            if !self.ivars().revealed.get() && !self.ivars().focused.get() { return std::ptr::null_mut(); }
+            unsafe { msg_send![super(self), hitTest: point] }
+        }
+
+        #[unsafe(method(activate:))]
+        fn activate(&self, _sender: Option<&objc2::runtime::AnyObject>) {
+            let this = self.retain();
+            if let Some(click) = &this.ivars().click { click(); }
+        }
+    }
+);
+
+impl ActionButton {
+    fn init(mtm: MainThreadMarker, frame: NSRect, click: Option<Box<dyn Fn()>>) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(ActionIvars {
+            click,
+            hovered: Cell::new(false),
+            revealed: Cell::new(true),
+            focused: Cell::new(false),
+            tracking: RefCell::new(None),
+        });
+        let this: Retained<Self> = unsafe { msg_send![super(this), initWithFrame: frame] };
+        this.setBordered(false);
+        this.setContentTintColor(Some(&color(habits::CHROME_SOFT)));
+        this
+    }
+
+    fn set_revealed(&self, revealed: bool) {
+        self.ivars().revealed.set(revealed);
+        self.update_visibility();
+    }
+
+    fn update_visibility(&self) {
+        self.setAlphaValue(
+            if self.ivars().revealed.get() || self.ivars().focused.get() {
+                1.0
+            } else {
+                0.0
+            },
+        );
+    }
+
+    pub(crate) fn new(
+        mtm: MainThreadMarker,
+        frame: NSRect,
+        symbol: &str,
+        tooltip: &str,
+        click: impl Fn() + 'static,
+    ) -> Retained<Self> {
+        let this = Self::init(mtm, frame, Some(Box::new(click)));
+        this.setImage(symbol_image(symbol, habits::CHROME_ICON_SIZE).as_deref());
+        this.setImagePosition(objc2_app_kit::NSCellImagePosition::ImageOnly);
+        this.setTitle(&NSString::from_str(""));
+        this.setToolTip(Some(&NSString::from_str(tooltip)));
+        this.setAccessibilityLabel(Some(&NSString::from_str(tooltip)));
+        unsafe {
+            this.setTarget(Some(&this));
+            this.setAction(Some(objc2::sel!(activate:)));
+        }
+        this
     }
 }

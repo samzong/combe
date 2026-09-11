@@ -10,7 +10,7 @@ use objc2_app_kit::{
     NSWindowOrderingMode, NSWorkspace,
 };
 use objc2_foundation::{
-    MainThreadMarker, NSObjectNSDelayedPerforming, NSPoint, NSRect, NSSize, NSString,
+    MainThreadMarker, NSObjectNSDelayedPerforming, NSPoint, NSRange, NSRect, NSSize, NSString,
 };
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
@@ -384,7 +384,18 @@ fn rebuild_status() {
             .map(|(text, _)| text.as_str())
             .collect::<Vec<_>>()
             .join("   ");
-        let used = parts.iter().map(|(_, used)| *used).fold(0.0_f64, f64::max);
+        let mut offset = 0;
+        let mut warnings = Vec::new();
+        for (part, used) in &parts {
+            let length = part.encode_utf16().count();
+            if let Some(warning) = quota_warn_color(*used)
+                && let Some((_, percentage)) = part.rsplit_once(' ')
+            {
+                let count = percentage.encode_utf16().count();
+                warnings.push((NSRange::new(offset + length - count, count), warning));
+            }
+            offset += length + 3;
+        }
         let font = NSFont::monospacedDigitSystemFontOfSize_weight(STATUS_FONT, unsafe {
             NSFontWeightRegular
         });
@@ -405,7 +416,7 @@ fn rebuild_status() {
         chip.dim_when_idle();
         chip.disable_hover_highlight();
         chip.set_font(&font);
-        chip.set_warn(quota_warn_color(used));
+        chip.set_warn(warnings);
         chip.setAccessibilityElement(true);
         chip.setAccessibilityRole(Some(&NSString::from_str("AXButton")));
         chip.setAccessibilityLabel(Some(&NSString::from_str(&format!(

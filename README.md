@@ -14,6 +14,8 @@ A worktree-aware terminal for Macs, written for personal use.
 brew install samzong/tap/combe
 ```
 
+To compile a personal copy and change habits, see [docs/build-your-terminal.md](docs/build-your-terminal.md).
+
 ## Shortcuts
 
 ### Tabs and panes

@@ -341,6 +341,14 @@ impl SurfaceView {
         self.ivars().cwd.borrow().clone()
     }
 
+    pub fn set_cwd(&self, cwd: &str) {
+        let cwd = cwd.trim();
+        if cwd.is_empty() || cwd.contains('\0') {
+            return;
+        }
+        *self.ivars().cwd.borrow_mut() = cwd.to_owned();
+    }
+
     pub fn title(&self) -> Option<String> {
         self.ivars().title.borrow().clone()
     }

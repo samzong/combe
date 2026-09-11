@@ -168,6 +168,17 @@ unsafe extern "C" fn action(
             crate::window::refresh_labels();
             true
         }
+        sys::GHOSTTY_ACTION_PWD => {
+            let Some(view) = surface_view(target) else {
+                return false;
+            };
+            let pwd = unsafe { action.action.pwd.pwd };
+            if pwd.is_null() {
+                return false;
+            }
+            view.set_cwd(&unsafe { CStr::from_ptr(pwd) }.to_string_lossy());
+            true
+        }
         sys::GHOSTTY_ACTION_GOTO_TAB => {
             if surface_view(target).is_none() {
                 return false;

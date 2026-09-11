@@ -151,7 +151,7 @@ Every tab of every worktree lives in the same content view. Only the active tab 
 
 A tab is named by the focused pane's terminal title, and falls back to the worktree's own name until a title arrives. Ghostty's shell integration writes the running command while a command runs and a shortened path at the prompt, so a pane running `claude` names its tab `claude`; splitting a tab means the name follows whichever pane holds focus. Titles reach the app through `GHOSTTY_ACTION_SET_TITLE` on the runtime action callback, which resolves back to the pane with `ghostty_surface_userdata`. There is no process-name API in `ghostty.h`, and none is invented: a shell without integration keeps the worktree name.
 
-Splitting reparents the focused surface into a fresh `NSSplitView` and adds a sibling. Closing removes the leaf and, when a pane is left with a single child, collapses that pane into its parent. Ghostty asks for a close through `close_surface_cb`, which queues the surface and drains it on the main queue.
+Splitting reparents the focused surface into a fresh `NSSplitView` and adds a sibling. The sibling opens with that surface's last working directory reported through `GHOSTTY_ACTION_PWD`. If none has arrived, it uses the workspace path. A reported directory does not change workspace selection. New tabs still open on the selected worktree path. Closing removes the leaf and, when a pane is left with a single child, collapses that pane into its parent. Ghostty asks for a close through `close_surface_cb`, which queues the surface and drains it on the main queue.
 
 ### Tab Overview
 
@@ -269,7 +269,7 @@ Preserve these capabilities when changing chrome. Prototype states demonstrate a
 | --- | --- |
 | Workspace sessions | Switch away and back; tab, split, focused pane, title, shell PID and output survive; repo collapse does not close sessions |
 | Tabs | Create, select, close and navigate by key; keep workspace ownership; closing the last workspace tab selects another live workspace, or closes the window when none remain |
-| Splits and zoom | Split right and down, nest and resize, move focus, zoom and restore, close a leaf and promote its sibling; preserve PTYs and focus |
+| Splits and zoom | Split right and down, nest and resize, move focus, zoom and restore, close a leaf and promote its sibling; a new sibling inherits the focused pane's reported working directory; preserve PTYs and focus |
 | Catalog | Add multiple repos with the native directory picker; include folder workspaces; Home is a single `home` row without adding a repo; adding `$HOME` as a repo replaces the built-in row; refresh on activation without blocking input |
 | Hover panels | Check entry, return-to-chip and exit delays; fast pointer sweeps, drag, outside click, Escape, blur, keyboard focus, pinning and resizing |
 | Workspace shortcuts | Command hints, visible-row numbering after repo collapse, Cmd-1 through Cmd-9, and closed-catalog tab shortcuts; no Command input reaches the PTY |

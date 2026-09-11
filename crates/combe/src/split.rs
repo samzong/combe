@@ -68,16 +68,30 @@ pub fn leaf(
     view
 }
 
+fn container(mtm: MainThreadMarker, frame: NSRect) -> Retained<NSView> {
+    let view = NSView::initWithFrame(NSView::alloc(mtm), frame);
+    view.setAutoresizingMask(FILL);
+    view
+}
+
 pub fn root(
     mtm: MainThreadMarker,
     frame: NSRect,
     cwd: &str,
     input: Option<&str>,
 ) -> Retained<NSView> {
-    let container = NSView::initWithFrame(NSView::alloc(mtm), frame);
-    container.setAutoresizingMask(FILL);
+    let container = container(mtm, frame);
     let view = leaf(mtm, container.bounds(), cwd, input);
     container.addSubview(&view);
+    container
+}
+
+pub fn adopt(mtm: MainThreadMarker, frame: NSRect, view: &SurfaceView) -> Retained<NSView> {
+    let container = container(mtm, frame);
+    detach(view);
+    view.setFrame(container.bounds());
+    view.setAutoresizingMask(FILL);
+    container.addSubview(view);
     container
 }
 
@@ -109,10 +123,17 @@ pub fn divide(
 }
 
 pub fn close(view: &SurfaceView) {
+    if unsafe { view.superview() }.is_none() {
+        return;
+    }
+    view.close();
+    detach(view);
+}
+
+pub fn detach(view: &SurfaceView) {
     let Some(parent) = (unsafe { view.superview() }) else {
         return;
     };
-    view.close();
     view.removeFromSuperview();
 
     if !is_pane(&parent) {

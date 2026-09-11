@@ -163,6 +163,8 @@ The overview enters and exits with a 180 ms ease-in-out crossfade. Reduce Motion
 
 Zooming moves the focused surface above its hidden split tree and leaves a placeholder at its original position. Toggling again restores that position without recreating terminals. Zoom is retained per tab; closing a pane or adding a split restores the tree first. A tab with one surface is unchanged.
 
+Moving a pane to a new tab reparents that surface without recreating its terminal, collapses the split it leaves behind, and opens the new tab on the same workspace, focused. It restores zoom first and does nothing when the tab has one pane. Combe offers no inverse: a tab does not merge back into a split.
+
 Command-modified keys belong to the app and never reach the PTY. Control sequences always reach the PTY. Releasing a selection on a surface copies that text to the system clipboard (`copy-on-select`). Cmd-C still copies. Terminal clipboard reads are denied by default; ordinary paste remains available, while unsafe pastes are denied with the system alert sound. Cmd-click on a terminal URL sends `GHOSTTY_ACTION_OPEN_URL`; Combe opens `http`, `https`, and `mailto` in the default handler.
 
 Search lives in libghostty. `GHOSTTY_ACTION_START_SEARCH` adds a find bar as a subview in the top-right corner of that surface; every edit sends `search:<needle>` through `ghostty_surface_binding_action`, and `SEARCH_TOTAL` / `SEARCH_SELECTED` feed the match counter. `END_SEARCH` removes the bar and returns focus to the surface.
@@ -178,6 +180,7 @@ Search lives in libghostty. `GHOSTTY_ACTION_START_SEARCH` adds a find bar as a s
 | Opt-Cmd-W | Close every titled window |
 | Cmd-D | Split right |
 | Cmd-Shift-D | Split down |
+| Cmd-Shift-T | Move the focused pane into its own tab |
 | Cmd-Shift-Backslash | Toggle Tab Overview |
 | Cmd-Shift-Return | Zoom the focused split, or restore its layout |
 | Cmd-Shift-[ / ] | Previous / next tab |

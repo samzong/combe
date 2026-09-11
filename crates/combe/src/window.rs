@@ -715,6 +715,32 @@ pub(crate) fn divide(vertical: bool) {
     }
 }
 
+pub(crate) fn move_pane_to_new_tab() {
+    let mtm = MainThreadMarker::new().expect("main thread");
+    let Some(view) = focused_surface() else {
+        return;
+    };
+    let source = STATE.with(|state| {
+        let state = state.borrow();
+        let state = state.as_ref()?;
+        let tab = state.tabs.active()?;
+        (split::surfaces(&tab.root).len() > 1).then(|| (tab.workspace.clone(), tab.name.clone()))
+    });
+    let Some((workspace, name)) = source else {
+        return;
+    };
+    restore_zoom(&view);
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let Some(state) = state.as_mut() else { return };
+        let root = split::adopt(mtm, state.content.bounds(), &view);
+        state.content.addSubview(&root);
+        state.tabs.push(workspace, name, root);
+    });
+    sync_tabs();
+    focus_active();
+}
+
 pub fn goto_tab(target: TabTarget) -> bool {
     let next = STATE.with(|state| {
         let state = state.borrow();

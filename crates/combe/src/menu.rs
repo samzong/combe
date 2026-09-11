@@ -59,6 +59,11 @@ define_class!(
             window::toggle_split_zoom();
         }
 
+        #[unsafe(method(movePaneToNewTab:))]
+        fn move_pane_to_new_tab(&self, _sender: Option<&AnyObject>) {
+            window::move_pane_to_new_tab();
+        }
+
         #[unsafe(method(previousTab:))]
         fn previous_tab(&self, _sender: Option<&AnyObject>) {
             window::goto_tab(window::TabTarget::Previous);
@@ -213,7 +218,7 @@ pub(crate) fn install(mtm: MainThreadMarker, app: &NSApplication) {
     menubar.addItem(&terminal_item);
     let terminal_menu = NSMenu::new(mtm);
     terminal_menu.setTitle(&NSString::from_str("Terminal"));
-    let entries: [(&str, objc2::runtime::Sel, &str, NSEventModifierFlags); 17] = [
+    let entries: [(&str, objc2::runtime::Sel, &str, NSEventModifierFlags); 18] = [
         (
             "Zoom Split",
             sel!(toggleSplitZoom:),
@@ -237,6 +242,12 @@ pub(crate) fn install(mtm: MainThreadMarker, app: &NSApplication) {
             "Split Down",
             sel!(splitDown:),
             "D",
+            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
+        ),
+        (
+            "Move Pane to New Tab",
+            sel!(movePaneToNewTab:),
+            "T",
             NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
         ),
         (

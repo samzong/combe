@@ -12,7 +12,7 @@ use objc2_foundation::{
     MainThreadMarker, NSNotification, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
 };
 
-use crate::chrome_view::{self, ClickView};
+use crate::chrome_view::{self, ActionButton};
 use crate::habits;
 use crate::surface::SurfaceView;
 
@@ -153,26 +153,24 @@ impl FindBar {
 
         let weak = Weak::from_retained(&this);
         let mut x = INSET + field_width + COUNT_WIDTH;
-        let actions: [(&str, Action); 3] = [
-            ("\u{2039}", |bar| bar.navigate(false)),
-            ("\u{203A}", |bar| bar.navigate(true)),
-            ("\u{00D7}", |bar| bar.act("end_search")),
+        let actions: [(&str, &str, Action); 3] = [
+            ("chevron.left", "Previous match", |bar| bar.navigate(false)),
+            ("chevron.right", "Next match", |bar| bar.navigate(true)),
+            ("xmark", "Close find bar", |bar| bar.act("end_search")),
         ];
-        for (glyph, action) in actions {
+        for (symbol, label, action) in actions {
             let weak = weak.clone();
-            let button = ClickView::new(
+            let button = ActionButton::new(
                 mtm,
                 NSRect::new(NSPoint::new(x, 0.0), NSSize::new(BUTTON_WIDTH, HEIGHT)),
-                glyph,
-                6.0,
-                0.0,
+                symbol,
+                label,
                 move || {
                     if let Some(bar) = weak.load() {
                         action(&bar);
                     }
                 },
             );
-            button.set_font(&NSFont::systemFontOfSize(habits::CHROME_FONT_SIZE + 2.0));
             this.addSubview(&button);
             x += BUTTON_WIDTH;
         }

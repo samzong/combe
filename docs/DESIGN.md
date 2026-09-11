@@ -79,8 +79,8 @@ The sidebar is one glass surface with three states: a workspace chip, a transien
 | Workspace chip | 36 pt high; 18 pt corner radius; default left edge 84 pt and right edge 312 pt |
 | Transient catalog | Default 300 pt wide, 12 pt from the top and left; height follows the list and is capped by the window; the same 18 pt corner radius as the chip |
 | Pinned sidebar | Same header and width as the transient catalog; extends to 12 pt above the bottom; reserves terminal space |
-| Header controls | 28 pt circular hit targets; 4 pt between add and pin, 4 pt from pin to the glass right edge; workspace text has a 12 pt leading inset within its trigger; add and pin remain available when the catalog is closed |
-| Tabs | 36 pt high, 180 pt nominal width, 18 pt glass and hover corners; keyboard focus follows a 16 pt path inset by 2 pt with a 2 pt stroke; 12 pt gaps; active tab has the restrained glass treatment; long titles truncate; close and new-tab symbols have no separate fill or border; titles and symbols accept clicks across their full visible height |
+| Header controls | Traffic lights, workspace text, add and pin share a vertical center 30 pt below the window content top in all sidebar states; 28 pt hit targets; 4 pt between add and pin, 4 pt from pin to the glass right edge; workspace text has a 12 pt leading inset within its trigger; add and pin remain available when the catalog is closed |
+| Tabs | 36 pt high, 180 pt nominal width, 18 pt glass and hover corners; keyboard focus follows a 16 pt path inset by 2 pt with a 2 pt stroke; 12 pt gaps; active tab has the restrained glass treatment; long titles truncate; close and new-tab symbols have no separate fill or border at rest; close has a 20 pt target, 10 pt right inset, and appears on tab hover or keyboard focus without moving the title |
 | Repo heading | 30 pt high, folder symbol, trailing disclosure indicator, 12 pt medium system text |
 | Workspace row | 34 pt high with 2 pt vertical spacing; 16 pt corners; session dot at 32 pt, label at 48 pt, and selected checkmark |
 | Shortcut hint | 18 pt circle, 11 pt tabular numeral centered horizontally and vertically using its measured text height, subtle fill; replaces the checkmark without moving the row |
@@ -93,6 +93,14 @@ The 12 pt gap also separates traffic lights from the chip, the chip from the fir
 Glass is confined to navigation and small control surfaces. Use native AppKit material that follows effective appearance and accessibility settings; do not change Ghostty's opacity or layer ownership to simulate glass. Preserve the deployment floor. Reduce Transparency makes materials opaque; Reduce Motion removes travel while keeping hover-intent delays.
 
 The outer content view clips the shared background to the window corners while retaining native titled-window controls. The sidebar's shadow sits outside its clipped material. Its glass and catalog viewport animate together for 380 ms with the prototype's easing curve, keeping the first heading stationary. Scrollbars are enabled only when content exceeds the final viewport. Catalog padding is 8 pt at the top, 6 pt horizontally and 12 pt at the bottom; adjacent repo groups have a 16.5 pt gap including a subtle separator.
+
+### Icons
+
+Chrome icons use monochrome SF Symbols with regular weight, configured at 12 pt for toolbar actions. Add repo and new tab both use the same `plus` symbol, size, and weight; close tab uses `xmark`; pin uses `sidebar.left`; overview uses `square.grid.2x2`. Use image-only native buttons so symbols share native alignment metrics and do not inherit text baselines. Find actions use `chevron.left`, `chevron.right`, and `xmark` with the same image configuration and circular feedback. Smaller disclosure symbols retain their existing 10 pt frames and regular weight. Do not substitute text characters for action icons. Prototype SVGs use a consistent 12 px box and 1.5 px stroke; native SF Symbols remain authoritative for optical alignment.
+
+### Button feedback
+
+Add repo, pin sidebar, new tab, close tab, and tab overview use a circular neutral background on hover and a stronger circular background while pressed, with no movement or scaling. Background diameter is 28 pt, capped by the button bounds; close uses 20 pt. Pin remains highlighted while pinned. Close appears when the whole tab is hovered or keyboard-focused, and remains visible while the close button has focus. Reserve 38 pt to the right of the title so visibility never moves the text. Buttons expose native tooltips and accessibility labels; tooltips include existing shortcuts where applicable. AppKit owns release-to-activate, drag-out cancellation, and keyboard focus.
 
 ### Sidebar interaction
 
@@ -137,7 +145,7 @@ The status line sits under the terminals, not under the sidebar. Combe reads loc
 
 Codex discovery enumerates session file metadata in the background, including old dates for resumed sessions. It examines at most eight recently modified files and at most the last 1 MiB of each, skips incomplete lines, and selects the newest timestamped `event_msg` / `token_count` snapshot for the `codex` limit bucket (or older records without a limit ID). Unchanged files reuse their parsed in-memory snapshots. Windows are classified by their duration, not by primary/secondary position; unsupported durations are omitted. A quota event outside the read budget is unavailable rather than triggering an unbounded history scan.
 
-One block lists each available provider and the remaining percent of its tighter 5h/7d window. Hover or explicit activation grows the same chip upward to show the windows, including Claude Fable if the local payload supplies it. Provider headings identify rows; do not add a Window / Remaining / Resets in header. Each row presents window, remaining percent, and reset interval, with an accessible label explaining the values. The details use the same 150 ms entry, 250 ms exit, drag cancellation, keyboard-focus protection and Escape behavior as the transient sidebar. Used quota at 60 percent is orange and at 80 percent is red. If only one provider is available, show only that provider; if none is available, remove the chip and its reserved status height. These are last-recorded snapshots, not a claim about the current login: neither source establishes account identity, and other devices or account switches can make values stale. Passing a reset time does not manufacture a fresh percentage. Combe persists no quota data. Startup reads once; while focused, it checks every 15 minutes, and activation checks only after five minutes since the previous check. Both intervals are compiled into `habits.rs`.
+One block lists each available provider and the remaining percent of its tighter 5h/7d window. Hover or explicit activation grows the same chip upward to show the windows, including Claude Fable if the local payload supplies it. Provider headings identify rows; do not add a Window / Remaining / Resets in header. Each row presents window, remaining percent, and reset interval, with an accessible label explaining the values. The details use the same 150 ms entry, 250 ms exit, drag cancellation, keyboard-focus protection and Escape behavior as the transient sidebar. Used quota at 60 percent is orange and at 80 percent is red. In the summary, color only the affected provider’s percentage; provider names, separators, and other providers retain their normal text color. If only one provider is available, show only that provider; if none is available, remove the chip and its reserved status height. These are last-recorded snapshots, not a claim about the current login: neither source establishes account identity, and other devices or account switches can make values stale. Passing a reset time does not manufacture a fresh percentage. Combe persists no quota data. Startup reads once; while focused, it checks every 15 minutes, and activation checks only after five minutes since the previous check. Both intervals are compiled into `habits.rs`.
 
 Every tab of every worktree lives in the same content view. Only the active tab of the selected worktree is unhidden; every surface everywhere else gets `ghostty_surface_set_occlusion(false)` and stops drawing. The selection is one pointer per worktree plus the current worktree, so the sidebar highlight and the tab bar cannot disagree. Each tab remembers its focused pane. Closing a background pane preserves the current input focus.
 
@@ -232,18 +240,23 @@ crates/combe
   entry.rs             external file, URL, and service requests
   ghostty.rs           ghostty_init, app lifecycle, runtime callbacks
   surface.rs           one NSView per libghostty surface
-  split.rs             NSSplitView tree: leaf, divide, close, collapse
+  split.rs             NSSplitView tree, zoom, and neighboring pane selection
   tabs.rs              tabs keyed by worktree, active tab per worktree
+  tab_bar.rs           tab controls, titles, selection, and scrolling
   overview.rs          static tab images and overview grid
-  window.rs            window, chrome, menu, sidebar, dispatch
+  window.rs            window lifecycle, workspace sessions, focus, and overall layout
+  menu.rs              native menu items, shortcuts, and action targets
   chrome_view.rs       shared clickable views, native glass, and symbols
   sidebar.rs           catalog adapter
+  sidebar_panel.rs     catalog refresh, sidebar controls, interaction state, and geometry
   quota.rs             Claude and Codex subscription windows
   quota_panel.rs       quota cache, refresh scheduling, chip, and expanding details
   habits.rs            every preference, compiled in
 ```
 
 The quota panel owns its cached usage, polling state, and views. The window mounts it, supplies callbacks for current window activity and layout, and uses its height when positioning terminal content. Shared chrome views dispatch clicks through callbacks without owning workspace or quota state.
+
+The sidebar panel owns its catalog snapshot, refresh scheduling, collapsed groups, hover timer, keyboard navigation, and views. The window supplies the current workspace and live session marks, handles workspace activation, and reserves space when the sidebar is pinned. The tab bar receives tab IDs, labels, and the selected ID; it emits create, select, and close actions. The window retains tab and terminal lifecycle, occlusion, close confirmation, and focus coordination. Components do not access the window's private state.
 
 ## GUI acceptance
 

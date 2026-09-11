@@ -13,6 +13,7 @@
       --text-strong: #e6e7e9;
       --line: #ffffff10;
       --hover: #ffffff15;
+      --button-pressed: #ffffff26;
       --selection: #ffffff12;
       --hint: #ffffff0d;
       --idle: #ffffff04;
@@ -51,6 +52,7 @@
       --blue: #0969da;
       --line: #0000000d;
       --hover: #00000009;
+      --button-pressed: #00000018;
       --selection: #00000008;
       --hint: #00000006;
       --idle: #00000003;
@@ -98,7 +100,7 @@
       --traffic-space: 0px;
     }
     .window.peek, .window.pinned { --traffic-space: 72px; }
-    .traffic { position: absolute; top: 12px; left: calc(-64px + var(--traffic-space)); display: flex; gap: 8px; z-index: 1; transition: left 380ms var(--ease); }
+    .traffic { position: absolute; top: calc((36px - 12px) / 2); left: calc(-64px + var(--traffic-space)); display: flex; gap: 8px; z-index: 1; transition: left 380ms var(--ease); }
     .traffic i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 .5px #00000020; }
     .traffic i:nth-child(1) { background: #ff6059; }
     .traffic i:nth-child(2) { background: #ffbd2e; }
@@ -156,7 +158,8 @@
     .dot.live { background: var(--green); }
     .tools { display: flex; align-items: center; flex: none; gap: 4px; }
     .icon { width: 28px; height: 28px; padding: 6px; display: grid; place-items: center; background: transparent; border: 0; border-radius: 50%; color: var(--text-soft); }
-    .icon svg { width: 15px; height: 15px; }
+    .icon svg, .newtab svg, .tab .x svg, .find-bar button svg { width: 12px; height: 12px; stroke-width: 1.5; }
+    .tab .x { display: grid; place-items: center; }
     .icon:hover { background: var(--hover); color: var(--fg); }
     .icon[aria-pressed="true"] { background: var(--selection); color: var(--fg); }
     .catalog {
@@ -206,6 +209,7 @@
     .quota.open { width: 304px; height: calc(28px + var(--quota-details-height, 222px)); background: var(--quota-open); box-shadow: inset 0 0 0 .75px #ffffff20, inset 0 1px .5px #ffffff18, 0 -6px 32px #00000030, 0 6px 18px #00000020; }
     .quota-trigger { position: absolute; bottom: 0; left: 0; display: flex; align-items: center; gap: 18px; width: 176px; height: 28px; padding: 0 8px; border: 0; border-radius: 14px; background: transparent; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
     .quota-trigger > span { display: flex; gap: 6px; white-space: nowrap; }
+    .quota-trigger b.warn, .quota-row strong.warn { color: #ff453a; }
     .quota-trigger b { color: var(--text-soft); font-weight: 500; }
     .quota-details { position: absolute; left: 0; bottom: 28px; width: 304px; padding: 16px 16px 12px; opacity: 0; transform: translateY(8px); transition: opacity 140ms ease, transform 300ms var(--ease); }
     .quota.open .quota-details { opacity: 1; transform: translateY(0); transition-delay: 65ms, 0ms; }
@@ -222,16 +226,28 @@
     .preview-tools { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .preview-tools label { display: flex; align-items: center; gap: 8px; }
     select, input { font: inherit; color: var(--fg); background: var(--solid); border: .5px solid var(--line); border-radius: 6px; padding: 5px 8px; }
-    .tab { position: relative; padding-right: 34px; flex: none; border: 0; text-align: left; cursor: default; }
-    .tab .x { position: absolute; right: 8px; top: 7px; width: 22px; height: 22px; padding: 0; border: 0; background: transparent; border-radius: 50%; }
-    .newtab { flex: none; border: 0; }
+    .tab { position: relative; padding-right: 38px; flex: none; border: 0; text-align: left; cursor: default; }
+    .tab .x { position: absolute; right: 10px; top: 8px; width: 20px; height: 20px; padding: 0; border: 0; background: transparent; border-radius: 50%; }
+    .newtab { flex: none; border: 0; position: relative; isolation: isolate; }
+    .newtab::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; z-index: -1; }
+    .newtab:hover::before { background: var(--hover); }
+    .newtab:active::before { background: var(--button-pressed); }
+    .icon, .tab .x, .newtab { border-radius: 50%; }
+    .tab .x { opacity: 0; pointer-events: none; }
+    .tab:hover .x, .tab:focus-within .x { opacity: 1; pointer-events: auto; }
+    .tab .x:hover { background: var(--hover); color: var(--fg); }
+    .icon[aria-pressed="true"]:hover { background: var(--hover); }
+    .icon:active, .icon[aria-pressed="true"]:active, .tab .x:active { background: var(--button-pressed); color: var(--fg); }
+
     .tabs { overflow-x: auto; scrollbar-width: none; }
     .term.down { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
     .term.down .pane + .pane { border-left: 0; border-top: .5px solid var(--line); }
     .pane { position: relative; }
     .find-bar { position: absolute; right: 12px; top: 8px; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--glass-panel); box-shadow: var(--glass-edge), 0 6px 20px #0002; border-radius: 12px; font: var(--font); }
     .find-bar input { width: 120px; }
-    .find-bar button { border: 0; background: transparent; }
+    .find-bar button { border: 0; background: transparent; width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border-radius: 50%; }
+    .find-bar button:hover { background: var(--hover); }
+    .find-bar button:active { background: var(--button-pressed); }
     .find-bar [data-count] { color: var(--muted); font-size: 11px; }
     .window dialog { color: var(--fg); background: var(--solid); border: .5px solid var(--line); border-radius: 18px; width: 340px; padding: 24px; box-shadow: 0 20px 80px #0005; font: var(--font); }
     dialog::backdrop { background: #0003; }
@@ -313,16 +329,16 @@
               <div class="quota-details" id="quota-details" role="region" aria-label="Quota details" tabindex="-1" inert>
                 <section class="quota-provider" aria-labelledby="quota-claude">
                   <h2 id="quota-claude">Claude</h2>
-                  <div class="quota-row" role="group" aria-label="5 hours, 83 percent remaining, resets in 0 minutes"><span>5h</span><strong>83%</strong><span class="quota-reset">0m</span></div>
+                  <div class="quota-row" role="group" aria-label="5 hours, 82 percent remaining, resets in 0 minutes"><span>5h</span><strong>82%</strong><span class="quota-reset">0m</span></div>
                   <div class="quota-row" role="group" aria-label="7 days, 84 percent remaining, resets in 4 days 4 hours"><span>7d</span><strong>84%</strong><span class="quota-reset">4d 4h</span></div>
                 </section>
                 <section class="quota-provider" aria-labelledby="quota-codex">
                   <h2 id="quota-codex">Codex</h2>
-                  <div class="quota-row" role="group" aria-label="7 days, 49 percent remaining, resets in 4 days 23 hours"><span>7d</span><strong>49%</strong><span class="quota-reset">4d 23h</span></div>
+                  <div class="quota-row" role="group" aria-label="7 days, 12 percent remaining, resets in 4 days 23 hours"><span>7d</span><strong class="warn">12%</strong><span class="quota-reset">4d 23h</span></div>
                 </section>
               </div>
               <button class="quota-trigger" id="quota-trigger" type="button" aria-expanded="false" aria-controls="quota-details">
-                <span>Claude <b>83%</b></span><span>Codex <b>49%</b></span>
+                <span>Claude <b>82%</b></span><span>Codex <b class="warn">12%</b></span>
               </button>
             </div>
           </footer>
@@ -341,7 +357,7 @@
       <p id="spacing-selection" class="spacing-selection" role="status"></p>
       <div class="spacing-table-wrap"><table><thead><tr><th>ID</th><th>Relationship</th><th>Native source · pt</th><th>Prototype live · px</th><th>Recommended · pt</th></tr></thead><tbody id="spacing-rows"></tbody></table></div>
     </section>
-    <details class="components"><summary>Component contract</summary><p>The native app uses AppKit controls and complete Ghostty surfaces. This page demonstrates chrome states; shell execution, search results, native directory selection, and process confirmation come from the real app. Tabs and workspace selections retain their preview state. See <a href="DESIGN.md">DESIGN.md</a> for the behavior and verification contract.</p><p>Chrome: system font, 12–13 pt. Terminal: Fira Code, Noto Sans Mono CJK SC fallback, 13 pt. Appearance changes colors and materials while font family, size, weight, metrics, and terminal state remain stable.</p></details>
+    <details class="components"><summary>Component contract</summary><p>The native app uses AppKit controls and complete Ghostty surfaces. This page demonstrates chrome states; shell execution, search results, native directory selection, and process confirmation come from the real app. Tabs and workspace selections retain their preview state. The sidebar owns catalog controls and interaction state; the tab bar owns tab controls. The window coordinates workspace sessions, terminal visibility, and overall layout. See <a href="DESIGN.md">DESIGN.md</a> for the behavior and verification contract.</p><p>Chrome: system font, 12–13 pt. Terminal: Fira Code, Noto Sans Mono CJK SC fallback, 13 pt. Appearance changes colors and materials while font family, size, weight, metrics, and terminal state remain stable.</p></details>
   </main>
   <script>
     const repos = [
@@ -472,7 +488,8 @@
         label.textContent = item.label;
         const close = document.createElement("button");
         close.className = "x";
-        close.textContent = "×";
+        close.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg>';
+        close.title = "Close tab";
         close.setAttribute("aria-label", `Close ${item.label}`);
         close.addEventListener("click", event => {
           event.stopPropagation();
@@ -504,7 +521,8 @@
       }
       const plus = document.createElement("button");
       plus.className = "newtab";
-      plus.textContent = "+";
+      plus.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>';
+      plus.title = "New tab (⌘T)";
       plus.setAttribute("aria-label", "New tab");
       plus.addEventListener("click", () => {
         const item = { id: ++nextTab, label: `${rowOf(selected).repo.name} — zsh`, split: false };
@@ -532,7 +550,7 @@
       if (value === "find") {
         const bar = document.createElement("div");
         bar.className = "find-bar";
-        bar.innerHTML = '<input type="search" aria-label="Find in terminal" placeholder="Find"><span data-count>1 / 3</span><button aria-label="Previous match">↑</button><button aria-label="Next match">↓</button><button aria-label="Close find bar">×</button>';
+        bar.innerHTML = '<input type="search" aria-label="Find in terminal" placeholder="Find"><span data-count>1 / 3</span><button aria-label="Previous match"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg></button><button aria-label="Next match"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button><button aria-label="Close find bar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg></button>';
         bar.querySelector('button:last-child').addEventListener("click", () => bar.remove());
         left.append(bar);
       }

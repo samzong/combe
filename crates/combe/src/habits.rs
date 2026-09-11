@@ -8,6 +8,7 @@ pub const FONT_FAMILY_CJK: &str = "Noto Sans Mono CJK SC";
 pub const CJK_CODEPOINTS: &str = "U+2E80-U+2FFF,U+3000-U+303F,U+31C0-U+31EF,U+3400-U+4DBF,U+4E00-U+9FFF,U+F900-U+FAFF,U+FF00-U+FFEF";
 pub const FONT_SIZE: f64 = 13.0;
 
+pub const CHROME_ICON_SIZE: f64 = 12.0;
 pub const CHROME_FONT_SIZE: f64 = 12.0;
 pub const CHROME_LINE_HEIGHT: f64 = 18.0;
 
@@ -15,6 +16,8 @@ pub const CHROME_TEXT: (u32, u32) = (0x24292fff, 0xf1f1f2ff);
 pub const CHROME_STRONG: (u32, u32) = (0x292d33ff, 0xe6e7e9ff);
 pub const CHROME_MUTED: (u32, u32) = (0x656970ff, 0x9c9ea3ff);
 pub const CHROME_SOFT: (u32, u32) = (0x555960ff, 0xc3c4c7ff);
+pub const CHROME_BUTTON_HOVER: (u32, u32) = (0x00000009, 0xffffff15);
+pub const CHROME_BUTTON_PRESSED: (u32, u32) = (0x00000018, 0xffffff26);
 pub const CHROME_SELECTION: (u32, u32) = (0x00000008, 0xffffff12);
 pub const CHROME_HINT: (u32, u32) = (0x00000006, 0xffffff0d);
 pub const CHROME_SESSION: (u32, u32) = (0x248247ff, 0x65c888ff);

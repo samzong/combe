@@ -9,8 +9,9 @@ use objc2_app_kit::{NSBeep, NSPasteboard, NSPasteboardTypeString, NSWorkspace};
 use objc2_foundation::{MainThreadMarker, NSString, NSURL};
 
 use crate::habits;
+use crate::split::Target as SplitTarget;
 use crate::surface::SurfaceView;
-use crate::window::{SplitTarget, TabTarget};
+use crate::window::TabTarget;
 use objc2::rc::Retained;
 
 thread_local! {

@@ -49,10 +49,6 @@ impl Tabs {
         self.current.as_deref()
     }
 
-    pub fn opened(&self, workspace: &str) -> bool {
-        self.items.iter().any(|tab| tab.workspace == workspace)
-    }
-
     pub fn visible(&self) -> impl Iterator<Item = &Tab> {
         let current = self.current.as_deref();
         self.items

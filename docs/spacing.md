@@ -58,19 +58,19 @@ The native header allocation is 72 +162 +2 +28 +4 +28 +4 =300 pt. Prototype H09 
 
 Definition notes and source:
 
-- **W01** — Sidebar width is adjustable. Right and unpinned bottom are remaining space, not spacing tokens. Normal window values; full screen uses a 12pt leading inset. [window.rs:2235–2257](../crates/combe/src/window.rs#L2235).
-- **W02** — The header and tabs stay in place in all sidebar states. Measured at the start of the tab scroll range. [window.rs:2338–2340](../crates/combe/src/window.rs#L2338).
-- **W03** — In transient mode the panel overlaps the terminal; a negative measurement means overlap. [window.rs:2344–2352](../crates/combe/src/window.rs#L2344).
-- **W04** — This locates the complete terminal area, which can contain multiple surfaces. Each surface has separate E01 padding. [window.rs:2338–2355](../crates/combe/src/window.rs#L2338).
-- **W05** — 60pt is the top row allocation; there is no extra gap after it. [window.rs:39,2344–2352](../crates/combe/src/window.rs#L39).
+- **W01** — Sidebar width is adjustable. Right and unpinned bottom are remaining space, not spacing tokens. Normal window values; full screen uses a 12pt leading inset. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **W02** — The header and tabs stay in place in all sidebar states. Measured at the start of the tab scroll range. [window.rs:layout_chrome](../crates/combe/src/window.rs).
+- **W03** — In transient mode the panel overlaps the terminal; a negative measurement means overlap. [window.rs:layout_chrome](../crates/combe/src/window.rs).
+- **W04** — This locates the complete terminal area, which can contain multiple surfaces. Each surface has separate E01 padding. [window.rs:layout_chrome](../crates/combe/src/window.rs).
+- **W05** — 60pt is the top row allocation; there is no extra gap after it. [window.rs:layout_chrome](../crates/combe/src/window.rs).
 - **W06** — Size, not spacing. The current prototype intentionally remains 1200 × 760 during this audit. [habits.rs:47–48](../crates/combe/src/habits.rs#L47).
-- **W07** — Radii are shape geometry, not empty-space tokens. [window.rs:47–48,2220–2229](../crates/combe/src/window.rs#L47).
+- **W07** — Radii are shape geometry, not empty-space tokens. [window.rs:WINDOW_RADIUS; sidebar_panel.rs:SIDEBAR_RADIUS](../crates/combe/src/window.rs).
 
 ### Workspace header and glass
 
 | ID | Relationship | Native · pt | Prototype snapshot · px | Proposed · pt |
 | --- | --- | --- | --- | --- |
-| H01 | First traffic light → window | T 24 − system button height / 2 / L 20 | T 24 / L 20 | Keep center 24; align prototype |
+| H01 | First traffic light → window | T 30 − system button height / 2 / L 20 | T 24 / L 20 | Shared header center 30 |
 | H02 | Traffic light → next traffic light | 20 − system button width | 8 | Keep 20pt origin pitch |
 | H03 | Last traffic light → workspace trigger | 24 − system button width | 12 | Keep current origin positions |
 | H04 | Workspace trigger → header | T 0 / R 66 / B 0 relative to header / L 0 closed; 72 open | T 0 / R 64 / B 0 / L 72 | Keep T 0 / R 66 / B 0 relative to header / L 0 closed; 72 open |
@@ -93,26 +93,26 @@ Definition notes and source:
 
 Definition notes and source:
 
-- **H01** — The prototype uses a 12px circle at y24, center30. Native centers the system button at y24. [window.rs:2365–2380](../crates/combe/src/window.rs#L2365).
-- **H02** — The 8px prototype gap assumes 12px circles. Native button size belongs to AppKit. [window.rs:2370–2377](../crates/combe/src/window.rs#L2370).
-- **H03** — At a 12pt button width this is 12pt. Do not treat that assumed width as a native constant. [window.rs:2291–2295,2370–2377](../crates/combe/src/window.rs#L2291).
-- **H04** — The trigger is a hit target, not just the visible repo / branch text. Native width is sidebar − 138 (162 by default). Normal window reserves 72pt for traffic lights; full screen reserves 0. [window.rs:2291–2295](../crates/combe/src/window.rs#L2291).
-- **H05** — Native has a full 18pt label frame. The prototype name span follows short text, so its right remainder is elastic. Native frame values assume the default 300pt sidebar; the text frame clamps at narrow widths. [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194), [window.rs:719–724](../crates/combe/src/window.rs#L719).
-- **H06** — These sums include the traffic-light reservation and button group. They are not four independent settings. Native frame values assume the default 300pt sidebar; the text frame clamps at narrow widths. [window.rs:2291–2295](../crates/combe/src/window.rs#L2291), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
-- **H07** — 10 × 10. Hidden when pinned but its reserved space remains. [window.rs:2300–2308](../crates/combe/src/window.rs#L2300).
-- **H08** — Native label-frame gap is fixed. Prototype short-label gap includes flexible free space. Native frame values assume the default 300pt sidebar; the text frame clamps at narrow widths. [window.rs:2303–2305](../crates/combe/src/window.rs#L2303), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
-- **H09** — Prototype is currently 0 because its trigger is 2px wider. [window.rs:2294,2334](../crates/combe/src/window.rs#L2294).
-- **H10** — This includes the arrow reservation. Actual short text leaves more visual free space. Native frame values assume the default 300pt sidebar; the text frame clamps at narrow widths. [window.rs:2294,2334](../crates/combe/src/window.rs#L2294), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
-- **H11** — Both boxes are28 ×28. The native trigger-to-Add gap remains2; the prototype remains0. [window.rs:2316–2335](../crates/combe/src/window.rs#L2316).
-- **H12** — Vertical centering is (36 − 28) / 2. [window.rs:2334–2335](../crates/combe/src/window.rs#L2334).
-- **H13** — The right inset shares H18. Top and bottom are relative to the36pt header. [window.rs:2318–2319](../crates/combe/src/window.rs#L2318).
-- **H14** — Only the prototype fixes SVG size at15px, centered in28px. Native SF Symbol ink/padding are system-owned. [window.rs:820–837](../crates/combe/src/window.rs#L820).
-- **H15** — The prototype has 6.5px box insets. This is not a measured native glyph inset. [window.rs:820–837](../crates/combe/src/window.rs#L820).
-- **H16** — Geometry, not spacing. Text, icon, hit target, and glass have different boundaries. [window.rs:40,44–45](../crates/combe/src/window.rs#L40).
-- **H17** — G is actual glass height:36 closed,36 + capped catalog height transient, H−24 pinned. Normal window, default300pt sidebar; text uses native full frame, not short glyph ink. Bottom is free panel space, not header padding. [window.rs:2235–2257,2303–2334](../crates/combe/src/window.rs#L2235).
-- **H18** — G is actual glass height:36 closed,36 + capped catalog height transient, H−24 pinned. Normal window, default300pt sidebar; text uses native full frame, not short glyph ink. Bottom is free panel space, not header padding. [window.rs:2235–2257,2303–2334](../crates/combe/src/window.rs#L2235).
-- **H19** — G is actual glass height:36 closed,36 + capped catalog height transient, H−24 pinned. Normal window, default300pt sidebar; text uses native full frame, not short glyph ink. Bottom is free panel space, not header padding. [window.rs:2235–2257,2303–2334](../crates/combe/src/window.rs#L2235).
-- **H20** — Includes the arrow reservation, the Add target and both inter-control gaps. Default300pt sidebar; short prototype text leaves flexible space. [window.rs:2303–2334](../crates/combe/src/window.rs#L2303).
+- **H01** — Native and prototype traffic lights share the header center at 30pt. AppKit owns the native button size; the prototype uses a 12px circle at y24. [window.rs:layout_chrome](../crates/combe/src/window.rs).
+- **H02** — The 8px prototype gap assumes 12px circles. Native button size belongs to AppKit. [window.rs:layout_chrome](../crates/combe/src/window.rs).
+- **H03** — At a 12pt button width this is 12pt. Do not treat that assumed width as a native constant. [window.rs:leading_inset; sidebar_panel.rs:layout](../crates/combe/src/window.rs).
+- **H04** — The trigger is a hit target, not just the visible repo / branch text. Native width is sidebar − 138 (162 by default). Normal window reserves 72pt for traffic lights; full screen reserves 0. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **H05** — Native has a full 18pt label frame. The prototype name span follows short text, so its right remainder is elastic. Native frame values assume the default 300pt sidebar; the text frame clamps at narrow widths. [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194), [chrome_view.rs:194–202; sidebar_panel.rs:mount](../crates/combe/src/chrome_view.rs).
+- **H06** — These sums include the traffic-light reservation and button group. They are not four independent settings. Native frame values assume the default 300pt sidebar; the text frame clamps at narrow widths. [sidebar_panel.rs:layout; chrome_view.rs:194–202](../crates/combe/src/sidebar_panel.rs), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
+- **H07** — 10 × 10. Hidden when pinned but its reserved space remains. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **H08** — Native label-frame gap is fixed. Prototype short-label gap includes flexible free space. Native frame values assume the default 300pt sidebar; the text frame clamps at narrow widths. [sidebar_panel.rs:layout; chrome_view.rs:194–202](../crates/combe/src/sidebar_panel.rs), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
+- **H09** — Prototype is currently 0 because its trigger is 2px wider. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **H10** — This includes the arrow reservation. Actual short text leaves more visual free space. Native frame values assume the default 300pt sidebar; the text frame clamps at narrow widths. [sidebar_panel.rs:layout; chrome_view.rs:194–202](../crates/combe/src/sidebar_panel.rs), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
+- **H11** — Both boxes are28 ×28. The native trigger-to-Add gap remains2; the prototype remains0. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **H12** — Vertical centering is (36 − 28) / 2. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **H13** — The right inset shares H18. Top and bottom are relative to the36pt header. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **H14** — Only the prototype fixes SVG size at15px, centered in28px. Native SF Symbol ink/padding are system-owned. [chrome_view.rs:icon_button](../crates/combe/src/chrome_view.rs).
+- **H15** — The prototype has 6.5px box insets. This is not a measured native glyph inset. [chrome_view.rs:icon_button](../crates/combe/src/chrome_view.rs).
+- **H16** — Geometry, not spacing. Text, icon, hit target, and glass have different boundaries. [sidebar_panel.rs:TAB_HEIGHT,TOGGLE_WIDTH,TOGGLE_HEIGHT](../crates/combe/src/sidebar_panel.rs).
+- **H17** — G is actual glass height:36 closed,36 + capped catalog height transient, H−24 pinned. Normal window, default300pt sidebar; text uses native full frame, not short glyph ink. Bottom is free panel space, not header padding. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **H18** — G is actual glass height:36 closed,36 + capped catalog height transient, H−24 pinned. Normal window, default300pt sidebar; text uses native full frame, not short glyph ink. Bottom is free panel space, not header padding. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **H19** — G is actual glass height:36 closed,36 + capped catalog height transient, H−24 pinned. Normal window, default300pt sidebar; text uses native full frame, not short glyph ink. Bottom is free panel space, not header padding. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **H20** — Includes the arrow reservation, the Add target and both inter-control gaps. Default300pt sidebar; short prototype text leaves flexible space. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
 
 ### Tabs
 
@@ -122,25 +122,25 @@ Definition notes and source:
 | T02 | Tab size | X 180 / Y 36 | X 180 / Y 36 | Keep |
 | T03 | Tab → next tab | 12 | 12 | 12 |
 | T04 | Last tab → New tab button | 12 | 12 | 12 |
-| T05 | Title text frame → tab | T 9 / R 28 / B 9 / L 12 | T 9.6 / R 104.48 / B 9.6 / L 14 | Native left12; keep 28 right reservation |
-| T06 | Close hit target → tab | T 0 / R 4 / B 0 / L 156 | T 7 / R 8 / B 7 / L 150 | Keep full-height native target |
-| T07 | Title text frame → Close hit target | 4 | 74.48 | 4 |
-| T08 | Close glyph line frame → Close hit target | T9 R0 B9 L6; line18 | See note; different control structure | Keep native frame; center glyph only after review |
+| T05 | Title text frame → tab | T 9 / R 38 / B 9 / L 12 | Left14; right38 reserved | Keep 38 right reservation |
+| T06 | Close hit target → tab | T 8 / R 10 / B 8 / L 150 | T 8 / R 10 / B 8 / L 150 | 20 pt target, right10 |
+| T07 | Title text frame → Close hit target | 8 | Flexible with label length | 8 |
+| T08 | Close glyph line frame → Close hit target | AppKit centers the glyph | Centered12px SVG | Keep native glyph alignment |
 | T09 | New tab hit target | X 36 / Y 36 | X 36 / Y 36 | Keep |
 | T10 | New tab button → window right edge | Flexible; right viewport inset12 | 456 | Keep flexible |
 
 Definition notes and source:
 
-- **T01** — Top row60, tab36. This already accounts for the 12px space below the tab. [window.rs:1748–1753](../crates/combe/src/window.rs#L1748).
-- **T02** — Nominal size, not padding. [window.rs:40–41](../crates/combe/src/window.rs#L40).
-- **T03** — Repeats for every adjacent tab; shown when there are at least two tabs. [window.rs:1780](../crates/combe/src/window.rs#L1780).
-- **T04** — Same spacing definition as the tab-to-tab gap. [window.rs:1780–1785](../crates/combe/src/window.rs#L1780).
-- **T05** — Native maximum label frame140 ×18. Prototype uses left14/right34 and a flex label. Glyph ink is not measured. [window.rs:1753](../crates/combe/src/window.rs#L1753), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
-- **T06** — Native20 ×36; prototype22 ×22, right8/top7. These are distinct current implementations. [window.rs:1766–1774](../crates/combe/src/window.rs#L1766).
-- **T07** — Short prototype labels leave extra elastic space. Native full label frame has a4pt gap. [window.rs:1753,1766–1774](../crates/combe/src/window.rs#L1753).
-- **T08** — Prototype × is a text node at15px. Native uses a12pt font in a separate full-height20pt target. [window.rs:1766–1774](../crates/combe/src/window.rs#L1766), [chrome_view.rs:194–204](../crates/combe/src/chrome_view.rs#L194).
-- **T09** — Native plus text frame has T9 R0 B9 L10; prototype centers a20px plus. [window.rs:1783–1789](../crates/combe/src/window.rs#L1783).
-- **T10** — This is unused tab capacity, not a fixed margin. Overflow scrolls. [window.rs:1794–1796,2338–2340](../crates/combe/src/window.rs#L1794).
+- **T01** — Top row60, tab36. This already accounts for the 12px space below the tab. [tab_bar.rs:TabBar::update](../crates/combe/src/tab_bar.rs).
+- **T02** — Nominal size, not padding. [tab_bar.rs:WIDTH,HEIGHT](../crates/combe/src/tab_bar.rs).
+- **T03** — Repeats for every adjacent tab; shown when there are at least two tabs. [tab_bar.rs:TabBar::update](../crates/combe/src/tab_bar.rs).
+- **T04** — Same spacing definition as the tab-to-tab gap. [tab_bar.rs:TabBar::update](../crates/combe/src/tab_bar.rs).
+- **T05** — Native maximum label frame130 ×18. Close visibility does not move the label. [Source](../crates/combe/src/tab_bar.rs).
+- **T06** — Close appears on tab hover or keyboard focus. Target and circular background are20 ×20. [Source](../crates/combe/src/tab_bar.rs).
+- **T07** — Maximum native title frame ends8pt before the close target. [Source](../crates/combe/src/tab_bar.rs).
+- **T08** — Native NSButton centers an SF Symbol inside a20 ×20 target. [Source](../crates/combe/src/chrome_view.rs).
+- **T09** — Native target36 ×36 with a centered28pt circular hover background. [Source](../crates/combe/src/tab_bar.rs).
+- **T10** — This is unused tab capacity, not a fixed margin. Overflow scrolls. [tab_bar.rs:TabBar::update; window.rs:layout_chrome](../crates/combe/src/tab_bar.rs).
 
 ### Sidebar catalog
 
@@ -171,28 +171,28 @@ Definition notes and source:
 
 Definition notes and source:
 
-- **S01** — The native viewport fills the area under the36pt header. HTML catalog has content height with a max-height; its empty pinned remainder differs. [window.rs:2276–2288](../crates/combe/src/window.rs#L2276).
-- **S02** — This is the catalog top padding, not an extra header-to-catalog gap. [window.rs:1856,1873–1885](../crates/combe/src/window.rs#L1856).
-- **S03** — The12pt bottom is minimum natural content padding. Additional pinned empty space is flexible. [window.rs:1856,1873–1885,1958](../crates/combe/src/window.rs#L1856).
-- **S04** — Browser measurement confirms16.5 after margin collapse. The same group separator pattern repeats. [window.rs:1875–1876,2028–2030](../crates/combe/src/window.rs#L1875).
-- **S05** — Shares S03; do not add both values when computing the same edge. [window.rs:1883–1889](../crates/combe/src/window.rs#L1883).
-- **S06** — Native30pt heading with18pt label frame. Prototype text span is intrinsic-width. [window.rs:1888–1889](../crates/combe/src/window.rs#L1888), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
-- **S07** — 14 ×14 icon box; native and prototype agree. [window.rs:1897–1902](../crates/combe/src/window.rs#L1897).
-- **S08** — This8pt gap is distinct from the12pt leading inset. [window.rs:1888–1902](../crates/combe/src/window.rs#L1888).
-- **S09** — Native10 ×10 arrow sits4pt farther left than the prototype. [window.rs:1911](../crates/combe/src/window.rs#L1911).
-- **S10** — Native text-frame gap2; prototype gap includes elastic short-text space. [window.rs:1888–1889,1911](../crates/combe/src/window.rs#L1888).
-- **S11** — Heading height30 is a size; this2pt is an actual gap. [window.rs:1933–1935](../crates/combe/src/window.rs#L1933).
-- **S12** — Visible row34, stride36. The same relation applies to all adjacent rows. [window.rs:1933–1935,1958](../crates/combe/src/window.rs#L1933).
-- **S13** — Shares S03. Selected background and row hit target use this same outer box. [window.rs:1933–1935](../crates/combe/src/window.rs#L1933).
-- **S14** — 13pt font inside18pt native line frame. Short prototype text leaves flexible trailing space. [window.rs:1940–1943](../crates/combe/src/window.rs#L1940), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
+- **S01** — The native viewport fills the area under the36pt header. HTML catalog has content height with a max-height; its empty pinned remainder differs. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
+- **S02** — This is the catalog top padding, not an extra header-to-catalog gap. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S03** — The12pt bottom is minimum natural content padding. Additional pinned empty space is flexible. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S04** — Browser measurement confirms16.5 after margin collapse. The same group separator pattern repeats. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S05** — Shares S03; do not add both values when computing the same edge. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S06** — Native30pt heading with18pt label frame. Prototype text span is intrinsic-width. [sidebar_panel.rs:rebuild; chrome_view.rs:194–202](../crates/combe/src/sidebar_panel.rs), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
+- **S07** — 14 ×14 icon box; native and prototype agree. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S08** — This8pt gap is distinct from the12pt leading inset. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S09** — Native10 ×10 arrow sits4pt farther left than the prototype. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S10** — Native text-frame gap2; prototype gap includes elastic short-text space. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S11** — Heading height30 is a size; this2pt is an actual gap. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S12** — Visible row34, stride36. The same relation applies to all adjacent rows. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S13** — Shares S03. Selected background and row hit target use this same outer box. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S14** — 13pt font inside18pt native line frame. Short prototype text leaves flexible trailing space. [sidebar_panel.rs:rebuild; chrome_view.rs:194–202](../crates/combe/src/sidebar_panel.rs), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).
 - **S15** — 6 ×6 dot; 14pt vertical inset is derived from34pt row height. [chrome_view.rs:70–78](../crates/combe/src/chrome_view.rs#L70).
-- **S16** — Reducing the gap changes text indentation. Dot position remains32. [chrome_view.rs:70–78](../crates/combe/src/chrome_view.rs#L70), [window.rs:1940–1943](../crates/combe/src/window.rs#L1940).
+- **S16** — Reducing the gap changes text indentation. Dot position remains32. [chrome_view.rs:70–78](../crates/combe/src/chrome_view.rs#L70), [chrome_view.rs:70–78; sidebar_panel.rs:rebuild](../crates/combe/src/chrome_view.rs).
 - **S17** — Native check/shortcut share18 ×18. Prototype check13 ×13 with right12 differs. [chrome_view.rs:88–99](../crates/combe/src/chrome_view.rs#L88).
 - **S18** — Prototype shortcut18 ×18 has right10. Inspect its reserved box even when the hint is not displayed. [chrome_view.rs:88–99](../crates/combe/src/chrome_view.rs#L88).
-- **S19** — Fixed native full-label-frame gap; prototype short-label free space varies. [chrome_view.rs:88–99](../crates/combe/src/chrome_view.rs#L88), [window.rs:1940–1943](../crates/combe/src/window.rs#L1940).
-- **S20** — A pinned sidebar fills the window; its catalog does not have to fill the height. Assumes unscrolled content without overflow; scrolling can make this distance negative. [window.rs:2284–2288,1958](../crates/combe/src/window.rs#L2284).
-- **S21** — Hairlines and focus rings are drawing geometry, not content padding. [window.rs:2028–2030](../crates/combe/src/window.rs#L2028), [chrome_view.rs:58–64](../crates/combe/src/chrome_view.rs#L58).
-- **S22** — Native hit strip spans the whole root split height, subject to covering views. Negative insets extend beyond glass. Prototype excludes44px at top and16px at bottom. [window.rs:2121–2134](../crates/combe/src/window.rs#L2121).
+- **S19** — Fixed native full-label-frame gap; prototype short-label free space varies. [chrome_view.rs:88–99](../crates/combe/src/chrome_view.rs#L88), [chrome_view.rs:88–99; sidebar_panel.rs:rebuild](../crates/combe/src/chrome_view.rs).
+- **S20** — A pinned sidebar fills the window; its catalog does not have to fill the height. Assumes unscrolled content without overflow; scrolling can make this distance negative. [sidebar_panel.rs:layout,rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S21** — Hairlines and focus rings are drawing geometry, not content padding. [sidebar_panel.rs:SidebarView::draw_rect; chrome_view.rs:58–64](../crates/combe/src/sidebar_panel.rs), [chrome_view.rs:58–64](../crates/combe/src/chrome_view.rs#L58).
+- **S22** — Native hit strip spans the whole root split height, subject to covering views. Negative insets extend beyond glass. Prototype excludes44px at top and16px at bottom. [window.rs:SplitDelegate::divider_grab](../crates/combe/src/window.rs).
 
 ### Terminal and splits
 
@@ -215,18 +215,18 @@ Definition notes and source:
 Definition notes and source:
 
 - **E01** — Applies to every pane, including split and zoomed surfaces. Ghostty balance remains enabled. [habits.rs:35–37](../crates/combe/src/habits.rs#L35).
-- **E02** — Ends at the surface edge. E03 additionally includes the terminal inner padding. [window.rs:1748–1753,2344–2352](../crates/combe/src/window.rs#L1748).
-- **E03** — Includes the12pt gap below the tab plus8pt surface padding. Glyph ink sits inside a line box. [window.rs:1748–1753](../crates/combe/src/window.rs#L1748), [habits.rs:35–37](../crates/combe/src/habits.rs#L35).
-- **E04** — 12pt outer gap plus8pt inner padding. In transient mode the glass overlays the terminal. [window.rs:2344–2352](../crates/combe/src/window.rs#L2344), [habits.rs:35–37](../crates/combe/src/habits.rs#L35).
-- **E05** — 12pt outer gap plus the final pane's8pt inner padding. [window.rs:2344–2352](../crates/combe/src/window.rs#L2344), [habits.rs:35–37](../crates/combe/src/habits.rs#L35).
-- **E06** — 40pt status allocation plus8pt padding. Without quota, native still reserves12pt outside the surface. Measures the bottommost visible pane in either split direction. [window.rs:2344–2352](../crates/combe/src/window.rs#L2344), [habits.rs:35–37](../crates/combe/src/habits.rs#L35).
+- **E02** — Ends at the surface edge. E03 additionally includes the terminal inner padding. [tab_bar.rs:TabBar::update; window.rs:layout_chrome](../crates/combe/src/tab_bar.rs).
+- **E03** — Includes the12pt gap below the tab plus8pt surface padding. Glyph ink sits inside a line box. [tab_bar.rs:TabBar::update; habits.rs:35–37](../crates/combe/src/tab_bar.rs), [habits.rs:35–37](../crates/combe/src/habits.rs#L35).
+- **E04** — 12pt outer gap plus8pt inner padding. In transient mode the glass overlays the terminal. [window.rs:layout_chrome; habits.rs:35–37](../crates/combe/src/window.rs), [habits.rs:35–37](../crates/combe/src/habits.rs#L35).
+- **E05** — 12pt outer gap plus the final pane's8pt inner padding. [window.rs:layout_chrome; habits.rs:35–37](../crates/combe/src/window.rs), [habits.rs:35–37](../crates/combe/src/habits.rs#L35).
+- **E06** — 40pt status allocation plus8pt padding. Without quota, native still reserves12pt outside the surface. Measures the bottommost visible pane in either split direction. [window.rs:layout_chrome; habits.rs:35–37](../crates/combe/src/window.rs), [habits.rs:35–37](../crates/combe/src/habits.rs#L35).
 - **E07** — 8pt is the explicit base, not a promise that each visible edge is exactly8pt. Prototype does not simulate grid balancing. [vendor/ghostty/src/renderer/size.zig:49–83,279–301](../vendor/ghostty/src/renderer/size.zig#L49).
 - **E08** — Prototype13px/16px differs from the native grid. Padding recommendations do not change font or line height. [habits.rs:6–9](../crates/combe/src/habits.rs#L6), [vendor/ghostty/src/font/metrics.zig:265–283](../vendor/ghostty/src/font/metrics.zig#L265).
-- **E09** — At1200 ×780, sidebar300 and quota:864 ×680. The prototype is20px shorter because its window is760px. W/H refer to the root content view, excluding system decoration. [window.rs:2344–2355](../crates/combe/src/window.rs#L2344).
+- **E09** — At1200 ×780, sidebar300 and quota:864 ×680. The prototype is20px shorter because its window is760px. W/H refer to the root content view, excluding system decoration. [window.rs:layout_chrome](../crates/combe/src/window.rs).
 - **P01** — Surface padding E01 remains separate. Split, zoom and survivor promotion do not add another outer wrapper. [split.rs:32,56,74,114](../crates/combe/src/split.rs#L32).
 - **P02** — Prototype divider is a0.5px inside border. Native divider thickness is system-owned; no fixed thickness is declared. [split.rs:77](../crates/combe/src/split.rs#L77).
 - **P03** — Each pane contributes its own8pt padding. The equivalent vertical split follows the same rule. [habits.rs:35–37](../crates/combe/src/habits.rs#L35), [split.rs:77](../crates/combe/src/split.rs#L77).
-- **P04** — In the current No quota snapshot scene, the prototype leaves0 outside the surface. This is a recorded mismatch, not an applied change. [window.rs:2347](../crates/combe/src/window.rs#L2347).
+- **P04** — In the current No quota snapshot scene, the prototype leaves0 outside the surface. This is a recorded mismatch, not an applied change. [window.rs:layout_chrome](../crates/combe/src/window.rs).
 
 ### Quota
 
@@ -290,7 +290,7 @@ Definition notes and source:
 | F08 | Next target → Close target | 0 | 8 | Keep 0 |
 | F09 | Previous target → bar top / bottom | T 0 / B 0 | T 10.5 / B 10.5 | Keep T 0 / B 0 |
 | F10 | Close target → bar right edge | R 12 | R 8 | Keep R 12 |
-| F11 | Find action glyph line frame | T10 R0 B10 L6, line18, font14 | See note; different control structure | Keep T10 R0 B10 L6, line18, font14 |
+| F11 | Find action glyph line frame | Centered12pt SF Symbol | See note; different control structure | Keep Centered12pt SF Symbol |
 | F12 | Search icon / editable text / clear button | System-owned; no fixed internal pt values | See note; different control structure | Keep System-owned; no fixed internal pt values |
 
 Definition notes and source:
@@ -318,9 +318,9 @@ Definition notes and source:
 
 Definition notes and source:
 
-- **A01** — Prototype dialog padding24, action gap8, action top margin20 are illustrative browser values. [window.rs:1017–1028](../crates/combe/src/window.rs#L1017).
-- **A02** — The prototype toast is only a placeholder; it is not the native picker layout. [window.rs:dispatch(Click::AddRepo)](../crates/combe/src/window.rs).
-- **A03** — Native menus, tooltips and system control glyphs do not have Combe spacing constants. [window.rs:install_menu,icon_button](../crates/combe/src/window.rs).
+- **A01** — Prototype dialog padding24, action gap8, action top margin20 are illustrative browser values. [window.rs:confirm](../crates/combe/src/window.rs).
+- **A02** — The prototype toast is only a placeholder; it is not the native picker layout. [sidebar_panel.rs:add_repo](../crates/combe/src/sidebar_panel.rs).
+- **A03** — Native menus, tooltips and system control glyphs do not have Combe spacing constants. [menu.rs:install; chrome_view.rs:icon_button](../crates/combe/src/menu.rs).
 
 ## Verification
 

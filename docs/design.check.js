@@ -56,7 +56,7 @@ export default async function checkCatalog() {
   assert(tools.right < tab.left, 'Header controls stay clear of terminal tabs');
   pointer(catalog, 'pointerenter');
   document.querySelector('[data-id="home"]').click();
-  assert(isOpen() && document.querySelector('#current').textContent === '~', 'Home chip is a single tilde');
+  assert(isOpen() && document.querySelector('#current').textContent === 'home', 'Home chip is home');
   document.querySelector('[data-id="confer-old"]').click();
   assert(isOpen() && document.querySelector('#current').textContent === 'confer / old-man', 'Selecting switches workspace and keeps the menu open');
   pointer(trigger, 'pointerenter');
@@ -226,7 +226,7 @@ export async function checkShortcuts() {
   assert(hints().every(hint => getComputedStyle(hint).opacity === '0') && getComputedStyle(list.querySelector('.row.on .check')).opacity !== '0', 'Releasing Command restores the selection check');
   assert(labels.every((label, index) => Math.abs(label.getBoundingClientRect().x - positions[index]) < .5), 'Showing and hiding hints does not shift row labels');
   assert(!key('1') && !key('1', { metaKey: true, shiftKey: true }) && !key('1', { metaKey: true, altKey: true }) && !key('1', { metaKey: true, ctrlKey: true }) && active() === 'confer-old', 'Plain digits and other modifier chords do not switch workspaces');
-  const group = list.querySelectorAll('.group-head')[2];
+  const group = [...list.querySelectorAll('.group-head')].find(head => head.textContent.includes('confer'));
   group.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
   group.click();
   assert(hints().map(hint => hint.textContent).join(',') === '1,2,3' && key('3', { metaKey: true }) && active() === 'combe-main', 'Collapsing a group renumbers visible rows and shortcut targets together');

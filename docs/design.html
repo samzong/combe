@@ -361,7 +361,7 @@
   </main>
   <script>
     const repos = [
-      { name: "~", open: true, rows: [{ id: "home", label: "~", path: "~", live: false }] },
+      { name: "home", heading: false, open: true, rows: [{ id: "home", label: "home", path: "~", live: false }] },
       { name: "gmc", open: true, rows: [{ id: "gmc-main", label: "main", path: "~/projects/gmc", live: true }] },
       { name: "confer", open: true, rows: [
         { id: "confer-main", label: "main", path: "~/projects/confer", live: false },
@@ -411,19 +411,22 @@
       for (const repo of repos) {
         const group = document.createElement("div");
         group.className = "group" + (repo.open ? "" : " shut");
-        const head = document.createElement("button");
-        head.className = "group-head";
-        head.type = "button";
-        head.setAttribute("aria-expanded", String(repo.open));
-        head.innerHTML = `${folder}<span>${repo.name}</span>${chevron}`;
         const rows = document.createElement("div");
         rows.className = "rows";
-        head.addEventListener("click", () => {
-          repo.open = !repo.open;
-          group.classList.toggle("shut", !repo.open);
+        if (repo.heading !== false) {
+          const head = document.createElement("button");
+          head.className = "group-head";
+          head.type = "button";
           head.setAttribute("aria-expanded", String(repo.open));
-          updateShortcuts();
-        });
+          head.innerHTML = `${folder}<span>${repo.name}</span>${chevron}`;
+          head.addEventListener("click", () => {
+            repo.open = !repo.open;
+            group.classList.toggle("shut", !repo.open);
+            head.setAttribute("aria-expanded", String(repo.open));
+            updateShortcuts();
+          });
+          group.append(head);
+        }
         for (const row of repo.rows) {
           const button = document.createElement("button");
           button.type = "button";
@@ -434,7 +437,7 @@
           button.addEventListener("click", () => select(row.id));
           rows.append(button);
         }
-        group.append(head, rows);
+        group.append(rows);
         list.append(group);
       }
       updateShortcuts();
@@ -459,7 +462,7 @@
       selected = id;
       const { repo, row } = rowOf(id);
       row.live = true;
-      current.textContent = repo.name === "~" && row.label === "~" ? "~" : `${repo.name} / ${row.label}`;
+      current.textContent = repo.heading === false ? row.label : `${repo.name} / ${row.label}`;
       for (const button of list.querySelectorAll(".row")) {
         const item = rowOf(button.dataset.id).row;
         button.classList.toggle("on", item.id === selected);

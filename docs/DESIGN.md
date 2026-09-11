@@ -34,7 +34,7 @@ The user curates the repo list by hand. Combe reads `git worktree list --porcela
 
 A worktree is a session, not a shortcut. Each row owns its own set of tabs; selecting a row swaps in that worktree's tabs and returns to the one it was left on. New tabs belong to the selected worktree. Closing the last tab of a workspace ends that session. If another workspace still has tabs, the window switches to it; if none remain, the window closes.
 
-The catalog always includes a Home workspace at `$HOME` unless a row already owns that path. Home is a folder workspace, not a registered repo: it is not written to `state.json`, and `$HOME` is not scanned for git worktrees until the user adds it. Its label is `~`. The workspace chip shows `~` while Home is selected. Startup opens the first catalog row, so a new window lands on Home.
+The catalog always includes a Home workspace at `$HOME` unless a row already owns that path. Home is a folder workspace, not a registered repo: it is not written to `state.json`, and `$HOME` is not scanned for git worktrees until the user adds it. Its label is `home`. It is one workspace row, with no repo heading and no disclosure. The workspace chip shows `home` while Home is selected. Startup opens the first catalog row, so a new window lands on Home.
 
 Repos are never discovered by walking the disk.
 
@@ -92,7 +92,7 @@ The 12 pt gap also separates traffic lights from the chip, the chip from the fir
 
 Glass is confined to navigation and small control surfaces. Use native AppKit material that follows effective appearance and accessibility settings; do not change Ghostty's opacity or layer ownership to simulate glass. Preserve the deployment floor. Reduce Transparency makes materials opaque; Reduce Motion removes travel while keeping hover-intent delays.
 
-The outer content view clips the shared background to the window corners while retaining native titled-window controls. The sidebar's shadow sits outside its clipped material. Its glass and catalog viewport animate together for 380 ms with the prototype's easing curve, keeping the first heading stationary. Scrollbars are enabled only when content exceeds the final viewport. Catalog padding is 8 pt at the top, 6 pt horizontally and 12 pt at the bottom; adjacent repo groups have a 16.5 pt gap including a subtle separator.
+The outer content view clips the shared background to the window corners while retaining native titled-window controls. The sidebar's shadow sits outside its clipped material. Its glass and catalog viewport animate together for 380 ms with the prototype's easing curve, keeping the first catalog row stationary. Scrollbars are enabled only when content exceeds the final viewport. Catalog padding is 8 pt at the top, 6 pt horizontally and 12 pt at the bottom; adjacent repo groups have a 16.5 pt gap including a subtle separator.
 
 ### Icons
 
@@ -108,7 +108,7 @@ The app starts with the workspace chip. Hovering it for 150 ms expands the catal
 
 Selecting a workspace keeps the catalog open and returns that workspace's existing tabs and focused pane. After entering the list, returning to the chip for 150 ms folds it; a quick crossing does not. Leaving the transient panel schedules closure after 250 ms, and re-entering cancels it. Keyboard focus inside the catalog protects it from pointer-exit closure. Escape, an outside click, or moving keyboard focus outside dismisses the transient panel. Pinned panels survive those dismissals. Pinning reserves space for terminal content; unpinning returns to the chip. Cmd-B toggles pinned and chip states.
 
-Repo headings collapse their rows without changing the selected workspace or closing terminals. Collapse state and session marks last only for the app run. A green dot means that workspace still owns a tab; an inactive dot means it does not. The workspace chip has no session dot.
+Repo headings collapse their rows without changing the selected workspace or closing terminals. Collapse state and session marks last only for the app run. A green dot means that workspace still owns a tab; an inactive dot means it does not. The workspace chip has no session dot. Home is not a repo group, so it has no heading to collapse.
 
 The row under the pointer uses the same neutral fill as the selected workspace, with appearance-adaptive text; selection is independent. Keep each control's tracking area alive while AppKit updates its visible rectangle, so geometry changes preserve paired enter and exit events.
 
@@ -224,7 +224,7 @@ A **repo** is a path the user added. A **worktree** is one record from `git work
 3. If the registered path is not a directory, skip it and keep the rest. Leave it in `state.json`.
 4. If `git rev-parse --git-dir` fails, emit one folder row
 5. Skip worktrees Git reports as `prunable`; their directory is gone
-6. If `$HOME` is a directory and no row already owns that path, prepend a folder workspace labelled `~`. Do not write it to `state.json`. Do not scan `$HOME` for git worktrees unless the user registered it.
+6. If `$HOME` is a directory and no row already owns that path, prepend a folder workspace labelled `home` as a single catalog row. Do not write it to `state.json`. Do not scan `$HOME` for git worktrees unless the user registered it.
 
 Identity is the resolved worktree path. `list`, `add`, `remove`, and `cleanup` still operate only on registered repos.
 
@@ -270,7 +270,7 @@ Preserve these capabilities when changing chrome. Prototype states demonstrate a
 | Workspace sessions | Switch away and back; tab, split, focused pane, title, shell PID and output survive; repo collapse does not close sessions |
 | Tabs | Create, select, close and navigate by key; keep workspace ownership; closing the last workspace tab selects another live workspace, or closes the window when none remain |
 | Splits and zoom | Split right and down, nest and resize, move focus, zoom and restore, close a leaf and promote its sibling; preserve PTYs and focus |
-| Catalog | Add multiple repos with the native directory picker; include folder workspaces; Home is present without adding a repo; adding `$HOME` as a repo replaces the built-in row; refresh on activation without blocking input |
+| Catalog | Add multiple repos with the native directory picker; include folder workspaces; Home is a single `home` row without adding a repo; adding `$HOME` as a repo replaces the built-in row; refresh on activation without blocking input |
 | Hover panels | Check entry, return-to-chip and exit delays; fast pointer sweeps, drag, outside click, Escape, blur, keyboard focus, pinning and resizing |
 | Workspace shortcuts | Command hints, visible-row numbering after repo collapse, Cmd-1 through Cmd-9, and closed-catalog tab shortcuts; no Command input reaches the PTY |
 | Quota | Both providers, each provider alone, missing snapshots, 5h/7d and Fable rows, warning colors and expired reset time; no network or credential access |

@@ -9,7 +9,7 @@ Use these words in code, commits, and docs. If a new domain word sticks, add it 
 | Worktree | One row from `git worktree list --porcelain` for a registered git repo. |
 | Folder workspace | A registered path that is not a git checkout. Shown as a single row. |
 | Workspace | The selected worktree, folder workspace, or Home workspace. The shell cwd of a tab. |
-| Home workspace | Built-in folder workspace at `$HOME`. Not a registered repo. Forced folder even if `$HOME` is a git checkout. Injected first in the sidebar catalog unless a catalog row already owns that path. Label `~`. |
+| Home workspace | Built-in folder workspace at `$HOME`. Not a registered repo. Forced folder even if `$HOME` is a git checkout. Injected first in the sidebar catalog unless a catalog row already owns that path. Label `home`. One workspace row, no repo heading. |
 | Catalog | The merge of `state.json` + git porcelain + folder fallback + the Home workspace when `$HOME` is not already a row. Missing registered paths are skipped. |
 | Entry | An external open request: a file URL, an `ssh:` or `x-man-page:` URL, or the Finder service. `crates/combe/src/entry.rs` resolves it into a workspace to open or a shell line the user confirms. |
 | Sidebar | The catalog shown as a workspace chip, transient panel, or pinned sidebar. ⌘B toggles pinned and chip states. |

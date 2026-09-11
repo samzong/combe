@@ -440,10 +440,10 @@ pub(crate) fn layout(size: NSSize, inset: f64, animated: bool) -> f64 {
 }
 
 fn chip_title(repo: &sidebar::Repo, row: &sidebar::Row) -> String {
-    if repo.name == combe_catalog::HOME_LABEL && row.label == combe_catalog::HOME_LABEL {
-        combe_catalog::HOME_LABEL.to_string()
-    } else {
+    if repo.has_heading {
         format!("{} / {}", repo.name, row.label)
+    } else {
+        row.label.clone()
     }
 }
 
@@ -702,7 +702,7 @@ pub(crate) fn handle_event(event: &NSEvent) -> bool {
             state
                 .repos
                 .iter()
-                .filter(|repo| !state.collapsed_repos.contains(&repo.path))
+                .filter(|repo| !repo.has_heading || !state.collapsed_repos.contains(&repo.path))
                 .flat_map(|repo| &repo.rows)
                 .nth(index - 1)
                 .map(|row| (row.path.to_string_lossy().into_owned(), row.label.clone()))
@@ -878,8 +878,12 @@ pub(crate) fn rebuild() {
         let width = state.sidebar_width.get();
         let mut height = 20.0 + state.repos.len().saturating_sub(1) as f64 * 16.5;
         for repo in &state.repos {
-            height += HEADER_HEIGHT;
-            if !state.collapsed_repos.contains(&repo.path) {
+            if repo.has_heading {
+                height += HEADER_HEIGHT;
+                if !state.collapsed_repos.contains(&repo.path) {
+                    height += repo.rows.len() as f64 * ROW_HEIGHT;
+                }
+            } else {
                 height += repo.rows.len() as f64 * ROW_HEIGHT;
             }
         }
@@ -898,57 +902,59 @@ pub(crate) fn rebuild() {
             if index > 0 {
                 y += 16.5;
             }
-            let collapsed = state.collapsed_repos.contains(&repo.path);
+            let collapsed = repo.has_heading && state.collapsed_repos.contains(&repo.path);
 
-            let path = repo.path.clone();
-            let header = ClickView::new(
-                mtm,
-                NSRect::new(
-                    NSPoint::new(6.0, y),
-                    NSSize::new(width - 12.0, HEADER_HEIGHT),
-                ),
-                &repo.name,
-                34.0,
-                28.0,
-                move || toggle_repo(path.clone()),
-            );
-            header.dim_when_idle();
-            header.set_font(&NSFont::systemFontOfSize_weight(
-                habits::CHROME_FONT_SIZE,
-                unsafe { objc2_app_kit::NSFontWeightMedium },
-            ));
-            chrome_view::symbol(
-                mtm,
-                &header,
-                "folder",
-                NSRect::new(NSPoint::new(12.0, 8.0), NSSize::new(14.0, 14.0)),
-            );
-            chrome_view::symbol(
-                mtm,
-                &header,
+            if repo.has_heading {
+                let path = repo.path.clone();
+                let header = ClickView::new(
+                    mtm,
+                    NSRect::new(
+                        NSPoint::new(6.0, y),
+                        NSSize::new(width - 12.0, HEADER_HEIGHT),
+                    ),
+                    &repo.name,
+                    34.0,
+                    28.0,
+                    move || toggle_repo(path.clone()),
+                );
+                header.dim_when_idle();
+                header.set_font(&NSFont::systemFontOfSize_weight(
+                    habits::CHROME_FONT_SIZE,
+                    unsafe { objc2_app_kit::NSFontWeightMedium },
+                ));
+                chrome_view::symbol(
+                    mtm,
+                    &header,
+                    "folder",
+                    NSRect::new(NSPoint::new(12.0, 8.0), NSSize::new(14.0, 14.0)),
+                );
+                chrome_view::symbol(
+                    mtm,
+                    &header,
+                    if collapsed {
+                        "chevron.right"
+                    } else {
+                        "chevron.down"
+                    },
+                    NSRect::new(NSPoint::new(width - 38.0, 10.0), NSSize::new(10.0, 10.0)),
+                );
+                if let Some(arrow) = header.subviews().lastObject() {
+                    arrow.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
+                }
+                header.setAccessibilityElement(true);
+                header.setAccessibilityRole(Some(&NSString::from_str("AXButton")));
+                header.setAccessibilityLabel(Some(&NSString::from_str(&repo.name)));
+                header.setIdentifier(Some(&NSString::from_str(&format!(
+                    "repo:{}",
+                    repo.path.display()
+                ))));
+                header.setAccessibilityExpanded(!collapsed);
+                header.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
+                document.addSubview(&header);
+                y += HEADER_HEIGHT;
                 if collapsed {
-                    "chevron.right"
-                } else {
-                    "chevron.down"
-                },
-                NSRect::new(NSPoint::new(width - 38.0, 10.0), NSSize::new(10.0, 10.0)),
-            );
-            if let Some(arrow) = header.subviews().lastObject() {
-                arrow.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
-            }
-            header.setAccessibilityElement(true);
-            header.setAccessibilityRole(Some(&NSString::from_str("AXButton")));
-            header.setAccessibilityLabel(Some(&NSString::from_str(&repo.name)));
-            header.setIdentifier(Some(&NSString::from_str(&format!(
-                "repo:{}",
-                repo.path.display()
-            ))));
-            header.setAccessibilityExpanded(!collapsed);
-            header.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
-            document.addSubview(&header);
-            y += HEADER_HEIGHT;
-            if collapsed {
-                continue;
+                    continue;
+                }
             }
 
             for row in &repo.rows {
@@ -1025,9 +1031,13 @@ define_class!(
             NSColor::labelColor().colorWithAlphaComponent(0.06).setFill();
             for header in self.subviews().into_iter().filter(|view| {
                 view.identifier().is_some_and(|identifier| identifier.to_string().starts_with("repo:"))
-            }).skip(1) {
+            }) {
+                let y = header.frame().origin.y;
+                if y <= 8.0 {
+                    continue;
+                }
                 NSBezierPath::fillRect(NSRect::new(
-                    NSPoint::new(6.0, header.frame().origin.y - 8.5),
+                    NSPoint::new(6.0, y - 8.5),
                     NSSize::new((self.bounds().size.width - 12.0).max(0.0), 0.5),
                 ));
             }

@@ -1,7 +1,7 @@
 use crate::{Workspace, WorktreeKind};
 use std::path::{Path, PathBuf};
 
-pub const HOME_LABEL: &str = "~";
+pub const HOME_LABEL: &str = "home";
 
 pub fn home_dir() -> Option<PathBuf> {
     let home = dirs::home_dir()?;
@@ -74,7 +74,7 @@ mod tests {
     }
 
     #[test]
-    fn folder_at_home_uses_tilde_label() {
+    fn folder_at_home_uses_home_label() {
         let Some(home) = home_dir() else {
             return;
         };

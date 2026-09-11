@@ -14,6 +14,7 @@ pub struct Repo {
     pub path: PathBuf,
     pub name: String,
     pub rows: Vec<Row>,
+    pub has_heading: bool,
 }
 
 pub fn repos() -> Vec<Repo> {
@@ -49,6 +50,7 @@ pub fn repos() -> Vec<Repo> {
             path: repo.path.clone(),
             name: repo_name(&repo.path),
             rows,
+            has_heading: true,
         });
     }
     with_home(repos, &found.rows)
@@ -79,6 +81,7 @@ fn synthetic_home(home: PathBuf) -> Repo {
             label: HOME_LABEL.to_string(),
             path: home,
         }],
+        has_heading: false,
     }
 }
 

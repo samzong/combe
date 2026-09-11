@@ -147,7 +147,7 @@ Definition notes and source:
 | ID | Relationship | Native · pt | Prototype snapshot · px | Proposed · pt |
 | --- | --- | --- | --- | --- |
 | S01 | Catalog viewport → glass | T 36 / R 0 / B 0 pinned / L 0 | T 36 / R 0 / B 411 / L 0 | Keep |
-| S02 | Header → first repo heading | 8 | 8 | 8 |
+| S02 | Header → first catalog row | 8 | 8 | 8 |
 | S03 | Catalog content padding | T 8 / R 6 / B 12 / L 6 | T 8 / R 6 / B 12 / L 6 | Keep T 8 / R 6 / B 12 / L 6 |
 | S04 | Last workspace row → next repo heading | 16.5 = 8 + 0.5 + 8 | 16.5 | Keep 8 / hairline / 8 |
 | S05 | Repo heading → catalog sides | R 6 / L 6 | R 6 / L 6 | Keep R 6 / L 6 |
@@ -172,7 +172,7 @@ Definition notes and source:
 Definition notes and source:
 
 - **S01** — The native viewport fills the area under the36pt header. HTML catalog has content height with a max-height; its empty pinned remainder differs. [sidebar_panel.rs:layout](../crates/combe/src/sidebar_panel.rs).
-- **S02** — This is the catalog top padding, not an extra header-to-catalog gap. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S02** — This is the catalog top padding, not an extra header-to-catalog gap. Home is the first catalog row and has no repo heading. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
 - **S03** — The12pt bottom is minimum natural content padding. Additional pinned empty space is flexible. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
 - **S04** — Browser measurement confirms16.5 after margin collapse. The same group separator pattern repeats. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
 - **S05** — Shares S03; do not add both values when computing the same edge. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
@@ -181,7 +181,7 @@ Definition notes and source:
 - **S08** — This8pt gap is distinct from the12pt leading inset. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
 - **S09** — Native10 ×10 arrow sits4pt farther left than the prototype. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
 - **S10** — Native text-frame gap2; prototype gap includes elastic short-text space. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
-- **S11** — Heading height30 is a size; this2pt is an actual gap. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
+- **S11** — Heading height30 is a size; this2pt is an actual gap. Measured on the first repo group; Home has no heading. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
 - **S12** — Visible row34, stride36. The same relation applies to all adjacent rows. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
 - **S13** — Shares S03. Selected background and row hit target use this same outer box. [sidebar_panel.rs:rebuild](../crates/combe/src/sidebar_panel.rs).
 - **S14** — 13pt font inside18pt native line frame. Short prototype text leaves flexible trailing space. [sidebar_panel.rs:rebuild; chrome_view.rs:194–202](../crates/combe/src/sidebar_panel.rs), [chrome_view.rs:194–202](../crates/combe/src/chrome_view.rs#L194).

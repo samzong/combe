@@ -23,8 +23,8 @@ if [[ ! -f "${BIN_PATH}" ]]; then
   exit 1
 fi
 
-RESOURCES_DIR=$(ls -td target/release/build/ghostty-sys-*/out/ghostty/share/ghostty 2>/dev/null | head -1)
-if [[ -z "${RESOURCES_DIR}" || ! -d "${RESOURCES_DIR}" ]]; then
+SHARE_DIR=$(ls -td target/release/build/ghostty-sys-*/out/ghostty/share 2>/dev/null | head -1)
+if [[ -z "${SHARE_DIR}" || ! -d "${SHARE_DIR}/ghostty" || ! -d "${SHARE_DIR}/terminfo" ]]; then
   echo "error: ghostty resources not found under target/release/build" >&2
   exit 1
 fi
@@ -44,7 +44,12 @@ if [[ -n "${VERSION}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" "${APP_DIR}/Contents/Info.plist"
 fi
 cp "${ICON_PATH}" "${APP_DIR}/Contents/Resources/app-icon.icns"
-cp -R "${RESOURCES_DIR}" "${APP_DIR}/Contents/Resources/ghostty"
+cp -R "${SHARE_DIR}/ghostty" "${APP_DIR}/Contents/Resources/ghostty"
+cp -R "${SHARE_DIR}/terminfo" "${APP_DIR}/Contents/Resources/terminfo"
+if [[ ! -f "${APP_DIR}/Contents/Resources/terminfo/78/xterm-ghostty" ]]; then
+  echo "error: xterm-ghostty terminfo missing from ${APP_DIR}" >&2
+  exit 1
+fi
 
 codesign --force --deep --sign - --identifier "${BUNDLE_ID}" "${APP_DIR}"
 

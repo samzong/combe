@@ -76,6 +76,7 @@ pub const PADDING_BALANCE: bool = true;
 
 pub const CURSOR_STYLE: &str = "block";
 pub const CURSOR_BLINK: bool = true;
+pub const SHELL_INTEGRATION_FEATURES: &str = "no-cursor";
 
 pub const OPTION_AS_ALT: bool = true;
 pub const COPY_ON_SELECT: bool = true;
@@ -136,6 +137,10 @@ pub fn ghostty_config(dark: bool) -> String {
     let _ = writeln!(config, "window-padding-balance = {PADDING_BALANCE}");
     let _ = writeln!(config, "cursor-style = {CURSOR_STYLE}");
     let _ = writeln!(config, "cursor-style-blink = {CURSOR_BLINK}");
+    let _ = writeln!(
+        config,
+        "shell-integration-features = {SHELL_INTEGRATION_FEATURES}"
+    );
     let _ = writeln!(config, "macos-option-as-alt = {OPTION_AS_ALT}");
     let _ = writeln!(config, "copy-on-select = {COPY_ON_SELECT}");
     let _ = writeln!(config, "scrollback-limit-lines = {SCROLLBACK_LINES}");

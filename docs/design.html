@@ -203,7 +203,7 @@
     .pane { padding: 8px; border-left: .5px solid var(--line); color: var(--text-soft); font: 13px/16px "Fira Code", "Noto Sans Mono CJK SC", Menlo, monospace; white-space: pre-wrap; overflow: hidden; }
     .pane:first-child { border-left: 0; }
     .pane [data-prompt] { color: var(--prompt); }
-    .caret { display: inline-block; width: 7px; height: 14px; background: var(--cursor); transform: translateY(3px); }
+    .caret { display: inline-block; width: 8px; height: 16px; background: var(--cursor); vertical-align: -2px; }
     .status-line { position: relative; margin: 0 var(--inset) var(--inset); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; transition: margin-left 380ms var(--ease); }
     .quota { position: absolute; left: 0; bottom: 0; width: 176px; height: 28px; border-radius: 14px; overflow: hidden; background: var(--quota-glass); box-shadow: inset 0 0 0 .5px #ffffff12; backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter); transform-origin: bottom left; transition: width 340ms var(--ease), height 340ms var(--ease), box-shadow 340ms var(--ease), background 260ms ease; }
     .quota.open { width: 304px; height: calc(28px + var(--quota-details-height, 222px)); background: var(--quota-open); box-shadow: inset 0 0 0 .75px #ffffff20, inset 0 1px .5px #ffffff18, 0 -6px 32px #00000030, 0 6px 18px #00000020; }

@@ -122,7 +122,7 @@ The default is Follow System. The native View menu also offers Light and Dark; a
 | --- | --- | --- |
 | Window and terminal background | `#161719` | `#f5f5f7` |
 | Primary terminal text | `#e6edf3` | `#24292f` |
-| Cursor | `#2f81f7` | `#0969da` |
+| Cursor | Block `#2f81f7` | Block `#0969da` |
 | Terminal selection | `#e6edf3` with dark text | `#b6e3ff` with dark text |
 | Chrome primary text | `#f1f1f2` | `#24292f` |
 | Active tab title | `#e6e7e9` | `#292d33` |
@@ -135,7 +135,7 @@ The default is Follow System. The native View menu also offers Light and Dark; a
 
 Native material supplies blur and accessibility fallback. An appearance-adaptive neutral tint, diagonal highlight and thin white edge provide the prototype's glass hierarchy: chips and active tabs stay light, while expanded catalog and quota panels gain body. Light glass has a brighter edge; dark glass keeps a restrained highlight. Chrome colors resolve through the effective appearance without changing the window or terminal background. Quota warning thresholds and system warning colors remain unchanged.
 
-Chrome uses the system font: 12 pt for chips, tabs, repo headings and quota values; 13 pt for workspace rows and semibold provider headings. Percentages and shortcut hints use tabular digits. Terminal fonts remain Fira Code with the explicit Noto Sans Mono CJK SC codepoint fallback, at the compiled 13 pt default. Appearance changes never change font family, size, weight, spacing, or CJK fallback. Both ANSI palettes remain compiled in `habits.rs`.
+Chrome uses the system font: 12 pt for chips, tabs, repo headings and quota values; 13 pt for workspace rows and semibold provider headings. Percentages and shortcut hints use tabular digits. Terminal fonts remain Fira Code with the explicit Noto Sans Mono CJK SC codepoint fallback, at the compiled 13 pt default. The terminal cursor is a block; Ghostty shell integration keeps title and prompt marking but does not replace that cursor with a bar at the prompt. Appearance changes never change font family, size, weight, spacing, or CJK fallback. Both ANSI palettes remain compiled in `habits.rs`.
 
 Every terminal surface has 8 pt of base padding on all four sides, including split and zoomed panes. Ghostty balances the remaining space around its whole-cell grid. Outer terminal layout stays unchanged. The quota summary starts at the terminal area's left edge, with the same 8 pt base text inset.
 

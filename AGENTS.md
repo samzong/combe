@@ -1,20 +1,12 @@
 # Combe
 
-Read [CONTEXT.md](CONTEXT.md), [DESIGN.md](docs/DESIGN.md), and [the interactive prototype](docs/design.html) before changing behavior. Approved design decisions define the target; live code and runtime establish current behavior. Resolve mismatches explicitly.
+Read [CONTEXT.md](CONTEXT.md), [DESIGN.md](docs/DESIGN.md), and [the interactive prototype](docs/design.html) before changing behavior. Approved design decisions define the target; live code and runtime establish current behavior. Resolve mismatches explicitly. When a request is ambiguous, converge on those sources; do not invent product semantics.
 
-Before changing GUI code, update the affected prototype tokens, components, and interaction states, then the design contract. Implement that contract in AppKit and verify the real window in light and dark appearances. Keep the HTML and design document in the same change; neither may be replaced by a scratch mockup.
+Before changing GUI code, update the affected prototype tokens, components, and interaction states, then the design contract. Implement that contract in AppKit and verify the real window in light and dark appearances. Keep the HTML and design document in the same change; neither may be replaced by a scratch mockup. Use user-provided screenshots to clarify interaction and visual intent.
 
 ## Scope
 
 A curated worktree list plus real Ghostty terminals. Do not add agents, an editor, a browser, an SSH client or any other remote transport, a settings GUI, a theme system, a command palette, or cloud sync.
-
-## Interaction reference
-
-- Orca is the interaction reference for Combe. Its local source is at `/Users/x/git/tmp/orca`.
-- When adding or changing a feature, inspect Combe's existing implementation first, then the corresponding Orca code. Use user-provided screenshots to clarify interaction and visual intent.
-- When a request is ambiguous, use Orca's actual behavior to offer concrete recommendations; do not invent product semantics.
-- Prefer existing Combe code and native AppKit capabilities. Borrow established interactions from Orca instead of designing them from scratch.
-- Orca is a reference, not a requirement to copy its implementation. Preserve Combe's lightweight scope and stack; do not import Orca's Electron architecture, extra features, or complexity.
 
 ## Stack
 
@@ -55,5 +47,7 @@ Chrome changes need a look at the running window, not just a green build.
 ## Style
 
 No comments in code. Name files after the domain object. English in anything that will be committed.
+
+Prefer existing Combe code and native AppKit capabilities. Inspect Combe's existing implementation first when adding or changing a feature.
 
 Before adding or expanding a module, identify its business responsibility, state ownership, and dependency direction. Keep related state and behavior together; separate responsibilities with independent reasons to change. File length triggers inspection, not mandatory splitting. A split must reduce the context needed to understand and modify a feature, without merely moving code, exposing internal state, or adding unnecessary abstractions.

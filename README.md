@@ -23,9 +23,9 @@ brew install samzong/tap/combe
 | Cmd-T | New tab |
 | Cmd-D | Split right |
 | Cmd-Shift-D | Split down |
-| Cmd-Shift-T | Move the focused pane into its own tab |
-| Cmd-Shift-Return | Zoom the focused pane, or restore its layout |
-| Cmd-Shift-Backslash | Toggle the tab overview |
+| Cmd-Shift-T | Move pane to a new tab |
+| Cmd-Shift-Return | Zoom or restore pane |
+| Cmd-Shift-Backslash | Tab overview |
 
 ### Moving around
 
@@ -33,25 +33,25 @@ brew install samzong/tap/combe
 | --- | --- |
 | Cmd-Shift-[ / ] | Previous / next tab |
 | Cmd-[ / ] | Previous / next pane |
-| Cmd-Alt-Arrows | Focus the neighbouring pane in that direction |
-| Cmd-B | Pin the sidebar, or return it to the workspace chip |
-| Cmd-1 … Cmd-9 | With the sidebar open, select visible workspace N. With it closed, go to tab N, where Cmd-9 is the last tab |
+| Cmd-Alt-Arrows | Focus neighbouring pane |
+| Cmd-B | Pin or unpin sidebar |
+| Cmd-1…9 | Sidebar open: workspace N. Closed: tab N (9 = last) |
 
 ### Text
 
 | Key | Action |
 | --- | --- |
-| Cmd-F | Find in the focused pane. Return / Shift-Return step through matches, Escape closes |
+| Cmd-F | Find. Return / Shift-Return cycles; Esc closes |
 | Cmd-G / Cmd-Shift-G | Next / previous match |
-| Cmd-C / Cmd-V | Copy / paste. Releasing a selection also copies it |
+| Cmd-C / Cmd-V | Copy / paste. Selection copies on release |
 
 ### Window
 
 | Key | Action |
 | --- | --- |
-| Ctrl-Cmd-F | Toggle full screen |
+| Ctrl-Cmd-F | Full screen |
 | Cmd-M | Minimize |
-| Cmd-Q | Quit. Asks first when a terminal still runs a foreground process |
+| Cmd-Q | Quit. Confirms if a process is running |
 
 ## Acknowledgments
 

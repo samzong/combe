@@ -72,6 +72,14 @@
     <array>
         <dict>
             <key>CFBundleURLName</key>
+            <string>combe URL</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>combe</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleURLName</key>
             <string>ssh URL</string>
             <key>CFBundleURLSchemes</key>
             <array>

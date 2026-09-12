@@ -12,6 +12,7 @@ Use these words in code, commits, and docs. If a new domain word sticks, add it 
 | Home workspace | Built-in folder workspace at `$HOME`. Not a registered repo. Forced folder even if `$HOME` is a git checkout. Injected first in the sidebar catalog unless a catalog row already owns that path. Label `home`. One workspace row, no repo heading. |
 | Catalog | The merge of `state.json` + git porcelain + folder fallback + the Home workspace when `$HOME` is not already a row. Missing registered paths are skipped. |
 | Entry | An external open request: a file URL, an `ssh:` or `x-man-page:` URL, or the Finder service. `crates/combe/src/entry.rs` resolves it into a workspace to open or a shell line the user confirms. |
+| Hop | `combe <path>` from a shell. Raises Combe and opens a new tab on the catalog row that owns the path. An unregistered path opens a tab of the Home workspace whose shell starts there, and registers nothing. A hop from a shell already inside Combe does nothing. |
 | Sidebar | The catalog shown as a workspace chip, transient panel, or pinned sidebar. ⌘B toggles pinned and chip states. |
 | Session mark | Sidebar dot on a worktree row. Green when that workspace has a tab this app run; dim when it does not. |
 | Tab | One split tree, opened on one workspace. |

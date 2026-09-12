@@ -56,6 +56,19 @@ pub fn repos() -> Vec<Repo> {
     with_home(repos, &found.rows)
 }
 
+pub fn rows() -> Vec<Workspace> {
+    let Some(state) = read_state() else {
+        return Vec::new();
+    };
+    match catalog(&state) {
+        Ok(found) => found.rows,
+        Err(err) => {
+            eprintln!("combe: {err}");
+            Vec::new()
+        }
+    }
+}
+
 fn home_catalog() -> Vec<Repo> {
     match home_dir() {
         Some(home) => vec![synthetic_home(home)],

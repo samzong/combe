@@ -219,15 +219,30 @@ One binary, two entry points, separated by `argv[0]`. Running it as `<something>
 
 Both the GUI and CLI stop state edits when reading the state file fails. Saves atomically replace the file, preserving the previous contents if writing fails.
 
+### Hop
+
+A first argument that is not one of those subcommands is a **hop**: `combe .`, `combe ..`, `combe ~/git/combe`, `combe /abs/path`. Subcommand names win, so a directory called `list` is unreachable by name. The CLI expands a leading `~`, canonicalizes, and requires a directory; a file, a missing path, or an unreadable state file is a message on stderr and a nonzero exit, and Combe is never raised. A name that cannot be canonicalized and does not look like a path is still the old unknown-command error.
+
+The hop itself is one `combe:` URL, the canonical directory as its path, opened through `NSWorkspace`. That is the smallest entry point that both raises a running Combe and cold-launches it, and it reuses the URL-scheme plumbing `ssh:` and `x-man-page:` already go through. `open -a Combe <dir>` is not the hop: the `public.directory` document type registers the folder as a repo, which is exactly what a hop must not do.
+
+The window resolves the hop against the catalog, never the CLI, so the answer matches what the sidebar currently shows. The directory is matched against registered rows only, and the longest ancestor-or-equal row wins. The injected Home row is not a prefix bucket; `$HOME/git/recall` is not a Home hit merely because it sits under `$HOME`.
+
+- Hit. Select that workspace and open a new tab whose cwd is the workspace root, not the subdirectory the user typed. Nothing is written to `state.json`.
+- Miss. Do not register anything. Select the Home workspace and open a new tab owned by `$HOME` whose shell starts in the requested directory. A tab therefore carries a workspace identity and a cwd separately; they differ only in this case.
+
+A hop always opens a new tab rather than reusing one. Combe never writes `cd` into a live surface, and never guesses a repo's main worktree from an unregistered path. `combe ~` is the degenerate miss: a plain Home tab. Once `$HOME` is a registered row, it is an ordinary hit like any other.
+
+Every surface sets `COMBE=1` through Ghostty's `env` override, after `TERM_PROGRAM=ghostty`. A hop that sees that mark prints a message and exits without opening a `combe:` URL, so an agent running inside Combe cannot stack another tab. The same mark refuses a second GUI when the bundle executable is launched from a Combe shell. `list`, `add`, `remove`, and `cleanup` still run.
+
 ## System entry points
 
 `Info.plist` registers Combe with LaunchServices so other applications can hand it work. macOS has no default-terminal role: browser and mail are privileged LaunchServices roles, terminals are not. What exists instead:
 
 - Document types. `public.directory` opens the folder as a workspace. `public.unix-executable` and `.command`, `.sh`, `.zsh`, `.bash` open a tab in the file's parent. Both claim `Alternate` rank, so Combe appears in Finder's Open With and Get Info without displacing the current handler.
-- URL schemes. `ssh:` and `x-man-page:`. `telnet:` is not claimed, because macOS ships no `telnet` binary and the handler would always fail.
+- URL schemes. `combe:` for the CLI hop, plus `ssh:` and `x-man-page:`. `telnet:` is not claimed, because macOS ships no `telnet` binary and the handler would always fail.
 - One service, "New Combe Tab Here", for the Finder right-click menu and any application that sends a file path.
 
-`crates/combe/src/entry.rs` is the boundary. It turns a path or URL into either a workspace to open or a shell line to type, rejects hosts, users, man pages, and sections outside a character whitelist, quotes every interpolated value, and separates options from operands with `--`. It has no AppKit dependency, so `cargo test -p combe` covers the injection cases directly.
+`crates/combe/src/entry.rs` is the boundary. It turns a path or URL into a workspace to open, a hop to land, or a shell line to type, rejects hosts, users, man pages, and sections outside a character whitelist, quotes every interpolated value, and separates options from operands with `--`. It has no AppKit dependency, so `cargo test -p combe` covers the injection cases and the hop resolution directly. A `combe:` URL can only ever open a directory, whatever sends it: it re-canonicalizes the path in the window process and drops anything that is not a directory.
 
 Executable file paths containing ASCII control characters are rejected before constructing shell input, because terminal line editors interpret those characters before shell quoting applies. Anything that would execute a command asks first. The tab appears only after the user confirms an alert showing the exact line. That line is then written into the new surface as `initial_input`, not run as the surface command, so the tab stays an ordinary long-lived workspace session afterwards.
 
@@ -255,8 +270,8 @@ crates/ghostty-sys     zig build + bindgen over vendor/ghostty
 crates/combe-catalog   state.json, git porcelain, folder fallback, Home workspace
 crates/combe
   main.rs              CLI or GUI, GHOSTTY_RESOURCES_DIR, NSApplication
-  cli.rs               list, add, remove, cleanup
-  entry.rs             external file, URL, and service requests
+  cli.rs               list, add, remove, cleanup, hop
+  entry.rs             external file, URL, and service requests, hop resolution
   ghostty.rs           ghostty_init, app lifecycle, runtime callbacks
   notification.rs      terminal attention, bounded delivery, and native notification callbacks
   surface.rs           one NSView per libghostty surface

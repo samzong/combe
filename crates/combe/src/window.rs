@@ -21,6 +21,8 @@ use objc2_foundation::{
 };
 use objc2_quartz_core::CAMediaTimingFunction;
 
+use combe_catalog::home_dir;
+
 use crate::chrome_view::{self, ClickView};
 use crate::entry::{self, Entry};
 use crate::ghostty;
@@ -388,7 +390,7 @@ pub(crate) fn new_current_tab() {
         })
         .or_else(sidebar_panel::first_row);
     if let Some((path, name)) = target {
-        new_tab(&path, &name, None);
+        new_tab(&path, &path, &name, None);
     }
 }
 
@@ -424,8 +426,12 @@ fn resolve(url: &NSURL) -> Option<Entry> {
     if url.isFileURL() {
         return entry::file(Path::new(&url.path()?.to_string()));
     }
+    let scheme = url.scheme()?.to_string().to_ascii_lowercase();
+    if scheme == entry::HOP_SCHEME {
+        return entry::directory(Path::new(&url.path()?.to_string()));
+    }
     let host = url.host()?.to_string();
-    match url.scheme()?.to_string().to_ascii_lowercase().as_str() {
+    match scheme.as_str() {
         "ssh" => entry::ssh(
             url.user().map(|user| user.to_string()).as_deref(),
             &host,
@@ -457,6 +463,15 @@ fn accept(entry: Entry) {
             sidebar_panel::set_repos(repos);
             sidebar_panel::select(&path.to_string_lossy(), &label);
         }
+        Entry::Hop(dir) => {
+            let hop = entry::hop(&dir, &sidebar::rows(), home_dir().as_deref());
+            new_tab(
+                &hop.workspace.to_string_lossy(),
+                &hop.cwd.to_string_lossy(),
+                &hop.name,
+                None,
+            );
+        }
         Entry::Run { cwd, name, input } => {
             if !confirm("Run this command in Combe?", &input, "Run") {
                 return;
@@ -467,7 +482,7 @@ fn accept(entry: Entry) {
                     STATE.with(|state| state.borrow().as_ref()?.tabs.current().map(str::to_owned))
                 })
                 .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| "/".to_owned()));
-            new_tab(&cwd, &name, Some(&input));
+            new_tab(&cwd, &cwd, &name, Some(&input));
         }
     }
     reveal_window();
@@ -481,18 +496,18 @@ fn open_worktree(path: &str, name: &str) {
     });
     match existing {
         Some(id) => activate_tab(id),
-        None => new_tab(path, name, None),
+        None => new_tab(path, path, name, None),
     }
 }
 
-fn new_tab(path: &str, name: &str, input: Option<&str>) {
+fn new_tab(workspace: &str, cwd: &str, name: &str, input: Option<&str>) {
     let mtm = MainThreadMarker::new().expect("main thread");
     STATE.with(|state| {
         let mut state = state.borrow_mut();
         let Some(state) = state.as_mut() else { return };
-        let root = split::root(mtm, state.content.bounds(), path, input);
+        let root = split::root(mtm, state.content.bounds(), cwd, input);
         state.content.addSubview(&root);
-        state.tabs.push(path.to_owned(), name.to_owned(), root);
+        state.tabs.push(workspace.to_owned(), name.to_owned(), root);
     });
     sync_tabs();
     sidebar_panel::refresh();

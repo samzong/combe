@@ -153,6 +153,22 @@ A tab is named by the focused pane's terminal title, and falls back to the workt
 
 Splitting reparents the focused surface into a fresh `NSSplitView` and adds a sibling. The sibling opens with that surface's last working directory reported through `GHOSTTY_ACTION_PWD`. If none has arrived, it uses the workspace path. A reported directory does not change workspace selection. New tabs still open on the selected worktree path. Closing removes the leaf and, when a pane is left with a single child, collapses that pane into its parent. Ghostty asks for a close through `close_surface_cb`, which queues the surface and drains it on the main queue.
 
+Title updates change the existing label and accessibility text in place. They preserve the tab, close button, and new-tab button instances, including hover and in-progress mouse tracking. The prototype's **Update tab title** control demonstrates this content-only update.
+
+### Notifications
+
+Combe consumes terminal notification channels from any program: OSC 9 and OSC 777 carry desktop notification text, BEL requests attention without completion semantics, and shell integration reports command completion with duration and exit status. Commands running for at least five seconds qualify. Shell completion does not identify a turn ending inside a persistent program or a detached background job. Combe installs no client hooks or plugins and changes no client configuration or Ghostty source.
+
+Events from the focused pane in the active key window are quiet. Other qualifying events mark their source pane as needing attention. A six-point blue dot appears in its tab; the workspace session dot becomes blue while any pane there needs attention. Repo headings also show the dot when a child workspace needs attention, including collapsed groups. The light/dark attention colors are `#0969da` / `#58a6ff`. Tab titles and repo headings reserve 48 pt on the right for the dot and adjacent control. Accessibility exposes the attention state. Activating a tab acknowledges every pane in that tab, including hidden panes, without changing its remembered pane focus. Focusing a source pane in the active window also acknowledges that pane. Other tabs remain pending.
+
+macOS owns permission, banners, sound, and Notification Center. Permission is requested on the first qualifying event. Refusing permission leaves the application marks available. Each pane retains at most one pending notification; bursts combine for 250 ms, with at most one delivery per pane every five seconds. Explicit notification text takes precedence over command completion and BEL within a burst. Different panes remain independent. The existing Ghostty OSC throttle runs before the Combe callback and can discard concurrent notifications; application marks cannot recover those events.
+
+Clicking a notification selects the source workspace and tab, restores the split layout when necessary, and focuses the still-live pane. Each pane receives a fresh UUID, so old notifications cannot open a different pane after restart. Closing a pane removes its pending and delivered notifications. Moving a pane preserves its identity and attention state. Notification state lives in memory; tab and sidebar marks derive from it without rebuilding the catalog or terminal views on each event.
+
+The prototype's **Notify background tab** control demonstrates the mark and acknowledgement states. Verify the native application with all three channels, foreground suppression, denied permission, independent panes, notification click routing, moved or closed panes, zoom, and light/dark appearances. Program text in notifications remains supplied by the terminal program; Combe's fallback wording is **Terminal needs attention**, **Command finished**, **Command succeeded**, or **Command failed**.
+
+Entering a tab with a new pending notification gives each visible source pane a one-time locating cue: a 1 pt inner border in the attention color, reaching 65 percent opacity after 180 ms and fading out over the remainder of 1.2 seconds. The cue does not change layout, keyboard focus, acknowledgement, or existing marks. Re-entering without another notification does not repeat it. Clicking a system notification uses the same cue after locating the source. The overlay passes mouse input through to the terminal. Reduce Motion replaces the fade with a brief static border. Core Animation owns the finite animation; no polling or repeating timer is used.
+
 ### Tab Overview
 
 The grid button at the right of the tab bar and Cmd-Shift-Backslash toggle an overview of the current workspace only. The View menu exposes the same command. Each card contains the whole tab's last rendered terminal image, including its visible split arrangement or zoomed pane, and its title. Images are static, may lag behind background output, live only in memory, and are released when the overview closes. A surface without a rendered image uses its terminal background until it has a frame.
@@ -242,6 +258,7 @@ crates/combe
   cli.rs               list, add, remove, cleanup
   entry.rs             external file, URL, and service requests
   ghostty.rs           ghostty_init, app lifecycle, runtime callbacks
+  notification.rs      terminal attention, bounded delivery, and native notification callbacks
   surface.rs           one NSView per libghostty surface
   split.rs             NSSplitView tree, zoom, and neighboring pane selection
   tabs.rs              tabs keyed by worktree, active tab per worktree

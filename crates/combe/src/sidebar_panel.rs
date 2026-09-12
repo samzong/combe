@@ -61,6 +61,7 @@ struct State {
     collapsed_repos: HashSet<PathBuf>,
     current: Option<String>,
     opened: HashSet<String>,
+    attention: HashSet<String>,
     sidebar_width: Cell<f64>,
     sidebar_height: Cell<f64>,
 }
@@ -200,6 +201,7 @@ pub(crate) fn mount(
             collapsed_repos: HashSet::new(),
             current: None,
             opened: HashSet::new(),
+            attention: HashSet::new(),
             sidebar_width: Cell::new(habits::SIDEBAR_WIDTH),
             sidebar_height: Cell::new(0.0),
         });
@@ -863,6 +865,41 @@ unsafe extern "C" fn apply_sidebar_on_main(_: *mut c_void) {
     }
 }
 
+pub(crate) fn set_attention(attention: HashSet<String>) {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let Some(state) = state.as_mut() else { return };
+        state.attention = attention;
+        let Some(document) = state.sidebar.documentView() else {
+            return;
+        };
+        for view in document.subviews() {
+            let Ok(view) = view.downcast::<ClickView>() else {
+                continue;
+            };
+            let Some(id) = view.identifier().map(|id| id.to_string()) else {
+                continue;
+            };
+            let attention = if let Some(path) = id.strip_prefix("repo:") {
+                state
+                    .repos
+                    .iter()
+                    .find(|repo| repo.path.to_string_lossy() == path)
+                    .is_some_and(|repo| {
+                        repo.rows.iter().any(|row| {
+                            state
+                                .attention
+                                .contains(row.path.to_string_lossy().as_ref())
+                        })
+                    })
+            } else {
+                state.attention.contains(&id)
+            };
+            view.set_attention(attention);
+        }
+    });
+}
+
 pub(crate) fn rebuild() {
     let mtm = MainThreadMarker::new().expect("main thread");
     STATE.with(|state| {
@@ -914,10 +951,15 @@ pub(crate) fn rebuild() {
                     ),
                     &repo.name,
                     34.0,
-                    28.0,
+                    48.0,
                     move || toggle_repo(path.clone()),
                 );
                 header.dim_when_idle();
+                header.set_attention(repo.rows.iter().any(|row| {
+                    state
+                        .attention
+                        .contains(row.path.to_string_lossy().as_ref())
+                }));
                 header.set_font(&NSFont::systemFontOfSize_weight(
                     habits::CHROME_FONT_SIZE,
                     unsafe { objc2_app_kit::NSFontWeightMedium },
@@ -973,6 +1015,7 @@ pub(crate) fn rebuild() {
                 view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
                 view.set_selected(state.current.as_deref() == Some(path.as_str()));
                 view.set_opened(opened);
+                view.set_attention(state.attention.contains(&path));
                 view.setAccessibilityIdentifier(Some(&NSString::from_str(&path)));
                 view.setIdentifier(Some(&NSString::from_str(&path)));
                 view.setAccessibilityElement(true);

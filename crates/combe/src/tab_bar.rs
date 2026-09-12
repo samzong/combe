@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::collections::HashSet;
+
 use objc2::MainThreadOnly;
 use objc2::rc::Retained;
 use objc2_app_kit::{NSAccessibility, NSAutoresizingMaskOptions, NSScrollView, NSView};
@@ -18,6 +21,7 @@ pub(crate) struct TabBar {
     select: fn(u64),
     close: fn(u64),
     create: fn(),
+    labels: RefCell<Vec<(u64, Retained<ClickView>)>>,
 }
 
 impl TabBar {
@@ -43,6 +47,7 @@ impl TabBar {
             select,
             close,
             create,
+            labels: RefCell::new(Vec::new()),
         }
     }
 
@@ -54,12 +59,25 @@ impl TabBar {
         self.scroll.setFrame(frame);
     }
 
+    pub(crate) fn set_attention(&self, tabs: &HashSet<u64>) {
+        for (id, view) in self.labels.borrow().iter() {
+            view.set_attention(tabs.contains(id));
+        }
+    }
+
+    pub(crate) fn set_label(&self, id: u64, label: &str) {
+        if let Some((_, view)) = self.labels.borrow().iter().find(|(tab, _)| *tab == id) {
+            view.set_text(label);
+        }
+    }
+
     pub(crate) fn update<'a>(
         &self,
         tabs: impl Iterator<Item = (u64, &'a str)>,
         active: Option<u64>,
     ) {
         let mtm = MainThreadMarker::new().expect("main thread");
+        self.labels.borrow_mut().clear();
         for child in self.document.subviews() {
             child.removeFromSuperview();
         }
@@ -70,7 +88,7 @@ impl TabBar {
         let mut x = 0.0;
         for (id, label) in tabs {
             let frame = NSRect::new(NSPoint::new(x, y), NSSize::new(WIDTH, HEIGHT));
-            let view = ClickView::new(mtm, frame, label, 12.0, 38.0, move || (select)(id));
+            let view = ClickView::new(mtm, frame, label, 12.0, 48.0, move || (select)(id));
             view.set_corner_radius(RADIUS);
             if Some(id) != active {
                 view.dim_when_idle();
@@ -82,6 +100,7 @@ impl TabBar {
             }
             view.setAccessibilitySelected(Some(id) == active);
             self.document.addSubview(&view);
+            self.labels.borrow_mut().push((id, view.clone()));
 
             let close = ActionButton::new(
                 mtm,

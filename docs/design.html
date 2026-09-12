@@ -28,6 +28,7 @@
       --green: #65c888;
       --session-idle: #85878d;
       --blue: #3478dc;
+      --attention: #58a6ff;
       --ease: cubic-bezier(.22, .8, .2, 1);
       --inset: 12px;
       --radius-row: 16px;
@@ -50,6 +51,7 @@
       --text-strong: #292d33;
       --green: #248247;
       --blue: #0969da;
+      --attention: #0969da;
       --line: #0000000d;
       --hover: #00000009;
       --button-pressed: #00000018;
@@ -156,6 +158,9 @@
     .window.pinned .trigger .chev { opacity: 0; }
     .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--session-idle); }
     .dot.live { background: var(--green); }
+    .row.attention .dot { background: var(--attention); }
+    .tab.attention::after, .group-head.attention::after { content: ""; position: absolute; right: 34px; top: calc(50% - 3px); width: 6px; height: 6px; border-radius: 50%; background: var(--attention); }
+    .group-head { position: relative; }
     .tools { display: flex; align-items: center; flex: none; gap: 4px; }
     .icon { width: 28px; height: 28px; padding: 6px; display: grid; place-items: center; background: transparent; border: 0; border-radius: 50%; color: var(--text-soft); }
     .icon svg, .newtab svg, .tab .x svg, .find-bar button svg { width: 12px; height: 12px; stroke-width: 1.5; }
@@ -174,6 +179,7 @@
     .group + .group { margin-top: 8px; padding-top: 8px; border-top: .5px solid var(--line); }
     .group-head, .row { display: flex; align-items: center; width: 100%; border: 0; background: transparent; text-align: left; }
     .group-head { height: 30px; padding: 0 12px; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 500; border-radius: var(--radius-row); }
+    .group-head > span { flex: 1; min-width: 0; padding-right: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .group-head > svg:first-child { width: 14px; height: 14px; color: var(--muted); }
     .group-head .arrow { margin-left: auto; width: 10px; height: 10px; opacity: .7; }
     .group-head:hover { background: var(--hover); }
@@ -226,7 +232,7 @@
     .preview-tools { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .preview-tools label { display: flex; align-items: center; gap: 8px; }
     select, input { font: inherit; color: var(--fg); background: var(--solid); border: .5px solid var(--line); border-radius: 6px; padding: 5px 8px; }
-    .tab { position: relative; padding-right: 38px; flex: none; border: 0; text-align: left; cursor: default; }
+    .tab { position: relative; padding-right: 48px; flex: none; border: 0; text-align: left; cursor: default; }
     .tab .x { position: absolute; right: 10px; top: 8px; width: 20px; height: 20px; padding: 0; border: 0; background: transparent; border-radius: 50%; }
     .newtab { flex: none; border: 0; position: relative; isolation: isolate; }
     .newtab::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; z-index: -1; }
@@ -389,7 +395,45 @@
     let menuKeyboard = false;
     let toastTimer;
     const sessions = new Map();
+    const attentionPreview = document.createElement('button');
+    attentionPreview.textContent = 'Notify background tab';
+    attentionPreview.type = 'button';
+    document.querySelector('.preview-tools').append(attentionPreview);
+    attentionPreview.addEventListener('click', () => {
+      const session = sessions.get(selected);
+      let item = session.items.find(item => item.id !== session.active);
+      if (!item) {
+        item = { id: ++nextTab, label: 'Terminal', split: false };
+        session.items.push(item);
+      }
+      item.attention = true;
+      item.guidePending = true;
+      item.attentionPane = item.split ? 'right' : 'left';
+      renderTabs();
+    });
+    function updateAttention() {
+      for (const button of list.querySelectorAll('.row')) {
+        const pending = sessions.get(button.dataset.id)?.items.some(item => item.attention) || false;
+        button.classList.toggle('attention', pending);
+        button.setAttribute('aria-description', pending ? 'Needs attention' : '');
+      }
+      for (const group of list.querySelectorAll('.group')) {
+        group.querySelector('.group-head')?.classList.toggle('attention', !!group.querySelector('.row.attention'));
+      }
+    }
     let nextTab = 0;
+    const titlePreview = document.createElement('button');
+    titlePreview.textContent = 'Update tab title';
+    titlePreview.type = 'button';
+    document.querySelector('.preview-tools').append(titlePreview);
+    titlePreview.addEventListener('click', () => {
+      const session = sessions.get(selected);
+      const item = session.items.find(item => item.id === session.active);
+      item.label = item.label.startsWith('⠹') ? '⠧ Running command' : '⠹ Running command';
+      const tab = tabs.querySelector('[aria-selected="true"]');
+      tab.querySelector('.label').textContent = item.label;
+      tab.querySelector('.x').setAttribute('aria-label', `Close ${item.label}`);
+    });
     const appearance = document.getElementById("appearance");
     const systemAppearance = matchMedia("(prefers-color-scheme: dark)");
     function applyAppearance() {
@@ -479,10 +523,13 @@
     function renderTabs() {
       const { row } = rowOf(selected);
       const session = sessions.get(selected);
+      const activeItem = session.items.find(item => item.id === session.active);
+      activeItem.attention = false;
       tabs.replaceChildren();
       for (const item of session.items) {
         const tab = document.createElement("div");
-        tab.className = "tab" + (item.id === session.active ? " on" : "");
+        tab.className = "tab" + (item.id === session.active ? " on" : "") + (item.attention ? " attention" : "");
+        tab.setAttribute('aria-description', item.attention ? 'Needs attention' : '');
         tab.setAttribute("role", "tab");
         tab.setAttribute("aria-selected", String(item.id === session.active));
         tab.tabIndex = item.id === session.active ? 0 : -1;
@@ -540,6 +587,20 @@
       right.hidden = !session.items.find(item => item.id === session.active)?.split;
       document.querySelector(".term").classList.toggle("single", right.hidden);
       applyComponent();
+      updateAttention();
+      if (activeItem.guidePending) {
+        const pane = document.getElementById(activeItem.attentionPane);
+        if (pane && !pane.hidden) {
+          activeItem.guidePending = false;
+          const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+          const border = 'inset 0 0 0 1px color-mix(in srgb, var(--attention) 65%, transparent)';
+          pane.animate([
+            { boxShadow: reduce ? border : 'inset 0 0 0 1px transparent', offset: 0, easing: reduce ? 'steps(1, end)' : 'ease-in-out' },
+            { boxShadow: border, offset: .15, easing: reduce ? 'steps(1, end)' : 'ease-in-out' },
+            { boxShadow: 'inset 0 0 0 1px transparent', offset: 1 }
+          ], { duration: 1200 });
+        }
+      }
     }
 
     function applyComponent() {

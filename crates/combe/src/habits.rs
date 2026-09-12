@@ -22,6 +22,7 @@ pub const CHROME_SELECTION: (u32, u32) = (0x00000008, 0xffffff12);
 pub const CHROME_HINT: (u32, u32) = (0x00000006, 0xffffff0d);
 pub const CHROME_SESSION: (u32, u32) = (0x248247ff, 0x65c888ff);
 pub const CHROME_SESSION_IDLE: (u32, u32) = (0x85878dff, 0x85878dff);
+pub const CHROME_ATTENTION: (u32, u32) = (0x0969daff, 0x58a6ffff);
 pub const GLASS_CONTROL: [(u32, u32); 4] = [
     (0xdfe1e650, 0x3b3d4140),
     (0xffffffa6, 0xffffff12),
@@ -91,6 +92,10 @@ pub const SIDEBAR_VISIBLE: bool = false;
 
 pub const QUOTA_POLL: Duration = Duration::from_secs(15 * 60);
 pub const QUOTA_FRESH: Duration = Duration::from_secs(5 * 60);
+pub const COMMAND_NOTIFY_AFTER: Duration = Duration::from_secs(5);
+pub const NOTIFICATION_BATCH: Duration = Duration::from_millis(250);
+pub const NOTIFICATION_INTERVAL: Duration = Duration::from_secs(5);
+pub const PANE_GUIDE_DURATION: f64 = 1.2;
 
 pub const ALLOW_OSC52_READ: bool = false;
 

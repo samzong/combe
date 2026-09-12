@@ -7,16 +7,82 @@ use objc2_app_kit::{
     NSAutoresizingMaskOptions, NSBezierPath, NSButton, NSColor, NSColorSpace, NSEvent, NSEventType,
     NSFont, NSGradient, NSImage, NSImageView, NSLineBreakMode, NSTextField, NSTrackingArea,
     NSTrackingAreaOptions, NSView, NSViewLayerContentsRedrawPolicy, NSVisualEffectBlendingMode,
-    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
+    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWorkspace,
 };
 use objc2_foundation::{
-    MainThreadMarker, NSArray, NSMutableAttributedString, NSPoint, NSRange, NSRect, NSSize,
-    NSString,
+    MainThreadMarker, NSArray, NSMutableAttributedString, NSNumber, NSPoint, NSRange, NSRect,
+    NSSize, NSString,
+};
+use objc2_quartz_core::{
+    CAKeyframeAnimation, CAMediaTiming, CAMediaTimingFunction, kCAAnimationDiscrete,
 };
 use std::cell::{Cell, RefCell};
 
 const PILL_RADIUS: f64 = 16.0;
 const SESSION_DOT: f64 = 6.0;
+
+define_class!(
+    #[unsafe(super(NSView))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "CombePaneGuide"]
+    pub(crate) struct PaneGuide;
+
+    impl PaneGuide {
+        #[unsafe(method(hitTest:))]
+        fn hit_test(&self, _point: NSPoint) -> *mut NSView {
+            std::ptr::null_mut()
+        }
+    }
+);
+
+impl PaneGuide {
+    pub(crate) fn new(mtm: MainThreadMarker, frame: NSRect) -> Retained<Self> {
+        let view: Retained<Self> = unsafe { msg_send![Self::alloc(mtm), initWithFrame: frame] };
+        view.setAutoresizingMask(
+            NSAutoresizingMaskOptions::ViewWidthSizable
+                | NSAutoresizingMaskOptions::ViewHeightSizable,
+        );
+        view.setAccessibilityElement(false);
+        view.setWantsLayer(true);
+        if let Some(layer) = view.layer() {
+            layer.setBorderWidth(1.0);
+            layer.setOpacity(0.0);
+        }
+        view
+    }
+
+    pub(crate) fn show(&self) {
+        let Some(layer) = self.layer() else { return };
+        let border = color(habits::CHROME_ATTENTION).CGColor();
+        unsafe {
+            let _: () = msg_send![&*layer, setBorderColor: &*border];
+        }
+        let reduce = NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion();
+        let animation =
+            CAKeyframeAnimation::animationWithKeyPath(Some(&NSString::from_str("opacity")));
+        let values = NSArray::from_retained_slice(&[
+            NSNumber::new_f64(if reduce { 0.65 } else { 0.0 }),
+            NSNumber::new_f64(0.65),
+            NSNumber::new_f64(0.0),
+        ]);
+        unsafe {
+            let _: () = msg_send![&animation, setValues: &*values];
+        }
+        animation.setKeyTimes(Some(&NSArray::from_retained_slice(&[
+            NSNumber::new_f64(0.0),
+            NSNumber::new_f64(0.15),
+            NSNumber::new_f64(1.0),
+        ])));
+        animation.setDuration(habits::PANE_GUIDE_DURATION);
+        if reduce {
+            animation.setCalculationMode(unsafe { kCAAnimationDiscrete });
+        } else {
+            let timing = CAMediaTimingFunction::functionWithControlPoints(0.42, 0.0, 0.58, 1.0);
+            animation.setTimingFunctions(Some(&NSArray::from_slice(&[&*timing, &*timing])));
+        }
+        layer.addAnimation_forKey(&animation, Some(&NSString::from_str("pane-guide")));
+    }
+}
 
 pub(crate) struct ClickIvars {
     click: Box<dyn Fn()>,
@@ -24,6 +90,7 @@ pub(crate) struct ClickIvars {
     label: RefCell<Option<Retained<NSTextField>>>,
     selected: Cell<bool>,
     opened: Cell<Option<bool>>,
+    attention: Cell<bool>,
     dim_when_idle: Cell<bool>,
     text_color: Cell<(u32, u32)>,
     warn: RefCell<Vec<(NSRange, Retained<NSColor>)>>,
@@ -68,12 +135,21 @@ define_class!(
                 ring.setLineWidth(2.0);
                 ring.stroke();
             }
+            if self.ivars().attention.get() && self.ivars().opened.get().is_none() {
+                color(habits::CHROME_ATTENTION).setFill();
+                NSBezierPath::bezierPathWithOvalInRect(NSRect::new(
+                    NSPoint::new(self.bounds().size.width - 40.0, (self.bounds().size.height - SESSION_DOT) / 2.0),
+                    NSSize::new(SESSION_DOT, SESSION_DOT),
+                )).fill();
+            }
             let Some(opened) = self.ivars().opened.get() else {
                 return;
             };
             let bounds = self.bounds();
             let y = ((bounds.size.height - SESSION_DOT) / 2.0).max(0.0);
-            if opened {
+            if self.ivars().attention.get() {
+                color(habits::CHROME_ATTENTION).setFill();
+            } else if opened {
                 color(habits::CHROME_SESSION).setFill();
             } else {
                 color(habits::CHROME_SESSION_IDLE).setFill();
@@ -198,6 +274,7 @@ impl ClickView {
             label: RefCell::new(None),
             selected: Cell::new(false),
             opened: Cell::new(None),
+            attention: Cell::new(false),
             dim_when_idle: Cell::new(false),
             text_color: Cell::new(habits::CHROME_TEXT),
             warn: RefCell::new(Vec::new()),
@@ -287,6 +364,20 @@ impl ClickView {
 
     pub(crate) fn set_opened(&self, opened: bool) {
         self.ivars().opened.set(Some(opened));
+        self.setNeedsDisplay(true);
+    }
+
+    pub(crate) fn set_attention(&self, attention: bool) {
+        if self.ivars().attention.replace(attention) == attention {
+            return;
+        }
+        unsafe {
+            self.setAccessibilityValue(Some(&NSString::from_str(if attention {
+                "Needs attention"
+            } else {
+                ""
+            })));
+        }
         self.setNeedsDisplay(true);
     }
 

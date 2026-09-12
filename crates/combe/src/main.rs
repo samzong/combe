@@ -5,6 +5,7 @@ mod find_bar;
 mod ghostty;
 mod habits;
 mod menu;
+mod notification;
 mod overview;
 mod quota;
 mod quota_panel;
@@ -45,6 +46,7 @@ fn main() -> ExitCode {
     ghostty::init();
 
     let _delegate = window::install_delegate(mtm, &app);
+    notification::init();
     menu::install(mtm, &app);
     window::open(mtm);
 

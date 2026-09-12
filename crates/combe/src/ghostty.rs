@@ -155,6 +155,45 @@ unsafe extern "C" fn action(
     action: sys::ghostty_action_s,
 ) -> bool {
     match action.tag {
+        sys::GHOSTTY_ACTION_DESKTOP_NOTIFICATION => {
+            let Some(view) = surface_view(target) else {
+                return false;
+            };
+            let value = unsafe { action.action.desktop_notification };
+            let copy = |text: *const c_char| {
+                if text.is_null() {
+                    String::new()
+                } else {
+                    unsafe { CStr::from_ptr(text) }
+                        .to_string_lossy()
+                        .into_owned()
+                }
+            };
+            crate::notification::receive(
+                &view,
+                crate::notification::Notice::desktop(copy(value.title), copy(value.body)),
+            );
+            true
+        }
+        sys::GHOSTTY_ACTION_RING_BELL => {
+            let Some(view) = surface_view(target) else {
+                return false;
+            };
+            crate::notification::receive(&view, crate::notification::Notice::bell());
+            true
+        }
+        sys::GHOSTTY_ACTION_COMMAND_FINISHED => {
+            let Some(view) = surface_view(target) else {
+                return false;
+            };
+            let value = unsafe { action.action.command_finished };
+            if let Some(notice) =
+                crate::notification::Notice::command(value.exit_code, value.duration)
+            {
+                crate::notification::receive(&view, notice);
+            }
+            true
+        }
         sys::GHOSTTY_ACTION_OPEN_URL => open_url_action(action),
         sys::GHOSTTY_ACTION_SET_TITLE | sys::GHOSTTY_ACTION_SET_TAB_TITLE => {
             let Some(view) = surface_view(target) else {

@@ -25,6 +25,9 @@ const NX_DEVICE_RCMD: usize = 0x00000010;
 
 pub struct SurfaceIvars {
     surface: Cell<sys::ghostty_surface_t>,
+    notification_id: String,
+    attention: Cell<bool>,
+    guide: RefCell<Option<Retained<crate::chrome_view::PaneGuide>>>,
     cwd: RefCell<String>,
     input: RefCell<Option<String>>,
     title: RefCell<Option<String>>,
@@ -111,6 +114,7 @@ define_class!(
                 unsafe { sys::ghostty_surface_set_focus(surface, true) };
             }
             crate::window::refresh_labels();
+            crate::window::refresh_attention();
             true
         }
 
@@ -306,6 +310,9 @@ impl SurfaceView {
     ) -> Retained<Self> {
         let ivars = SurfaceIvars {
             surface: Cell::new(ptr::null_mut()),
+            notification_id: objc2_foundation::NSUUID::UUID().UUIDString().to_string(),
+            attention: Cell::new(false),
+            guide: RefCell::new(None),
             cwd: RefCell::new(cwd.to_owned()),
             input: RefCell::new(input.map(str::to_owned)),
             title: RefCell::new(None),
@@ -319,6 +326,9 @@ impl SurfaceView {
     }
 
     pub fn close(&self) {
+        self.ivars().attention.set(false);
+        crate::notification::forget(self.notification_id());
+        crate::window::refresh_attention();
         let surface = self.ivars().surface.replace(ptr::null_mut());
         if !surface.is_null() {
             unsafe { sys::ghostty_surface_free(surface) };
@@ -329,6 +339,33 @@ impl SurfaceView {
         if let Some(surface) = self.handle() {
             unsafe { sys::ghostty_surface_set_color_scheme(surface, ghostty::color_scheme()) };
         }
+    }
+
+    pub fn notification_id(&self) -> &str {
+        &self.ivars().notification_id
+    }
+
+    pub fn needs_attention(&self) -> bool {
+        self.ivars().attention.get()
+    }
+
+    pub fn set_attention(&self, attention: bool) {
+        if self.ivars().attention.replace(attention) != attention {
+            crate::window::refresh_attention();
+        }
+    }
+
+    pub fn guide_attention(&self) {
+        if self.isHiddenOrHasHiddenAncestor() || !self.needs_attention() {
+            return;
+        }
+        let mut guide = self.ivars().guide.borrow_mut();
+        let guide = guide.get_or_insert_with(|| {
+            let guide = crate::chrome_view::PaneGuide::new(self.mtm(), self.bounds());
+            self.addSubview(&guide);
+            guide
+        });
+        guide.show();
     }
 
     pub fn set_occluded(&self, occluded: bool) {

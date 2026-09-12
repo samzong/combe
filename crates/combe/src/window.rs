@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
 
@@ -47,6 +48,7 @@ const FILL: NSAutoresizingMaskOptions = NSAutoresizingMaskOptions(
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
     static ANIMATE_CHROME: Cell<bool> = const { Cell::new(false) };
+    static ATTENTION_QUEUED: Cell<bool> = const { Cell::new(false) };
 }
 
 struct State {
@@ -134,6 +136,7 @@ define_class!(
         #[unsafe(method(applicationDidBecomeActive:))]
         fn did_become_active(&self, _notification: &AnyObject) {
             ghostty::set_focus(true);
+            refresh_attention();
             sidebar_panel::refresh();
             quota_panel::refresh();
         }
@@ -177,6 +180,10 @@ define_class!(
     unsafe impl NSObjectProtocol for WindowDelegate {}
 
     unsafe impl NSWindowDelegate for WindowDelegate {
+        #[unsafe(method(windowDidBecomeKey:))]
+        fn did_become_key(&self, _note: &NSNotification) {
+            refresh_attention();
+        }
         #[unsafe(method(windowDidResignKey:))]
         fn did_resign_key(&self, _note: &NSNotification) {
             deactivate_chrome();
@@ -501,6 +508,21 @@ fn activate_tab(id: u64) {
     });
     sync_tabs();
     sidebar_panel::rebuild();
+    let guides = STATE.with(|state| {
+        state
+            .borrow()
+            .as_ref()
+            .and_then(|state| state.tabs.active())
+            .map(|tab| split::surfaces(&tab.root))
+            .unwrap_or_default()
+    });
+    for view in guides {
+        view.guide_attention();
+        if view.needs_attention() {
+            view.set_attention(false);
+            crate::notification::acknowledge(view.notification_id());
+        }
+    }
     focus_active();
 }
 
@@ -830,13 +852,136 @@ fn focused_surface() -> Option<Retained<SurfaceView>> {
     })
 }
 
-pub fn refresh_labels() {
-    let changed = STATE.with(|state| {
-        let Ok(mut state) = state.try_borrow_mut() else {
+pub(crate) fn notification_source(id: &str) -> Option<(Retained<SurfaceView>, String)> {
+    STATE.with(|state| {
+        let state = state.try_borrow().ok()?;
+        state.as_ref()?.tabs.items().iter().find_map(|tab| {
+            split::surfaces(&tab.root)
+                .into_iter()
+                .find(|view| view.notification_id() == id)
+                .map(|view| (view, tab.name.clone()))
+        })
+    })
+}
+
+pub(crate) fn is_observed(view: &SurfaceView) -> bool {
+    let mtm = MainThreadMarker::new().expect("main thread");
+    if !NSApplication::sharedApplication(mtm).isActive() || view.isHiddenOrHasHiddenAncestor() {
+        return false;
+    }
+    STATE.with(|state| {
+        let Ok(state) = state.try_borrow() else {
             return false;
         };
+        state.as_ref().is_some_and(|state| {
+            state.window.isKeyWindow()
+                && state.window.isVisible()
+                && !state.window.isMiniaturized()
+                && state.overview.is_none()
+                && state
+                    .tabs
+                    .active()
+                    .and_then(|tab| tab.focused_surface())
+                    .is_some_and(|focused| focused.notification_id() == view.notification_id())
+        })
+    })
+}
+
+pub(crate) fn focus_notification(id: &str) {
+    let target = STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let state = state.as_mut()?;
+        let (tab_id, view) = state.tabs.items().iter().find_map(|tab| {
+            split::surfaces(&tab.root)
+                .into_iter()
+                .find(|view| view.notification_id() == id)
+                .map(|view| (tab.id, view))
+        })?;
+        let tab = state.tabs.get_mut(tab_id)?;
+        if tab
+            .zoom
+            .as_ref()
+            .is_some_and(|zoom| zoom.surface.notification_id() != id)
+            && let Some(zoom) = tab.zoom.take()
+        {
+            zoom.restore();
+        }
+        tab.focused = Some(view);
+        Some(tab_id)
+    });
+    if let Some(tab) = target {
+        activate_tab(tab);
+        reveal_window();
+        NSApplication::sharedApplication(MainThreadMarker::new().expect("main thread")).activate();
+        refresh_attention();
+    }
+}
+
+pub(crate) fn refresh_attention() {
+    if !ATTENTION_QUEUED.replace(true) {
+        ghostty::on_main(attention_on_main);
+    }
+}
+
+unsafe extern "C" fn attention_on_main(_: *mut c_void) {
+    ATTENTION_QUEUED.set(false);
+    let surfaces = STATE.with(|state| {
+        state
+            .borrow()
+            .as_ref()
+            .map(|state| {
+                state
+                    .tabs
+                    .items()
+                    .iter()
+                    .flat_map(|tab| split::surfaces(&tab.root))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    });
+    for view in &surfaces {
+        if view.needs_attention() && is_observed(view) {
+            view.set_attention(false);
+            crate::notification::acknowledge(view.notification_id());
+        }
+    }
+    let workspaces = STATE.with(|state| {
+        let state = state.borrow();
+        let state = state.as_ref()?;
+        let tabs: HashSet<_> = state
+            .tabs
+            .items()
+            .iter()
+            .filter(|tab| {
+                split::surfaces(&tab.root)
+                    .iter()
+                    .any(|view| view.needs_attention())
+            })
+            .map(|tab| tab.id)
+            .collect();
+        state.tab_bar.set_attention(&tabs);
+        Some(
+            state
+                .tabs
+                .items()
+                .iter()
+                .filter(|tab| tabs.contains(&tab.id))
+                .map(|tab| tab.workspace.clone())
+                .collect(),
+        )
+    });
+    if let Some(workspaces) = workspaces {
+        sidebar_panel::set_attention(workspaces);
+    }
+}
+
+pub fn refresh_labels() {
+    STATE.with(|state| {
+        let Ok(mut state) = state.try_borrow_mut() else {
+            return;
+        };
         let Some(state) = state.as_mut() else {
-            return false;
+            return;
         };
         let focused = responder_surface(state);
         let updates: Vec<_> = state
@@ -861,19 +1006,15 @@ pub fn refresh_labels() {
                 (tab.id, label, view)
             })
             .collect();
-        updates
-            .into_iter()
-            .fold(false, |changed, (id, label, view)| {
-                let tab = state.tabs.get_mut(id).expect("existing tab");
-                let changed = changed || tab.label != label;
+        for (id, label, view) in updates {
+            let tab = state.tabs.get_mut(id).expect("existing tab");
+            if tab.label != label {
                 tab.label = label;
-                tab.focused = view;
-                changed
-            })
+                state.tab_bar.set_label(id, &tab.label);
+            }
+            tab.focused = view;
+        }
     });
-    if changed {
-        sync_tabs();
-    }
 }
 
 pub(crate) fn toggle_overview() {
@@ -1041,6 +1182,7 @@ fn sync_tabs() {
     if let Some((current, opened)) = sessions {
         sidebar_panel::set_sessions(current, opened);
     }
+    refresh_attention();
 }
 
 define_class!(

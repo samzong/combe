@@ -589,9 +589,10 @@
       applyComponent();
       updateAttention();
       if (activeItem.guidePending) {
+        activeItem.guidePending = false;
         const pane = document.getElementById(activeItem.attentionPane);
-        if (pane && !pane.hidden) {
-          activeItem.guidePending = false;
+        const visible = [...document.querySelectorAll('.pane')].filter(pane => !pane.hidden).length;
+        if (visible > 1 && pane && !pane.hidden) {
           const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
           const border = 'inset 0 0 0 1px color-mix(in srgb, var(--attention) 65%, transparent)';
           pane.animate([

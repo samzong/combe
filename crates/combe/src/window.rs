@@ -516,8 +516,17 @@ fn activate_tab(id: u64) {
             .map(|tab| split::surfaces(&tab.root))
             .unwrap_or_default()
     });
+    if guides
+        .iter()
+        .filter(|view| !view.isHiddenOrHasHiddenAncestor())
+        .count()
+        > 1
+    {
+        for view in &guides {
+            view.guide_attention();
+        }
+    }
     for view in guides {
-        view.guide_attention();
         if view.needs_attention() {
             view.set_attention(false);
             crate::notification::acknowledge(view.notification_id());
@@ -901,12 +910,10 @@ pub(crate) fn focus_notification(id: &str) {
         if tab
             .zoom
             .as_ref()
-            .is_some_and(|zoom| zoom.surface.notification_id() != id)
-            && let Some(zoom) = tab.zoom.take()
+            .is_none_or(|zoom| zoom.surface.notification_id() == id)
         {
-            zoom.restore();
+            tab.focused = Some(view);
         }
-        tab.focused = Some(view);
         Some(tab_id)
     });
     if let Some(tab) = target {

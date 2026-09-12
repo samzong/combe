@@ -51,6 +51,15 @@ if [[ ! -f "${APP_DIR}/Contents/Resources/terminfo/78/xterm-ghostty" ]]; then
   exit 1
 fi
 
-codesign --force --deep --sign - --identifier "${BUNDLE_ID}" "${APP_DIR}"
-
+IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
+    | awk -F '"' '/Apple Development: / { print $2; exit }')
+if [[ -z "${IDENTITY}" ]]; then
+    IDENTITY="-"
+fi
+codesign --force --deep --sign "${IDENTITY}" --identifier "${BUNDLE_ID}" "${APP_DIR}"
+if [[ "${IDENTITY}" == "-" ]]; then
+    echo "signed adhoc"
+else
+    echo "signed with ${IDENTITY}"
+fi
 echo "${APP_DIR}"

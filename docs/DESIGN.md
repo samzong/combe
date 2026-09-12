@@ -6,13 +6,11 @@ Built for personal use, exclusively on Apple Silicon Macs. Private GitHub Releas
 
 ## Interface contract
 
-[design.html](design.html) is the permanent, interactive GUI reference. Open it directly in a browser, or serve this directory for the interaction checks. Its CSS tokens and component states define the visual system; this document defines behavior and ownership. Terminal output and quota values in the HTML are samples.
+[design.html](design.html) is the permanent interactive GUI reference: its CSS tokens and component states define visuals; this document defines behavior and ownership. Open it directly, or serve this directory for interaction checks. Terminal output and quota values are samples.
 
-The prototype's **Show spacing** inspector and [spacing inventory](spacing.md) identify native source values, live prototype measurements, and proposed changes by stable IDs. Recommendations remain proposals until approved; they do not change the current geometry contract. Select an area and measurement to inspect individual edges, including zero gaps and state-dependent empty space.
+The **Show spacing** inspector, [spacing inventory](spacing.md), and [radius inventory](radii.md) use stable IDs to distinguish native source values, live prototype measurements, and proposals. Select an area and measurement to inspect edges, zero gaps, and state-dependent space. **Corner radii** R01–R26 distinguish visible surfaces, transparent targets, focus rings, circles, and system-owned shapes. Recommendations require approval; current geometry is specified below.
 
-The inspector's **Corner radii** area and [radius inventory](radii.md) separate visible surfaces, transparent targets, focus rings, circles, and system-owned shapes. R01–R26 record current geometry: Tab glass and hover share 18 pt corners, Tab focus uses 16 pt, and list rows retain 16 pt. Other native shapes keep their existing values.
-
-Before changing the GUI, update the relevant tokens, components, and interaction states in `design.html`, then update this document. Implement the same contract in AppKit and inspect the running window in both appearances. A screenshot or a passing build alone does not establish interaction parity. User-approved product decisions define the target; code and runtime establish what is implemented. Resolve discrepancies before calling a change complete.
+For GUI changes, update the prototype first, then this contract, then AppKit. Verify the running window in both appearances; a screenshot or build alone cannot prove interaction parity. User-approved decisions define the target; code and runtime establish current behavior. Resolve discrepancies before completion.
 
 ## Product
 
@@ -25,18 +23,17 @@ Combe is a lightweight native terminal organized around workspaces. Its mission 
 - Restraint in scope: build for the owner's actual daily work on macOS. Do not add features for hypothetical users or pursue a general-purpose terminal product.
 - No compromise on experience: every retained feature should be dependable, easy to use, and consistent with native macOS interactions. A small feature set is no excuse for a poor experience.
 - Do fewer things, and do the needed things well. CLI tools such as Claude Code and Codex run inside terminals; Combe does not become an IDE or an agent management platform.
+- When experience goals conflict, prioritize reliable sessions and predictable interaction, then ease of switching, then visual polish.
+- New features must address recurring friction in the owner's actual work. Check whether existing tools or native capabilities already cover the need, and weigh the state, failure modes, and maintenance Combe would take on.
+- Revisit design choices when repeated use shows their costs outweigh their benefits. Explicit non-goals and behavior contracts remain binding until the owner changes them.
 
 ### Workspaces
 
-A heavy terminal user keeps many git checkouts and linked worktrees. The missing piece is a directory of those trees, not another multiplexer, editor, or agent overlay.
+The user registers repos by hand. Combe lists their worktrees through Git; it never scans the disk for repos.
 
-The user curates the repo list by hand. Combe reads `git worktree list --porcelain` for each registered repo and shows every tree git already knows.
+Each workspace owns its tabs and remembers its active tab. Selecting a row returns to that session; new tabs belong to it. Closing its last tab switches to another workspace with tabs, or closes the window if none remain.
 
-A worktree is a session, not a shortcut. Each row owns its own set of tabs; selecting a row swaps in that worktree's tabs and returns to the one it was left on. New tabs belong to the selected worktree. Closing the last tab of a workspace ends that session. If another workspace still has tabs, the window switches to it; if none remain, the window closes.
-
-The catalog always includes a Home workspace at `$HOME` unless a row already owns that path. Home is a folder workspace, not a registered repo: it is not written to `state.json`, and `$HOME` is not scanned for git worktrees until the user adds it. Its label is `home`. It is one workspace row, with no repo heading and no disclosure. The workspace chip shows `home` while Home is selected. Startup opens the first catalog row, so a new window lands on Home.
-
-Repos are never discovered by walking the disk.
+The built-in Home workspace is one `home` row without a repo heading or disclosure; its chip also reads `home`. The [catalog](#catalog) injects it first unless a row owns `$HOME`. Startup opens the first row. Home is not registered or persisted, and `$HOME` is scanned for worktrees only when the user registers it.
 
 ## Non-goals
 
@@ -44,6 +41,7 @@ Repos are never discovered by walking the disk.
 - In-app editor, browser, diffs, PR/issue chrome
 - An SSH client, WSL, remote hosts, a PTY daemon that survives app updates
 - A settings GUI, a theme market, cloud sync, user configuration files
+- A third quota provider, quota settings, or usage fetched from the network
 - Creating or deleting worktrees (that stays with `git` / `gmc`)
 - A hand-written VT parser, glyph atlas, or renderer
 
@@ -69,9 +67,9 @@ Rejected:
 
 ## Window
 
-One window, with a transparent titlebar and hidden title. Native traffic lights remain native window controls. The terminal and window share one background; terminal panes have no independent card, shadow, blur, or rounded border. Only split dividers separate terminal surfaces.
+One window with a transparent titlebar, hidden title, and native traffic lights. Window and terminals share a background; panes have no independent card, shadow, blur, or rounded border. Only split dividers separate surfaces.
 
-The sidebar is one glass surface with three states: a workspace chip, a transient catalog, and a pinned sidebar. The chip expands leftward under the traffic lights and downward into the catalog. Its right edge, selected-workspace text, add-repo button, and pin button stay fixed throughout the transition. The workspace trigger has no separate hover background. Traffic lights and tabs stay in their window positions through opening, closing, pinning, and unpinning. Tabs remain outside the sidebar's right edge in all states.
+The sidebar's single glass surface has chip, transient catalog, and pinned states. It expands leftward under the traffic lights and downward, keeping its right edge, selected-workspace text, add and pin buttons fixed. The workspace trigger has no separate hover background. Traffic lights and tabs keep their window positions through every transition; tabs always remain beyond the sidebar's right edge.
 
 | Component | Geometry and appearance |
 | --- | --- |
@@ -88,35 +86,35 @@ The sidebar is one glass surface with three states: a workspace chip, a transien
 | Quota details | 304 pt wide; the same glass surface and 14 pt corners as the chip; expands upward with a fixed bottom-left and fixed summary; 16 pt top and side insets, 12 pt bottom inset; 8 pt column and heading-to-row gaps, 30 pt rows, 16 pt between providers |
 | Find bar | Native search field, match counter, previous/next and close controls; compact rounded surface in the focused pane's top-right |
 
-The 12 pt gap also separates traffic lights from the chip, the chip from the first tab, and adjacent tabs. The default sidebar width is 300 pt; dragging its glass right border resizes a pinned sidebar within 160–420 pt. The resize cursor and hit area occupy the 4 pt immediately outside that border, without overlapping the catalog. After pinning, moving onto the border shows the resize cursor without another click. Resizing changes its right edge and available label width. It does not change width during ordinary window resizes. Narrow headers truncate text before displacing the action buttons. The custom sidebar split view explicitly forwards `mouseDown:` to `NSSplitView`; AppKit owns divider tracking and constraints. Catalog overflow scrolls. Full screen hides the system traffic lights without leaving dead controls.
+The 12 pt gap separates traffic lights, chip, and tabs. Dragging a pinned sidebar's right glass border resizes its 300 pt default width within 160–420 pt, changing the right edge and label width. Its 4 pt resize target sits immediately outside the glass, clear of the catalog, and shows the resize cursor without another click after pinning. Ordinary window resizing preserves sidebar width. Narrow headers truncate text before displacing buttons; catalog overflow scrolls. The custom split view forwards `mouseDown:` to `NSSplitView`, which owns divider tracking and constraints. Full screen hides traffic lights without leaving dead controls.
 
-Glass is confined to navigation and small control surfaces. Use native AppKit material that follows effective appearance and accessibility settings; do not change Ghostty's opacity or layer ownership to simulate glass. Preserve the deployment floor. Reduce Transparency makes materials opaque; Reduce Motion removes travel while keeping hover-intent delays.
+Glass is confined to navigation and small controls. Native AppKit material follows effective appearance and accessibility settings. Preserve the deployment floor and Ghostty's opacity and layer ownership. Reduce Transparency makes materials opaque; Reduce Motion removes travel but keeps hover-intent delays.
 
-The outer content view clips the shared background to the window corners while retaining native titled-window controls. The sidebar's shadow sits outside its clipped material. Its glass and catalog viewport animate together for 380 ms with the prototype's easing curve, keeping the first catalog row stationary. Scrollbars are enabled only when content exceeds the final viewport. Catalog padding is 8 pt at the top, 6 pt horizontally and 12 pt at the bottom; adjacent repo groups have a 16.5 pt gap including a subtle separator.
+The outer content view clips the shared background to the window corners and retains native titled-window controls. The sidebar shadow stays outside its clipped material. Glass and catalog viewport animate together for 380 ms with the prototype easing, keeping the first row stationary. Scrollbars appear only when content exceeds the final viewport. Catalog padding is 8 pt top, 6 pt horizontal, 12 pt bottom; repo groups have a 16.5 pt gap including a subtle separator.
 
 ### Icons
 
-Chrome icons use monochrome SF Symbols with regular weight, configured at 12 pt for toolbar actions. Add repo and new tab both use the same `plus` symbol, size, and weight; close tab uses `xmark`; pin uses `sidebar.left`; overview uses `square.grid.2x2`. Use image-only native buttons so symbols share native alignment metrics and do not inherit text baselines. Find actions use `chevron.left`, `chevron.right`, and `xmark` with the same image configuration and circular feedback. Smaller disclosure symbols retain their existing 10 pt frames and regular weight. Do not substitute text characters for action icons. Prototype SVGs use a consistent 12 px box and 1.5 px stroke; native SF Symbols remain authoritative for optical alignment.
+Use image-only native buttons with monochrome, regular-weight SF Symbols: 12 pt for toolbar actions, 10 pt frames for disclosures. Add repo and new tab share `plus`; close uses `xmark`, pin `sidebar.left`, overview `square.grid.2x2`. Find uses `chevron.left`, `chevron.right`, and `xmark` with the same image configuration and circular feedback. Native symbol metrics own alignment; do not use text baselines or characters as icons. Prototype SVGs use a 12 px box and 1.5 px stroke.
 
 ### Button feedback
 
-Add repo, pin sidebar, new tab, close tab, and tab overview use a circular neutral background on hover and a stronger circular background while pressed, with no movement or scaling. Background diameter is 28 pt, capped by the button bounds; close uses 20 pt. Pin remains highlighted while pinned. Close appears when the whole tab is hovered or keyboard-focused, and remains visible while the close button has focus. Reserve 38 pt to the right of the title so visibility never moves the text. Buttons expose native tooltips and accessibility labels; tooltips include existing shortcuts where applicable. AppKit owns release-to-activate, drag-out cancellation, and keyboard focus.
+Add repo, pin, new tab, close tab, and overview use neutral circular hover and stronger pressed fills, without movement or scaling. Diameter is 28 pt, capped by button bounds; close uses 20 pt. Pin stays highlighted while pinned. Close appears on tab hover or keyboard focus, including focus on the close button. Reserve 38 pt right of the title to prevent text movement. Native tooltips include existing shortcuts; buttons expose accessibility labels. AppKit owns release-to-activate, drag-out cancellation, and keyboard focus.
 
 ### Sidebar interaction
 
-The app starts with the workspace chip. Hovering it for 150 ms expands the catalog. Passing across it sooner, dragging with a mouse button held, beginning a drag, losing window focus, or pressing Escape cancels pending entry. Explicit click or keyboard activation opens immediately. The panel stays open while the pointer crosses between its header and list.
+Startup shows the workspace chip. Hover for 150 ms to expand the catalog; click or keyboard activation opens immediately. A faster crossing, held mouse button, drag start, window blur, or Escape cancels pending entry. Crossing between header and list keeps it open.
 
-Selecting a workspace keeps the catalog open and returns that workspace's existing tabs and focused pane. After entering the list, returning to the chip for 150 ms folds it; a quick crossing does not. Leaving the transient panel schedules closure after 250 ms, and re-entering cancels it. Keyboard focus inside the catalog protects it from pointer-exit closure. Escape, an outside click, or moving keyboard focus outside dismisses the transient panel. Pinned panels survive those dismissals. Pinning reserves space for terminal content; unpinning returns to the chip. Cmd-B toggles pinned and chip states.
+Workspace selection keeps the catalog open and restores that workspace's tabs and focused pane. After entering the list, hovering the chip for 150 ms folds it; a quick crossing does not. Pointer exit closes the transient panel after 250 ms unless re-entry or keyboard focus inside protects it. Escape, outside click, or keyboard focus leaving dismisses it. Pinned panels survive these dismissals and reserve terminal space; unpinning returns to the chip. Cmd-B toggles pinned and chip states.
 
-Repo headings collapse their rows without changing the selected workspace or closing terminals. Collapse state and session marks last only for the app run. A green dot means that workspace still owns a tab; an inactive dot means it does not. The workspace chip has no session dot. Home is not a repo group, so it has no heading to collapse.
+Repo headings collapse rows without changing selection or closing terminals. Collapse state and session marks last for the app run. Green means a workspace owns a tab; dim means it does not. The chip has no session dot; Home has no collapsible heading.
 
-The row under the pointer uses the same neutral fill as the selected workspace, with appearance-adaptive text; selection is independent. Keep each control's tracking area alive while AppKit updates its visible rectangle, so geometry changes preserve paired enter and exit events.
+Hovered and selected rows share the neutral fill and appearance-adaptive text; hover does not select. Keep tracking areas alive during AppKit visible-rectangle updates to preserve paired enter/exit events across geometry changes.
 
-While the catalog is transient or pinned, holding Command displays numbers for the first nine visible workspace rows. Cmd-1 through Cmd-9 selects those rows and preserves the panel. Collapsed repo rows do not receive numbers; numbering follows displayed order. Unassigned numbers are consumed. With the catalog closed, existing Ghostty tab-number bindings apply. Command keys must never reach the PTY.
+In either open catalog state, holding Command numbers the first nine visible workspace rows in display order, excluding collapsed rows. Cmd-1 through Cmd-9 selects them without dismissing the panel; unassigned numbers are consumed. With the catalog closed, Ghostty tab-number bindings apply.
 
 ### Appearance and typography
 
-The default is Follow System. The native View menu also offers Light and Dark; an override lasts only for the current run and is not written to the state file. The prototype's Appearance selector exposes the same three choices outside the simulated app window.
+The View menu offers Follow System (default), Light, and Dark. Overrides last for the current run only. The prototype exposes the same choices outside its simulated window.
 
 | Role | Dark | Light |
 | --- | --- | --- |
@@ -133,57 +131,71 @@ The default is Follow System. The native View menu also offers Light and Dark; a
 | Live session mark | `#65c888` | `#248247` |
 | Inactive session mark | `#85878d` | `#85878d` |
 
-Native material supplies blur and accessibility fallback. An appearance-adaptive neutral tint, diagonal highlight and thin white edge provide the prototype's glass hierarchy: chips and active tabs stay light, while expanded catalog and quota panels gain body. Light glass has a brighter edge; dark glass keeps a restrained highlight. Chrome colors resolve through the effective appearance without changing the window or terminal background. Quota warning thresholds and system warning colors remain unchanged.
+Native material supplies blur and accessibility fallback. An appearance-adaptive neutral tint, diagonal highlight, and thin white edge keep chips and active tabs light and expanded catalog and quota panels fuller. Light glass has a brighter edge; dark glass a restrained highlight. Chrome colors follow effective appearance independently of window and terminal backgrounds. Quota thresholds and system warning colors do not vary by appearance.
 
-Chrome uses the system font: 12 pt for chips, tabs, repo headings and quota values; 13 pt for workspace rows and semibold provider headings. Percentages and shortcut hints use tabular digits. Terminal fonts remain Fira Code with the explicit Noto Sans Mono CJK SC codepoint fallback, at the compiled 13 pt default. The terminal cursor is a block; Ghostty shell integration keeps title and prompt marking but does not replace that cursor with a bar at the prompt. Appearance changes never change font family, size, weight, spacing, or CJK fallback. Both ANSI palettes remain compiled in `habits.rs`.
+Chrome uses the system font: 12 pt for chips, tabs, repo headings, and quota values; 13 pt for workspace rows and semibold provider headings. Percentages and shortcut hints use tabular digits. Terminals default to 13 pt Fira Code with explicit Noto Sans Mono CJK SC codepoint fallback. Ghostty shell integration retains title and prompt marking and keeps the block cursor at the prompt. Both ANSI palettes are compiled in `habits.rs`.
 
-Every terminal surface has 8 pt of base padding on all four sides, including split and zoomed panes. Ghostty balances the remaining space around its whole-cell grid. Outer terminal layout stays unchanged. The quota summary starts at the terminal area's left edge, with the same 8 pt base text inset.
+Every surface, including split and zoomed panes, has 8 pt base padding on all sides; Ghostty balances whole-cell grid remainders. The quota summary starts at the terminal area's left edge with the same 8 pt text inset.
 
-Effective-appearance changes update the window background, native material and semantic text colors, Ghostty configuration, and every surface, including hidden tabs and zoomed panes. Shells, scrollback, split trees, selection ownership and user-adjusted font size survive. New surfaces inherit the effective appearance. Check Latin, CJK, bold text, ANSI colors, cursor and selection in both modes; no hard-coded light text may remain on light glass.
+Appearance changes update window background, native material, semantic text colors, Ghostty configuration, and all surfaces, including hidden and zoomed panes. Preserve shells, scrollback, split trees, selection ownership, and font family, size (including user adjustments), weight, spacing, and CJK fallback. New surfaces inherit effective appearance. Check Latin, CJK, bold, ANSI colors, cursor, and selection in both modes; light glass must not retain hard-coded light text.
 
-The status line sits under the terminals, not under the sidebar. Combe reads local quota snapshots only: Claude's `~/.claude/rate-limits.json` (or `$CLAUDE_CONFIG_DIR/rate-limits.json`) and Codex's `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`). It never reads credentials, accesses Keychain, queries usage endpoints, starts a CLI, or installs hooks. Claude's externally configured statusline writer supplies the `rate_limits` object with an `updated_at` epoch timestamp, which Combe ignores. The Claude file is read whole up to 64 KiB; larger files are unavailable. Missing or invalid snapshots hide that provider.
+### Quota
 
-Codex discovery enumerates session file metadata in the background, including old dates for resumed sessions. It examines at most eight recently modified files and at most the last 1 MiB of each, skips incomplete lines, and selects the newest timestamped `event_msg` / `token_count` snapshot for the `codex` limit bucket (or older records without a limit ID). Unchanged files reuse their parsed in-memory snapshots. Windows are classified by their duration, not by primary/secondary position; unsupported durations are omitted. A quota event outside the read budget is unavailable rather than triggering an unbounded history scan.
+The status line sits under terminals only. Sources are local Claude `~/.claude/rate-limits.json` (or `$CLAUDE_CONFIG_DIR/rate-limits.json`) and Codex `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`). Combe never reads credentials, accesses Keychain, queries usage endpoints, starts a CLI, or installs hooks. Claude's externally configured statusline writer supplies `rate_limits`; its `updated_at` epoch timestamp is ignored. Read the whole file up to 64 KiB. Larger, missing, or invalid snapshots make that provider unavailable.
 
-One block lists each available provider and the remaining percent of its tighter 5h/7d window. Hover or explicit activation grows the same chip upward to show the windows, including Claude Fable if the local payload supplies it. Provider headings identify rows; do not add a Window / Remaining / Resets in header. Each row presents window, remaining percent, and reset interval, with an accessible label explaining the values. The details use the same 150 ms entry, 250 ms exit, drag cancellation, keyboard-focus protection and Escape behavior as the transient sidebar. Used quota at 60 percent is orange and at 80 percent is red. In the summary, color only the affected provider’s percentage; provider names, separators, and other providers retain their normal text color. If only one provider is available, show only that provider; if none is available, remove the chip and its reserved status height. These are last-recorded snapshots, not a claim about the current login: neither source establishes account identity, and other devices or account switches can make values stale. Passing a reset time does not manufacture a fresh percentage. Combe persists no quota data. Startup reads once; while focused, it checks every 15 minutes, and activation checks only after five minutes since the previous check. Both intervals are compiled into `habits.rs`.
+Codex discovery scans session metadata in the background, including old dates for resumed sessions. Read at most eight recently modified files, at most the last 1 MiB each; skip incomplete lines and select the newest timestamped `event_msg` / `token_count` snapshot for the `codex` bucket or legacy records without a limit ID. Reuse cached snapshots for unchanged files. Classify windows by duration, ignoring primary/secondary position; omit unsupported durations. Events outside the read budget stay unavailable.
 
-Every tab of every worktree lives in the same content view. Only the active tab of the selected worktree is unhidden; every surface everywhere else gets `ghostty_surface_set_occlusion(false)` and stops drawing. The selection is one pointer per worktree plus the current worktree, so the sidebar highlight and the tab bar cannot disagree. Each tab remembers its focused pane. Closing a background pane preserves the current input focus.
+The chip lists available providers and remaining percent of each tighter 5h/7d window. Hover or activation expands the same chip upward to show windows, including Claude Fable when supplied. Use provider headings without a Window / Remaining / Resets in header. Rows show window, remaining percent, and reset interval with accessible labels. Details share the transient sidebar's 150 ms entry, 250 ms exit, drag cancellation, keyboard-focus protection, and Escape behavior.
 
-A tab is named by the focused pane's terminal title, and falls back to the worktree's own name until a title arrives. Ghostty's shell integration writes the running command while a command runs and a shortened path at the prompt, so a pane running `claude` names its tab `claude`; splitting a tab means the name follows whichever pane holds focus. Titles reach the app through `GHOSTTY_ACTION_SET_TITLE` on the runtime action callback, which resolves back to the pane with `ghostty_surface_userdata`. There is no process-name API in `ghostty.h`, and none is invented: a shell without integration keeps the worktree name.
+Used quota at 60 percent is orange, at 80 percent red. In the summary, color only the affected percentage; names, separators, and other providers keep normal text color. Hide unavailable providers; with none, remove the chip and reserved status height.
 
-Splitting reparents the focused surface into a fresh `NSSplitView` and adds a sibling. The sibling opens with that surface's last working directory reported through `GHOSTTY_ACTION_PWD`. If none has arrived, it uses the workspace path. A reported directory does not change workspace selection. New tabs still open on the selected worktree path. Closing removes the leaf and, when a pane is left with a single child, collapses that pane into its parent. Ghostty asks for a close through `close_surface_cb`, which queues the surface and drains it on the main queue.
+Snapshots establish no account identity or current-login claim. Other devices or account switches can make values stale; passing a reset time never produces a fresh percentage. Persist no quota data. Read once at startup, every 15 minutes while focused, and on activation only after five minutes since the last check. Both intervals are compiled in `habits.rs`.
 
-Title updates change the existing label and accessibility text in place. They preserve the tab, close button, and new-tab button instances, including hover and in-progress mouse tracking. The prototype's **Update tab title** control demonstrates this content-only update.
+## Terminals
+
+All tabs share one content view. Only the selected worktree's active tab is visible; other surfaces receive `ghostty_surface_set_occlusion(false)` and stop drawing. One active-tab pointer per worktree plus the current worktree keeps sidebar and tab selection consistent. Each tab remembers its focused pane; closing a background pane preserves input focus.
+
+A tab follows its focused pane's terminal title, falling back to the worktree name. Ghostty shell integration supplies the running command (for example, `claude`) or shortened prompt path. `GHOSTTY_ACTION_SET_TITLE` reaches the runtime action callback, which identifies the pane through `ghostty_surface_userdata`. There is no process-name API in `ghostty.h`; without shell integration, keep the worktree name.
+
+Splitting reparents the focused surface into a new `NSSplitView` with a fresh sibling. The sibling uses the last `GHOSTTY_ACTION_PWD` directory, falling back to the workspace path. Reported directories do not change workspace selection; new tabs use the selected worktree path. Closing removes the leaf and collapses any single-child pane into its parent. `close_surface_cb` queues the surface for removal on the main queue.
+
+Title updates change labels and accessibility text in place, preserving tab, close, and new-tab controls, hover, and in-progress mouse tracking. The prototype's **Update tab title** control demonstrates this.
 
 ### Notifications
 
-Combe consumes terminal notification channels from any program: OSC 9 and OSC 777 carry desktop notification text, BEL requests attention without completion semantics, and shell integration reports command completion with duration and exit status. Commands running for at least five seconds qualify. Shell completion does not identify a turn ending inside a persistent program or a detached background job. Combe installs no client hooks or plugins and changes no client configuration or Ghostty source.
+Any program can send desktop notification text through OSC 9 or OSC 777; BEL requests attention without completion semantics. Shell integration reports duration and exit status for completed commands; those running at least five seconds qualify. Shell completion does not identify a persistent program's turn ending or a detached background job's completion. Combe installs no client hooks or plugins and changes no client configuration or Ghostty source.
 
-Events from the focused pane in the active key window are quiet. Other qualifying events mark their source pane as needing attention. A six-point blue dot appears in its tab; the workspace session dot becomes blue while any pane there needs attention. Repo headings also show the dot when a child workspace needs attention, including collapsed groups. The light/dark attention colors are `#0969da` / `#58a6ff`. Tab titles and repo headings reserve 48 pt on the right for the dot and adjacent control. Accessibility exposes the attention state. Activating a tab acknowledges every pane in that tab, including hidden panes, without changing its remembered pane focus. Focusing a source pane in the active window also acknowledges that pane. Other tabs remain pending.
+Events from the focused pane in the active key window are quiet. Other qualifying events mark their source pane with a six-point blue tab dot. The workspace session dot stays blue while any pane there needs attention; repo headings also show a dot for pending child workspaces, including collapsed groups. Light/dark colors are `#0969da` / `#58a6ff`; tab titles and repo headings reserve 48 pt on the right for the dot and adjacent control. Accessibility exposes attention state. Activating a tab acknowledges all its panes, including hidden ones, and preserves remembered focus. Focusing a source pane in the active window acknowledges that pane. Other tabs remain pending.
 
-macOS owns permission, banners, sound, and Notification Center. Permission is requested on the first qualifying event. Refusing permission leaves the application marks available. Each pane retains at most one pending notification; bursts combine for 250 ms, with at most one delivery per pane every five seconds. Explicit notification text takes precedence over command completion and BEL within a burst. Different panes remain independent. The existing Ghostty OSC throttle runs before the Combe callback and can discard concurrent notifications; application marks cannot recover those events.
+macOS owns permission, banners, sound, and Notification Center. Request permission on the first qualifying event; denial preserves application marks. Each pane independently retains at most one pending notification, combining bursts for 250 ms and delivering at most once every five seconds. Explicit text takes precedence over command completion and BEL within a burst. Ghostty's OSC throttle can discard concurrent events before Combe's callback; application marks cannot recover them.
 
-Clicking a notification selects the source workspace and tab. It focuses the source pane only when that pane is visible. It does not restore zoom or otherwise change split layout. Each pane receives a fresh UUID, so old notifications cannot open a different pane after restart. Closing a pane removes its pending and delivered notifications. Moving a pane preserves its identity and attention state. Notification state lives in memory; tab and sidebar marks derive from it without rebuilding the catalog or terminal views on each event.
+Notification clicks select the source workspace and tab, focusing the source pane only if visible, without restoring zoom or changing split layout. Each pane gets a fresh UUID so old notifications cannot open a different pane after restart. Closing removes its pending and delivered notifications; moving preserves identity and attention. State lives in memory; marks derive from it without rebuilding catalogs or terminal views per event.
 
 The prototype's **Notify background tab** control demonstrates the mark and acknowledgement states. Verify the native application with all three channels, foreground suppression, denied permission, independent panes, a single-pane or zoomed tab skipping the locating cue, notification click routing that does not restore zoom, moved or closed panes, zoom, and light/dark appearances. Program text in notifications remains supplied by the terminal program; Combe's fallback wording is **Terminal needs attention**, **Command finished**, **Command succeeded**, or **Command failed**.
 
-Entering a tab that currently shows more than one pane and has a new pending notification gives each visible source pane a one-time locating cue: a 1 pt inner border in the attention color, reaching 65 percent opacity after 180 ms and fading out over the remainder of 1.2 seconds. A single-pane tab, or a zoomed tab that shows only one pane, has no locating cue. The cue does not change layout, keyboard focus, acknowledgement, or existing marks. Re-entering without another notification does not repeat it. Clicking a system notification uses the same rule and does not restore zoom. The overlay passes mouse input through to the terminal. Reduce Motion replaces the fade with a brief static border. Core Animation owns the finite animation; no polling or repeating timer is used.
+Entering a tab with a new pending notification cues each visible source pane once, only if more than one pane is currently visible. Single-pane and single-visible-pane zoomed tabs skip it. The cue is a 1 pt inner attention-colored border: 65 percent opacity at 180 ms, fading out over the remainder of 1.2 seconds. It preserves layout, focus, acknowledgement, and marks, passes mouse input through, and never repeats without a new notification. System-notification clicks use the same rule. Reduce Motion uses a brief static border; otherwise Core Animation owns the finite animation, without polling or repeating timers.
 
 ### Tab Overview
 
-The grid button at the right of the tab bar and Cmd-Shift-Backslash toggle an overview of the current workspace only. The View menu exposes the same command. Each card contains the whole tab's last rendered terminal image, including its visible split arrangement or zoomed pane, and its title. Images are static, may lag behind background output, live only in memory, and are released when the overview closes. A surface without a rendered image uses its terminal background until it has a frame.
+The tab bar's right-hand grid button, Cmd-Shift-Backslash, and View menu toggle the current workspace's overview. Cards show titles and each whole tab's last rendered image, including visible splits or zoom. Images are static, may lag behind background output, stay in memory, and are released when the overview closes. A surface without a frame shows its terminal background.
 
-Clicking a card enters that tab. Return enters the tab focused before opening the overview, or a card reached through normal keyboard focus. Escape returns without switching tabs. There is no arrow-key navigation, reordering, closing, or cross-workspace aggregation in the overview. Other unmodified keys must not reach the terminal while the overview is open. Command shortcuts dismiss the overview before following the existing application command path.
+Click enters a card's tab. Return enters the previously focused tab or a card reached by normal keyboard focus. Escape returns without switching tabs and restores the prior responder if available. No arrow navigation, reordering, closing, or cross-workspace aggregation. Other unmodified keys never reach terminals; Command shortcuts dismiss the overview before normal application routing.
 
-The overview enters and exits with a 180 ms ease-in-out crossfade. Reduce Motion switches immediately. Repeated toggles replace the current transition; focus and tab selection update immediately without waiting for animation. The overview covers the terminal area without reparenting or resizing terminal surfaces. Its opaque background matches the window background in both appearances and redraws when the effective appearance changes. The sidebar and tab bar retain their positions. Cards use 8 pt padding, 24 pt grid gaps and outer padding, a 20 pt title line, and the selected-row neutral fill. The grid scrolls vertically as needed and follows light and dark appearance. Opening or dismissing it preserves sessions, split geometry and zoom; Escape restores the prior responder when it is still available.
+Use a 180 ms ease-in-out crossfade, immediate under Reduce Motion. Repeated toggles replace the transition; focus and selection update immediately. Cover terminals without reparenting or resizing them; preserve sessions, split geometry, zoom, sidebar, and tab-bar positions. The opaque background matches the window and redraws on appearance changes. Cards use selected-row neutral fill, 8 pt padding, 24 pt grid gaps and outer padding, and a 20 pt title line. The grid scrolls vertically as needed and follows both appearances.
 
-Zooming moves the focused surface above its hidden split tree and leaves a placeholder at its original position. Toggling again restores that position without recreating terminals. Zoom is retained per tab; closing a pane or adding a split restores the tree first. A tab with one surface is unchanged.
+### Zoom and pane movement
 
-Moving a pane to a new tab reparents that surface without recreating its terminal, collapses the split it leaves behind, and opens the new tab on the same workspace, focused. It restores zoom first and does nothing when the tab has one pane. Combe offers no inverse: a tab does not merge back into a split.
+Zoom moves the focused surface above its hidden split tree, leaving a placeholder for restoration without recreating terminals. Zoom is retained per tab; toggling restores it. Closing a pane or adding a split restores the tree first. Single-surface tabs are unchanged.
 
-Command-modified keys belong to the app and never reach the PTY. Control sequences always reach the PTY. Releasing a selection on a surface copies that text to the system clipboard (`copy-on-select`). Cmd-C still copies. Terminal clipboard reads are denied by default; ordinary paste remains available, while unsafe pastes are denied with the system alert sound. Cmd-click on a terminal URL sends `GHOSTTY_ACTION_OPEN_URL`; Combe opens `http`, `https`, and `mailto` in the default handler.
+Moving a pane to a new tab restores zoom first, reparents the surface without recreating its terminal, collapses the old split, and focuses the new tab in the same workspace. Single-pane tabs are unchanged. There is no inverse tab-to-split merge.
 
-Search lives in libghostty. `GHOSTTY_ACTION_START_SEARCH` adds a find bar as a subview in the top-right corner of that surface; every edit sends `search:<needle>` through `ghostty_surface_binding_action`, and `SEARCH_TOTAL` / `SEARCH_SELECTED` feed the match counter. `END_SEARCH` removes the bar and returns focus to the surface.
+### Input and search
+
+Command-modified keys belong to the app and never reach the PTY; Control sequences always reach the PTY. Selection release copies to the system clipboard (`copy-on-select`); Cmd-C also copies. Terminal clipboard reads default to denied. Ordinary paste remains available; unsafe paste is denied with the system alert sound. Cmd-click sends `GHOSTTY_ACTION_OPEN_URL`; only `http`, `https`, and `mailto` open in the default handler.
+
+libghostty owns search. `GHOSTTY_ACTION_START_SEARCH` adds the surface's top-right find bar; edits send `search:<needle>` through `ghostty_surface_binding_action`. `SEARCH_TOTAL` / `SEARCH_SELECTED` feed the counter; `END_SEARCH` removes the bar and restores surface focus.
+
+### Shortcuts
 
 | Key | Action |
 | --- | --- |
@@ -211,44 +223,42 @@ Search lives in libghostty. `GHOSTTY_ACTION_START_SEARCH` adds a find bar as a s
 
 ## CLI
 
-One binary, two entry points, separated by `argv[0]`. Running it as `<something>.app/Contents/MacOS/Combe` with no arguments opens the window; that is what the Dock, Finder, and `open -a` do. Every other invocation is the CLI, and no arguments means help.
+`argv[0]` selects between two entry points in one binary: `<something>.app/Contents/MacOS/Combe` without arguments opens the GUI (Dock, Finder, `open -a`); every other invocation is CLI, with no arguments showing help. Use `argv[0]` because `current_exe()` resolves the `make install` symlink on `PATH` back into the bundle.
 
-`argv[0]` rather than `current_exe()`, because `make install` symlinks `combe` onto `PATH` and `current_exe()` resolves that symlink back into the bundle.
+`list`, `add`, `remove`, and `cleanup` operate on `state.json` without AppKit. `cleanup` removes registered paths whose directories no longer exist.
 
-`list`, `add`, `remove`, and `cleanup` read and write `state.json` and never touch AppKit. `cleanup` drops registered repo paths whose directory no longer exists, which is the recovery path for a checkout deleted outside Combe.
-
-Both the GUI and CLI stop state edits when reading the state file fails. Saves atomically replace the file, preserving the previous contents if writing fails.
+GUI and CLI stop state edits on read failure. Saves replace the file atomically, preserving old contents on write failure.
 
 ### Hop
 
-A first argument that is not one of those subcommands is a **hop**: `combe .`, `combe ..`, `combe ~/git/combe`, `combe /abs/path`. Subcommand names win, so a directory called `list` is unreachable by name. The CLI expands a leading `~`, canonicalizes, and requires a directory; a file, a missing path, or an unreadable state file is a message on stderr and a nonzero exit, and Combe is never raised. A name that cannot be canonicalized and does not look like a path is still the old unknown-command error.
+A non-subcommand first argument is a **hop**: `combe .`, `combe ..`, `combe ~/git/combe`, `combe /abs/path`. Subcommands win; a directory named `list` is unreachable by that name. Expand leading `~`, canonicalize, and require a directory. Files, missing paths, or unreadable state report to stderr and exit nonzero without raising Combe. An uncanonicalizable name that does not look like a path gets the unknown-command error.
 
-The hop itself is one `combe:` URL, the canonical directory as its path, opened through `NSWorkspace`. That is the smallest entry point that both raises a running Combe and cold-launches it, and it reuses the URL-scheme plumbing `ssh:` and `x-man-page:` already go through. `open -a Combe <dir>` is not the hop: the `public.directory` document type registers the folder as a repo, which is exactly what a hop must not do.
+Open one `combe:` URL through `NSWorkspace`, using the canonical directory as its path. The shared URL-scheme handler supports both running and cold-launched Combe. Do not use `open -a Combe <dir>`: its `public.directory` handler registers the folder as a repo, which a hop must never do.
 
-The window resolves the hop against the catalog, never the CLI, so the answer matches what the sidebar currently shows. The directory is matched against registered rows only, and the longest ancestor-or-equal row wins. The injected Home row is not a prefix bucket; `$HOME/git/recall` is not a Home hit merely because it sits under `$HOME`.
+The window resolves the hop against the displayed catalog's registered rows; the CLI does not. The longest ancestor-or-equal path wins. Exclude injected Home from prefix matching: merely being under `$HOME` is not a hit.
 
-- Hit. Select that workspace and open a new tab whose cwd is the workspace root, not the subdirectory the user typed. Nothing is written to `state.json`.
-- Miss. Do not register anything. Select the Home workspace and open a new tab owned by `$HOME` whose shell starts in the requested directory. A tab therefore carries a workspace identity and a cwd separately; they differ only in this case.
+- Hit: select that workspace; open a new tab at its root, ignoring the requested subdirectory. Do not write `state.json`.
+- Miss: register nothing; select Home and open a new tab owned by `$HOME` with the requested cwd. Only this case separates tab workspace identity from cwd.
 
-A hop always opens a new tab rather than reusing one. Combe never writes `cd` into a live surface, and never guesses a repo's main worktree from an unregistered path. `combe ~` is the degenerate miss: a plain Home tab. Once `$HOME` is a registered row, it is an ordinary hit like any other.
+Always open a new tab; never reuse one, inject `cd` into a live surface, or infer a main worktree from an unregistered path. `combe ~` opens a plain Home tab unless `$HOME` is registered, when normal matching applies.
 
-Every surface sets `COMBE=1` through Ghostty's `env` override, after `TERM_PROGRAM=ghostty`. A hop that sees that mark prints a message and exits without opening a `combe:` URL, so an agent running inside Combe cannot stack another tab. The same mark refuses a second GUI when the bundle executable is launched from a Combe shell. `list`, `add`, `remove`, and `cleanup` still run.
+Every surface sets `COMBE=1` through Ghostty's `env` override after `TERM_PROGRAM=ghostty`. That mark makes hops print a message and exit without opening a URL, and refuses a second GUI launched from a Combe shell. Catalog subcommands still run.
 
 ## System entry points
 
-`Info.plist` registers Combe with LaunchServices so other applications can hand it work. macOS has no default-terminal role: browser and mail are privileged LaunchServices roles, terminals are not. What exists instead:
+`Info.plist` registers these LaunchServices entry points. macOS has no default-terminal role equivalent to browser or mail:
 
 - Document types. `public.directory` opens the folder as a workspace. `public.unix-executable` and `.command`, `.sh`, `.zsh`, `.bash` open a tab in the file's parent. Both claim `Alternate` rank, so Combe appears in Finder's Open With and Get Info without displacing the current handler.
 - URL schemes. `combe:` for the CLI hop, plus `ssh:` and `x-man-page:`. `telnet:` is not claimed, because macOS ships no `telnet` binary and the handler would always fail.
 - One service, "New Combe Tab Here", for the Finder right-click menu and any application that sends a file path.
 
-`crates/combe/src/entry.rs` is the boundary. It turns a path or URL into a workspace to open, a hop to land, or a shell line to type, rejects hosts, users, man pages, and sections outside a character whitelist, quotes every interpolated value, and separates options from operands with `--`. It has no AppKit dependency, so `cargo test -p combe` covers the injection cases and the hop resolution directly. A `combe:` URL can only ever open a directory, whatever sends it: it re-canonicalizes the path in the window process and drops anything that is not a directory.
+`crates/combe/src/entry.rs` resolves paths and URLs into workspaces, hops, or shell input. It whitelists characters in hosts, users, man pages, and sections, quotes interpolated values, and separates options from operands with `--`. It has no AppKit dependency; `cargo test -p combe` covers injection cases and hop resolution. Every `combe:` URL is re-canonicalized in the window process and rejected unless it names a directory.
 
-Executable file paths containing ASCII control characters are rejected before constructing shell input, because terminal line editors interpret those characters before shell quoting applies. Anything that would execute a command asks first. The tab appears only after the user confirms an alert showing the exact line. That line is then written into the new surface as `initial_input`, not run as the surface command, so the tab stays an ordinary long-lived workspace session afterwards.
+Reject executable paths containing ASCII control characters before constructing shell input; line editors interpret them before shell quoting. Command execution requires an alert showing the exact line. Only confirmation opens the tab and writes that line as `initial_input`, leaving an ordinary long-lived workspace session. Never use it as the surface command.
 
 ## Catalog
 
-A **repo** is a path the user added. A **worktree** is one record from `git worktree list --porcelain` for that repo. A **folder workspace** is a registered path that is not a git checkout: one row, no branch. A **Home workspace** is a built-in folder workspace at `$HOME`.
+Use the terms in [CONTEXT.md](../CONTEXT.md). Folder workspaces are single rows without a branch.
 
 1. Load `state.json`
 2. For each repo, `git -C <path> worktree list --porcelain`
@@ -259,7 +269,7 @@ A **repo** is a path the user added. A **worktree** is one record from `git work
 
 Identity is the resolved worktree path. `list`, `add`, `remove`, and `cleanup` still operate only on registered repos.
 
-The window loads the catalog synchronously on startup so the first workspace can open at once. Every later refresh, when the app becomes active, after adding repos or opening a new tab, or when the user clicks an empty part of the sidebar, runs Git on a background thread and applies the result on the main queue; a refresh requested during a scan runs once more after it. Tab selection and session marks reuse that catalog without running Git.
+Startup loads the catalog synchronously. Later refreshes run Git in the background and apply results on the main queue: on activation, after adding repos or opening a tab, and on sidebar empty-area clicks. A refresh requested during a scan runs once more afterwards. Tab selection and session marks reuse the catalog without Git.
 
 `crates/combe-catalog` has no AppKit dependency. `cargo test -p combe-catalog` is the fast loop.
 
@@ -330,3 +340,4 @@ Inspect both appearances and the component selector, including Typography. User-
 - Git porcelain over libgit2.
 - Preferences as Rust constants over a config file.
 - `initial_input` plus a confirmation alert over `config.command`: libghostty always runs `command` through `/bin/sh -c`, and an external URL must never reach a shell without the user seeing the line.
+- Quota is a compiled instrument, not a surface. Local snapshots of tools the owner already runs may show remaining percent. Claude and Codex are the closed provider list. It may not grow another panel, another provider, a setting, or a network.

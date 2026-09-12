@@ -21,7 +21,7 @@ Use these words in code, commits, and docs. If a new domain word sticks, add it 
 | Split | A cut that reparents the focused surface into a new pane beside a fresh sibling. |
 | Chrome | Everything AppKit draws: window, sidebar, tab bar, status line, splits. Never the terminal. |
 | Status line | Bottom chrome row on the right pane. Present only while a quota chip is shown. |
-| Quota | One status-line block of locally recorded CLI subscription snapshots. Each name is followed by remaining percent of its tightest 5h/7d window. Hover or activation expands the chip upward with every available provider's windows. |
+| Quota | Compiled instrument on the status line. Local Claude and Codex subscription snapshots only. Each name is followed by remaining percent of its tightest 5h/7d window. Hover or activation expands the same chip. No third provider, extra panel, setting, or network. |
 | Habits | Compiled-in preferences in `crates/combe/src/habits.rs`. There is no config file. |
 | Occlusion | A hidden tab's surfaces are told to stop drawing via `ghostty_surface_set_occlusion`. |
 | State file | `~/Library/Application Support/combe/state.json` |

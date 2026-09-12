@@ -3,7 +3,9 @@ use std::collections::HashSet;
 
 use objc2::MainThreadOnly;
 use objc2::rc::Retained;
-use objc2_app_kit::{NSAccessibility, NSAutoresizingMaskOptions, NSScrollView, NSView};
+use objc2_app_kit::{
+    NSAccessibility, NSAutoresizingMaskOptions, NSScrollElasticity, NSScrollView, NSView,
+};
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize};
 
 use crate::chrome_view::{self, ActionButton, ClickView};
@@ -40,6 +42,9 @@ impl TabBar {
         scroll.setAutomaticallyAdjustsContentInsets(false);
         scroll.setDrawsBackground(false);
         scroll.setHasHorizontalScroller(false);
+        scroll.setHasVerticalScroller(false);
+        scroll.setVerticalScrollElasticity(NSScrollElasticity::None);
+        scroll.setUsesPredominantAxisScrolling(true);
         scroll.setDocumentView(Some(&document));
         Self {
             document,

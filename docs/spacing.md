@@ -140,7 +140,7 @@ Definition notes and source:
 - **T07** — Maximum native title frame ends8pt before the close target. [Source](../crates/combe/src/tab_bar.rs).
 - **T08** — Native NSButton centers an SF Symbol inside a20 ×20 target. [Source](../crates/combe/src/chrome_view.rs).
 - **T09** — Native target36 ×36 with a centered28pt circular hover background. [Source](../crates/combe/src/tab_bar.rs).
-- **T10** — This is unused tab capacity, not a fixed margin. Overflow scrolls. [tab_bar.rs:TabBar::update; window.rs:layout_chrome](../crates/combe/src/tab_bar.rs).
+- **T10** — This is unused tab capacity, not a fixed margin. Overflow scrolls horizontally only. [tab_bar.rs:TabBar::update; window.rs:layout_chrome](../crates/combe/src/tab_bar.rs).
 
 ### Sidebar catalog
 

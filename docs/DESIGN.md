@@ -80,7 +80,7 @@ The sidebar is one glass surface with three states: a workspace chip, a transien
 | Transient catalog | Default 300 pt wide, 12 pt from the top and left; height follows the list and is capped by the window; the same 18 pt corner radius as the chip |
 | Pinned sidebar | Same header and width as the transient catalog; extends to 12 pt above the bottom; reserves terminal space |
 | Header controls | Traffic lights, workspace text, add and pin share a vertical center 30 pt below the window content top in all sidebar states; 28 pt hit targets; 4 pt between add and pin, 4 pt from pin to the glass right edge; workspace text has a 12 pt leading inset within its trigger; add and pin remain available when the catalog is closed |
-| Tabs | 36 pt high, 180 pt nominal width, 18 pt glass and hover corners; keyboard focus follows a 16 pt path inset by 2 pt with a 2 pt stroke; 12 pt gaps; active tab has the restrained glass treatment; long titles truncate; close and new-tab symbols have no separate fill or border at rest; close has a 20 pt target, 10 pt right inset, and appears on tab hover or keyboard focus without moving the title |
+| Tabs | 36 pt high, 180 pt nominal width, 18 pt glass and hover corners; keyboard focus follows a 16 pt path inset by 2 pt with a 2 pt stroke; 12 pt gaps; active tab has the restrained glass treatment; long titles truncate; overflow scrolls horizontally only; close and new-tab symbols have no separate fill or border at rest; close has a 20 pt target, 10 pt right inset, and appears on tab hover or keyboard focus without moving the title |
 | Repo heading | 30 pt high, folder symbol, trailing disclosure indicator, 12 pt medium system text |
 | Workspace row | 34 pt high with 2 pt vertical spacing; 16 pt corners; session dot at 32 pt, label at 48 pt, and selected checkmark |
 | Shortcut hint | 18 pt circle, 11 pt tabular numeral centered horizontally and vertically using its measured text height, subtle fill; replaces the checkmark without moving the row |
@@ -285,7 +285,7 @@ Preserve these capabilities when changing chrome. Prototype states demonstrate a
 | Capability | Required verification |
 | --- | --- |
 | Workspace sessions | Switch away and back; tab, split, focused pane, title, shell PID and output survive; repo collapse does not close sessions |
-| Tabs | Create, select, close and navigate by key; keep workspace ownership; closing the last workspace tab selects another live workspace, or closes the window when none remain |
+| Tabs | Create, select, close and navigate by key; keep workspace ownership; closing the last workspace tab selects another live workspace, or closes the window when none remain; the tab strip does not move vertically |
 | Splits and zoom | Split right and down, nest and resize, move focus, zoom and restore, close a leaf and promote its sibling; a new sibling inherits the focused pane's reported working directory; preserve PTYs and focus |
 | Catalog | Add multiple repos with the native directory picker; include folder workspaces; Home is a single `home` row without adding a repo; adding `$HOME` as a repo replaces the built-in row; refresh on activation without blocking input |
 | Hover panels | Check entry, return-to-chip and exit delays; fast pointer sweeps, drag, outside click, Escape, blur, keyboard focus, pinning and resizing |

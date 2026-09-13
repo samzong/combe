@@ -37,10 +37,6 @@ pub fn run() -> Option<ExitCode> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(command) = args.first().map(String::as_str) else {
         if launched_from_bundle() {
-            if inside() {
-                eprintln!("combe: already inside Combe");
-                return Some(ExitCode::FAILURE);
-            }
             return None;
         }
         print_usage();

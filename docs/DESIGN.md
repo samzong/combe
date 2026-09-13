@@ -242,7 +242,7 @@ The window resolves the hop against the displayed catalog's registered rows; the
 
 Always open a new tab; never reuse one, inject `cd` into a live surface, or infer a main worktree from an unregistered path. `combe ~` opens a plain Home tab unless `$HOME` is registered, when normal matching applies.
 
-Every surface sets `COMBE=1` through Ghostty's `env` override after `TERM_PROGRAM=ghostty`. That mark makes hops print a message and exit without opening a URL, and refuses a second GUI launched from a Combe shell. Catalog subcommands still run.
+Every surface sets `COMBE=1` through Ghostty's `env` override after `TERM_PROGRAM=ghostty`. That mark makes hops print a message and exit without opening a URL. Catalog subcommands and a bundle GUI launch still run.
 
 ## System entry points
 

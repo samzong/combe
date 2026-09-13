@@ -28,7 +28,7 @@ use crate::entry::{self, Entry};
 use crate::ghostty;
 use crate::habits;
 use crate::menu;
-use crate::overview::Overview;
+use crate::overview::{Overview, Step};
 use crate::quota_panel;
 use crate::split;
 use crate::surface::SurfaceView;
@@ -1069,6 +1069,7 @@ pub(crate) fn toggle_overview() {
     });
     if let Some((window, overview)) = mounted {
         window.makeFirstResponder(Some(&*overview));
+        overview.focus_active();
     }
 }
 
@@ -1123,7 +1124,24 @@ fn handle_overview_event(event: &NSEvent) -> bool {
     }
     match event.keyCode() {
         53 => dismiss_overview(true),
-        36 | 76 => {
+        123..=126 => {
+            let step = match event.keyCode() {
+                123 => Step::Left,
+                124 => Step::Right,
+                125 => Step::Down,
+                _ => Step::Up,
+            };
+            let overview = STATE.with(|state| {
+                state
+                    .borrow()
+                    .as_ref()
+                    .and_then(|state| state.overview.clone())
+            });
+            if let Some(overview) = overview {
+                overview.move_focus(step);
+            }
+        }
+        36 | 76 | 49 => {
             let card = STATE.with(|state| {
                 let state = state.borrow();
                 let state = state.as_ref()?;

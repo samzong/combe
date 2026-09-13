@@ -1,6 +1,7 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use objc2::rc::Retained;
+use objc2::runtime::AnyObject;
 use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{
     NSAccessibility, NSAutoresizingMaskOptions, NSBezierPath, NSBitmapImageRep, NSColor,
@@ -20,7 +21,16 @@ use crate::tabs::Tab;
 const INSET: f64 = 24.0;
 const GAP: f64 = 24.0;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Step {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
 struct Card {
+    id: u64,
     button: Retained<ClickView>,
     image: Retained<NSImageView>,
     title: Retained<NSTextField>,
@@ -30,6 +40,8 @@ pub struct OverviewIvars {
     scroll: RefCell<Option<Retained<NSScrollView>>>,
     document: Retained<NSView>,
     cards: Vec<Card>,
+    active: u64,
+    columns: Cell<usize>,
 }
 
 define_class!(
@@ -112,6 +124,7 @@ impl Overview {
                 button.addSubview(&title);
                 document.addSubview(&button);
                 Card {
+                    id,
                     button,
                     image,
                     title,
@@ -122,6 +135,8 @@ impl Overview {
             scroll: RefCell::new(None),
             document,
             cards,
+            active,
+            columns: Cell::new(1),
         });
         let view: Retained<Self> = unsafe { msg_send![super(allocated), initWithFrame: frame] };
         view.setAutoresizingMask(
@@ -156,6 +171,7 @@ impl Overview {
         scroll.setFrame(self.bounds());
         let size = scroll.contentSize();
         let (columns, width, height, content_height) = grid(size, self.ivars().cards.len());
+        self.ivars().columns.set(columns);
         self.ivars()
             .document
             .setFrameSize(NSSize::new(size.width, content_height));
@@ -173,6 +189,59 @@ impl Overview {
                 NSSize::new((width - 16.0).max(0.0), 20.0),
             ));
         }
+    }
+}
+
+impl Overview {
+    pub fn focus_active(&self) {
+        let active = self.ivars().active;
+        if let Some(index) = self.ivars().cards.iter().position(|card| card.id == active) {
+            self.focus_index(index);
+        }
+    }
+
+    pub fn move_focus(&self, step: Step) {
+        let Some(index) = self.focused_index() else {
+            self.focus_active();
+            return;
+        };
+        if let Some(target) = neighbour(
+            index,
+            self.ivars().cards.len(),
+            self.ivars().columns.get(),
+            step,
+        ) {
+            self.focus_index(target);
+        }
+    }
+
+    fn focused_index(&self) -> Option<usize> {
+        let current = self.window()?.firstResponder()?;
+        self.ivars().cards.iter().position(|card| {
+            std::ptr::eq(
+                &*card.button as *const _ as *const AnyObject,
+                &*current as *const _ as *const AnyObject,
+            )
+        })
+    }
+
+    fn focus_index(&self, index: usize) {
+        let Some(window) = self.window() else { return };
+        let button = &self.ivars().cards[index].button;
+        window.makeFirstResponder(Some(&**button));
+        button.scrollRectToVisible(button.bounds());
+    }
+}
+
+fn neighbour(index: usize, count: usize, columns: usize, step: Step) -> Option<usize> {
+    let column = index % columns;
+    let row = index / columns;
+    let last_row = count.saturating_sub(1) / columns;
+    match step {
+        Step::Left => (column > 0).then(|| index - 1),
+        Step::Right => (column + 1 < columns && index + 1 < count).then(|| index + 1),
+        Step::Up => (row > 0).then(|| index - columns),
+        Step::Down => (row < last_row).then(|| (index + columns).min(count - 1)),
     }
 }
 
@@ -250,6 +319,24 @@ fn snapshot(tab: &Tab, context: &CIContext) -> Option<Retained<NSImage>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arrows_stay_inside_rows_and_stop_at_grid_edges() {
+        let columns = 3;
+        let count = 7;
+        assert_eq!(neighbour(0, count, columns, Step::Left), None);
+        assert_eq!(neighbour(2, count, columns, Step::Right), None);
+        assert_eq!(neighbour(3, count, columns, Step::Left), None);
+        assert_eq!(neighbour(1, count, columns, Step::Right), Some(2));
+        assert_eq!(neighbour(6, count, columns, Step::Right), None);
+        assert_eq!(neighbour(1, count, columns, Step::Up), None);
+        assert_eq!(neighbour(4, count, columns, Step::Up), Some(1));
+        assert_eq!(neighbour(1, count, columns, Step::Down), Some(4));
+        assert_eq!(neighbour(5, count, columns, Step::Down), Some(6));
+        assert_eq!(neighbour(6, count, columns, Step::Down), None);
+        assert_eq!(neighbour(0, 1, 1, Step::Down), None);
+        assert_eq!(neighbour(0, 1, 1, Step::Right), None);
+    }
 
     #[test]
     fn cards_stay_in_bounds_and_overflow_scrolls() {

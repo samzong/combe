@@ -195,7 +195,7 @@
     .window.command-held .row[data-shortcut] .check { opacity: 0; }
     .row:hover, .row:focus-visible { background: var(--selection); }
     .right { position: absolute; inset: 0; border-radius: inherit; display: grid; grid-template-rows: calc(36px + 2 * var(--inset)) minmax(0, 1fr) calc(28px + var(--inset)); }
-    .tabs { display: flex; gap: var(--inset); align-items: center; padding: var(--inset); padding-left: calc(var(--menu-right) + var(--inset)); }
+    .tabs { display: flex; gap: var(--inset); align-items: center; padding: var(--inset); padding-left: calc(var(--menu-right) + var(--inset)); padding-right: calc(48px + var(--inset)); }
     .tab { display: flex; align-items: center; justify-content: space-between; gap: 20px; height: 36px; width: 180px; padding: 0 14px; border-radius: var(--radius-control); color: var(--muted); font-size: 12px; white-space: nowrap; background: var(--idle); }
     .tab.on { background: var(--glass-control); color: var(--text-strong); box-shadow: var(--glass-edge), 0 2px 6px #00000012; backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter); }
     .tab:hover { box-shadow: inset 0 0 0 100px var(--selection); }
@@ -203,6 +203,21 @@
     .tab .label { overflow: hidden; text-overflow: ellipsis; }
     .tab .x { color: var(--muted); font-size: 15px; }
     .newtab { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-control); background: transparent; color: var(--muted); font-size: 20px; font-weight: 300; }
+    .overview-button { position: absolute; right: var(--inset); top: var(--inset); z-index: 7; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--text-soft); isolation: isolate; }
+    .overview-button::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; z-index: -1; }
+    .overview-button svg { width: 12px; height: 12px; stroke-width: 1.5; }
+    .overview-button:hover::before { background: var(--hover); }
+    .overview-button:hover { color: var(--fg); }
+    .overview-button:active::before { background: var(--button-pressed); }
+    .overview-button[aria-expanded="true"]::before { background: var(--selection); }
+    .overview { position: absolute; left: var(--inset); right: var(--inset); top: calc(36px + 2 * var(--inset)); bottom: calc(28px + var(--inset)); z-index: 5; background: var(--bg); overflow-y: auto; scrollbar-width: thin; transition: left 380ms var(--ease); }
+    .window.pinned .overview { left: calc(var(--menu-right) + var(--inset)); }
+    .overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; padding: 24px; align-content: start; }
+    .card { display: block; width: 100%; max-width: 400px; padding: 8px; border: 0; border-radius: var(--radius-row); background: transparent; color: var(--fg); text-align: center; }
+    .card:hover, .card.on { background: var(--selection); }
+    .card .shot { aspect-ratio: 1.6; overflow: hidden; padding: 5px; background: var(--bg); color: var(--text-soft); font: 8px/10px "Fira Code", "Noto Sans Mono CJK SC", Menlo, monospace; text-align: left; white-space: pre-wrap; }
+    .card .shot [data-prompt] { color: var(--prompt); }
+    .card .title { display: block; height: 20px; margin-top: 8px; line-height: 20px; font-size: 12px; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .term { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; margin: 0 var(--inset); overflow: hidden; transition: margin-left 380ms var(--ease); }
     .window.pinned .term, .window.pinned .status-line { margin-left: calc(var(--menu-right) + var(--inset)); }
     .term.single { grid-template-columns: 1fr; }
@@ -329,6 +344,7 @@
         </aside>
         <section class="right" aria-label="Terminal preview">
           <div class="tabs" id="tabs"></div>
+          <button class="overview-button" id="overview-button" type="button" title="Tab Overview (⌘⇧\)" aria-label="Tab Overview" aria-expanded="false" aria-keyshortcuts="Meta+Shift+Backslash"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg></button>
           <div class="term"><div class="pane" id="left"></div><div class="pane" id="right"></div></div>
           <footer class="status-line" aria-label="Usage status">
             <div class="quota" id="quota">
@@ -353,7 +369,7 @@
         <div class="toast" id="toast" role="status" hidden></div>
       </div>
     </div>
-    <div class="footnote"><span>HTML interaction reference · sample terminal and quota data</span><span><kbd>esc</kbd> Dismiss · <kbd>⌘ B</kbd> Pin / unpin</span></div>
+    <div class="footnote"><span>HTML interaction reference · sample terminal and quota data</span><span><kbd>esc</kbd> Dismiss · <kbd>⌘ B</kbd> Pin / unpin · <kbd>⌘ ⇧ \</kbd> Tab Overview</span></div>
     <section id="spacing-inspector" class="spacing-inspector" aria-label="Spacing inspection" hidden>
       <a href="spacing.md">Complete spacing inventory</a>
       <p>Canvas labels measure this prototype in unscaled CSS px. Native values are AppKit pt; N marks a difference. Text edges mean layout boxes, not glyph ink. Click an ID to isolate one measurement. Hidden states remain listed.</p>
@@ -525,6 +541,7 @@
       const session = sessions.get(selected);
       const activeItem = session.items.find(item => item.id === session.active);
       activeItem.attention = false;
+      closeOverview(false);
       tabs.replaceChildren();
       for (const item of session.items) {
         const tab = document.createElement("div");
@@ -626,6 +643,90 @@
       if (value === "confirm" && !dialog.open) dialog.showModal();
     }
     document.getElementById("component").addEventListener("change", renderTabs);
+
+    const overviewButton = document.getElementById("overview-button");
+    let overviewReturn = null;
+    function openOverview() {
+      const session = sessions.get(selected);
+      if (document.querySelector(".overview") || !session) return;
+      overviewReturn = document.activeElement;
+      const overview = document.createElement("div");
+      overview.className = "overview";
+      overview.setAttribute("role", "group");
+      overview.setAttribute("aria-label", "Tab Overview");
+      const grid = document.createElement("div");
+      grid.className = "overview-grid";
+      for (const item of session.items) {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "card" + (item.id === session.active ? " on" : "");
+        card.dataset.id = item.id;
+        card.setAttribute("aria-label", item.label);
+        card.setAttribute("aria-current", String(item.id === session.active));
+        card.innerHTML = `<span class="shot">${left.innerHTML}</span><span class="title"></span>`;
+        card.querySelector(".title").textContent = item.label;
+        card.addEventListener("click", () => enterCard(item.id));
+        grid.append(card);
+      }
+      overview.append(grid);
+      document.querySelector(".right").append(overview);
+      overviewButton.setAttribute("aria-expanded", "true");
+      focusCard(overview.querySelector(".card.on") || overview.querySelector(".card"));
+    }
+    function closeOverview(restore) {
+      const overview = document.querySelector(".overview");
+      if (!overview) return;
+      overview.remove();
+      overviewButton.setAttribute("aria-expanded", "false");
+      if (restore && overviewReturn?.isConnected) overviewReturn.focus({ preventScroll: true });
+      overviewReturn = null;
+    }
+    function enterCard(id) {
+      sessions.get(selected).active = id;
+      renderTabs();
+    }
+    function focusCard(card) {
+      if (!card) return;
+      card.focus({ preventScroll: true });
+      card.scrollIntoView({ block: "nearest" });
+    }
+    function overviewNeighbour(index, count, columns, key) {
+      const column = index % columns;
+      if (key === "ArrowLeft") return column === 0 ? index : index - 1;
+      if (key === "ArrowRight") return column === columns - 1 || index + 1 >= count ? index : index + 1;
+      if (key === "ArrowUp") return index < columns ? index : index - columns;
+      if (index + columns < count) return index + columns;
+      return Math.floor(index / columns) < Math.floor((count - 1) / columns) ? count - 1 : index;
+    }
+    overviewButton.addEventListener("click", () => document.querySelector(".overview") ? closeOverview(true) : openOverview());
+    document.addEventListener("keydown", event => {
+      const overview = document.querySelector(".overview");
+      const toggle = event.metaKey && event.shiftKey && !event.ctrlKey && !event.altKey && (event.code === "Backslash" || event.key === "\\" || event.key === "|");
+      if (toggle) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (overview) closeOverview(true);
+        else openOverview();
+        return;
+      }
+      if (!overview) return;
+      if (event.metaKey) {
+        closeOverview(true);
+        return;
+      }
+      if (event.key === "Tab") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const cards = [...overview.querySelectorAll(".card")];
+      const focused = cards.indexOf(document.activeElement);
+      if (event.key === "Escape") closeOverview(true);
+      else if (event.key === "Enter" || event.key === " ") enterCard(focused < 0 ? sessions.get(selected).active : Number(cards[focused].dataset.id));
+      else if (event.key.startsWith("Arrow")) {
+        const columns = getComputedStyle(overview.querySelector(".overview-grid")).gridTemplateColumns.split(" ").length;
+        const target = focused < 0 ? cards.findIndex(card => card.classList.contains("on")) : overviewNeighbour(focused, cards.length, columns, event.key);
+        focusCard(cards[Math.max(target, 0)]);
+      }
+    }, true);
 
     function setMode(next) {
       clearTimeout(menuTimer);

@@ -538,6 +538,9 @@
         const items = Array.from({ length: id === "gmc-main" ? 2 : 1 }, () => ({ id: ++nextTab, label: `${repo.name} — zsh`, split: id === "gmc-main" }));
         sessions.set(id, { items, active: items[0].id });
       }
+      const session = sessions.get(id);
+      const pending = session.items.find(item => item.attention);
+      if (pending) session.active = pending.id;
       renderTabs();
     }
 

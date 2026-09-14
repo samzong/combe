@@ -96,7 +96,13 @@ impl Tabs {
             .get(workspace)
             .copied()
             .filter(|id| self.get(*id).is_some());
-        let id = remembered.or_else(|| {
+        let pending = self.items.iter().find(|tab| {
+            tab.workspace == workspace
+                && split::surfaces(&tab.root)
+                    .iter()
+                    .any(|view| view.needs_attention())
+        });
+        let id = pending.map(|tab| tab.id).or(remembered).or_else(|| {
             self.items
                 .iter()
                 .find(|tab| tab.workspace == workspace)

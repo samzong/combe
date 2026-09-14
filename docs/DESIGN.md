@@ -31,7 +31,7 @@ Combe is a lightweight native terminal organized around workspaces. Its mission 
 
 The user registers repos by hand. Combe lists their worktrees through Git; it never scans the disk for repos.
 
-Each workspace owns its tabs and remembers its active tab. Selecting a row returns to that session; new tabs belong to it. Closing its last tab switches to another workspace with tabs, or closes the window if none remain.
+Each workspace owns its tabs and remembers its active tab. Selecting a workspace row or pressing Cmd-1 through Cmd-9 enters its first tab with pending attention, in tab-bar order, even when that workspace is already selected. Without pending attention, it restores the remembered active tab, falling back to the first tab. New tabs belong to that workspace. Closing its last tab switches to another workspace with tabs, or closes the window if none remain.
 
 The built-in Home workspace is one `home` row without a repo heading or disclosure; its chip also reads `home`. The [catalog](#catalog) injects it first unless a row owns `$HOME`. Startup opens the first row. Home is not registered or persisted, and `$HOME` is scanned for worktrees only when the user registers it.
 

@@ -309,6 +309,14 @@ pub(crate) fn pinned() -> bool {
     })
 }
 
+pub(crate) fn tab_hints_visible() -> bool {
+    STATE.with(|state| {
+        state.borrow().as_ref().is_some_and(|state| {
+            state.command_held.get() && state.sidebar_mode.get() == Mode::Closed
+        })
+    })
+}
+
 pub(crate) fn resized(width: Option<f64>) {
     STATE.with(|state| {
         if let Some(state) = state.borrow().as_ref() {
@@ -820,6 +828,7 @@ fn update_workspace_hints() {
             }
         }
     });
+    crate::window::set_tab_shortcuts(tab_hints_visible());
 }
 
 pub(crate) fn set_repos(repos: Vec<sidebar::Repo>) {

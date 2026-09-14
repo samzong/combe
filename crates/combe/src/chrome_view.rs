@@ -142,6 +142,9 @@ define_class!(
                     NSSize::new(SESSION_DOT, SESSION_DOT),
                 )).fill();
             }
+            if let Some(number) = self.ivars().shortcut.get() {
+                self.draw_marker(&number.to_string(), self.bounds().size.width - 27.0, true);
+            }
             let Some(opened) = self.ivars().opened.get() else {
                 return;
             };
@@ -159,31 +162,8 @@ define_class!(
                 NSSize::new(SESSION_DOT, SESSION_DOT),
             ))
             .fill();
-            let marker = if let Some(number) = self.ivars().shortcut.get() {
-                Some(number.to_string())
-            } else if self.ivars().selected.get() {
-                Some("✓".into())
-            } else {
-                None
-            };
-            if let Some(marker) = marker {
-                let field = NSTextField::labelWithString(&NSString::from_str(&marker), self.mtm());
-                field.setFont(Some(&NSFont::monospacedDigitSystemFontOfSize_weight(11.0, unsafe { objc2_app_kit::NSFontWeightRegular })));
-                field.setTextColor(Some(&color(habits::CHROME_SOFT)));
-                let frame = NSRect::new(NSPoint::new(bounds.size.width - 27.0, (bounds.size.height - 18.0) / 2.0), NSSize::new(18.0, 18.0));
-                if self.ivars().shortcut.get().is_some() {
-                    color(habits::CHROME_HINT).setFill();
-                    NSBezierPath::bezierPathWithOvalInRect(frame).fill();
-                }
-                field.setFrame(frame);
-                field.setAlignment(objc2_app_kit::NSTextAlignment::Center);
-                let mut text_frame = frame;
-                if self.ivars().shortcut.get().is_some() {
-                    field.sizeToFit();
-                    text_frame.size.height = field.frame().size.height;
-                    text_frame.origin.y += (frame.size.height - text_frame.size.height) / 2.0;
-                }
-                if let Some(cell) = field.cell() { cell.drawWithFrame_inView(text_frame, self); }
+            if self.ivars().shortcut.get().is_none() && self.ivars().selected.get() {
+                self.draw_marker("✓", bounds.size.width - 27.0, false);
             }
         }
 
@@ -325,7 +305,39 @@ impl ClickView {
 
     pub(crate) fn set_shortcut(&self, shortcut: Option<usize>) {
         self.ivars().shortcut.set(shortcut);
+        self.update_hover_button();
         self.setNeedsDisplay(true);
+    }
+
+    fn draw_marker(&self, marker: &str, x: f64, background: bool) {
+        let field = NSTextField::labelWithString(&NSString::from_str(marker), self.mtm());
+        field.setFont(Some(&NSFont::monospacedDigitSystemFontOfSize_weight(
+            11.0,
+            unsafe { objc2_app_kit::NSFontWeightRegular },
+        )));
+        field.setTextColor(Some(&color(if background {
+            habits::CHROME_HINT_TEXT
+        } else {
+            habits::CHROME_SOFT
+        })));
+        let frame = NSRect::new(
+            NSPoint::new(x, (self.bounds().size.height - 18.0) / 2.0),
+            NSSize::new(18.0, 18.0),
+        );
+        if background {
+            color(habits::CHROME_HINT).setFill();
+            NSBezierPath::bezierPathWithOvalInRect(frame).fill();
+        }
+        field.setAlignment(objc2_app_kit::NSTextAlignment::Center);
+        let mut text_frame = frame;
+        if background {
+            field.sizeToFit();
+            text_frame.size.height = field.frame().size.height;
+            text_frame.origin.y += (frame.size.height - text_frame.size.height) / 2.0;
+        }
+        if let Some(cell) = field.cell() {
+            cell.drawWithFrame_inView(text_frame, self);
+        }
     }
 
     fn set_hovered(&self, hovered: bool) {
@@ -342,7 +354,10 @@ impl ClickView {
 
     fn update_hover_button(&self) {
         if let Some(button) = self.ivars().hover_button.borrow().as_ref() {
-            button.set_revealed(self.ivars().hovered.get() || self.ivars().focus_visible.get());
+            button.set_revealed(
+                self.ivars().shortcut.get().is_none()
+                    && (self.ivars().hovered.get() || self.ivars().focus_visible.get()),
+            );
         }
     }
 

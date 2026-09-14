@@ -76,6 +76,12 @@ impl TabBar {
         }
     }
 
+    pub(crate) fn set_shortcuts(&self, visible: bool) {
+        for (index, (_, view)) in self.labels.borrow().iter().enumerate() {
+            view.set_shortcut((visible && index < 9).then_some(index + 1));
+        }
+    }
+
     pub(crate) fn update<'a>(
         &self,
         tabs: impl Iterator<Item = (u64, &'a str)>,

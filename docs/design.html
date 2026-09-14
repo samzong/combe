@@ -15,7 +15,8 @@
       --hover: #ffffff15;
       --button-pressed: #ffffff26;
       --selection: #ffffff12;
-      --hint: #ffffff0d;
+      --hint: #2f6fca;
+      --hint-text: #ffffff;
       --idle: #ffffff04;
       --prompt: #8dbfac;
       --cursor: #2f81f7;
@@ -56,7 +57,8 @@
       --hover: #00000009;
       --button-pressed: #00000018;
       --selection: #00000008;
-      --hint: #00000006;
+      --hint: #0969da;
+      --hint-text: #ffffff;
       --idle: #00000003;
       --prompt: #28654e;
       --cursor: #0969da;
@@ -190,7 +192,7 @@
     .row .check { margin-left: auto; width: 13px; height: 13px; opacity: 0; }
     .row.on { background: var(--selection); }
     .row.on .check { opacity: .85; }
-    .row .shortcut { position: absolute; right: 10px; top: 8px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 9px; background: var(--hint); color: var(--text-soft); font: 11px/normal -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; opacity: 0; }
+    .row .shortcut { position: absolute; right: 10px; top: 8px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 9px; background: var(--hint); color: var(--hint-text); font: 11px/normal -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; opacity: 0; }
     .window.command-held .row[data-shortcut] .shortcut { opacity: 1; }
     .window.command-held .row[data-shortcut] .check { opacity: 0; }
     .row:hover, .row:focus-visible { background: var(--selection); }
@@ -201,6 +203,9 @@
     .tab:hover { box-shadow: inset 0 0 0 100px var(--selection); }
     .tab.on:hover { box-shadow: inset 0 0 0 100px var(--selection), var(--glass-edge), 0 2px 6px #00000012; }
     .tab .label { overflow: hidden; text-overflow: ellipsis; }
+    .tab .shortcut { position: absolute; right: 9px; top: 9px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 9px; background: var(--hint); color: var(--hint-text); font: 11px/normal -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; opacity: 0; }
+    .window.command-held:not(.peek):not(.pinned) .tab[data-shortcut] .shortcut { opacity: 1; }
+    .window.command-held:not(.peek):not(.pinned) .tab[data-shortcut] .x { opacity: 0; pointer-events: none; }
     .tab .x { color: var(--muted); font-size: 15px; }
     .newtab { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-control); background: transparent; color: var(--muted); font-size: 20px; font-weight: 300; }
     .overview-button { position: absolute; right: var(--inset); top: var(--inset); z-index: 7; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--text-soft); isolation: isolate; }
@@ -543,13 +548,17 @@
       activeItem.attention = false;
       closeOverview(false);
       tabs.replaceChildren();
-      for (const item of session.items) {
+      for (const [index, item] of session.items.entries()) {
         const tab = document.createElement("div");
         tab.className = "tab" + (item.id === session.active ? " on" : "") + (item.attention ? " attention" : "");
         tab.setAttribute('aria-description', item.attention ? 'Needs attention' : '');
         tab.setAttribute("role", "tab");
         tab.setAttribute("aria-selected", String(item.id === session.active));
         tab.tabIndex = item.id === session.active ? 0 : -1;
+        const shortcut = document.createElement("kbd");
+        shortcut.className = "shortcut";
+        shortcut.textContent = index < 9 ? String(index + 1) : "";
+        if (shortcut.textContent) tab.dataset.shortcut = shortcut.textContent;
         const label = document.createElement("span");
         label.className = "label";
         label.textContent = item.label;
@@ -579,7 +588,7 @@
           if (item.id === session.active) session.active = session.items[Math.min(index, session.items.length - 1)].id;
           renderTabs();
         });
-        tab.append(label, close);
+        tab.append(shortcut, label, close);
         tab.addEventListener("click", () => { session.active = item.id; renderTabs(); });
         tab.addEventListener("keydown", event => {
           if (event.key === "Enter" || event.key === " ") { event.preventDefault(); session.active = item.id; renderTabs(); }

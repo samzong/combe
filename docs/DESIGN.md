@@ -81,7 +81,7 @@ The sidebar's single glass surface has chip, transient catalog, and pinned state
 | Tabs | 36 pt high, 180 pt nominal width, 18 pt glass and hover corners; keyboard focus follows a 16 pt path inset by 2 pt with a 2 pt stroke; 12 pt gaps; active tab has the restrained glass treatment; long titles truncate; overflow scrolls horizontally only; close and new-tab symbols have no separate fill or border at rest; close has a 20 pt target, 10 pt right inset, and appears on tab hover or keyboard focus without moving the title |
 | Repo heading | 30 pt high, folder symbol, trailing disclosure indicator, 12 pt medium system text |
 | Workspace row | 34 pt high with 2 pt vertical spacing; 16 pt corners; session dot at 32 pt, label at 48 pt, and selected checkmark |
-| Shortcut hint | 18 pt circle, 11 pt tabular numeral centered horizontally and vertically using its measured text height, subtle fill; replaces the checkmark without moving the row |
+| Shortcut hint | 18 pt blue circle, 11 pt white tabular numeral centered horizontally and vertically using its measured text height; replaces the checkmark without moving the row |
 | Quota chip | 28 pt high, 14 pt corners; content-sized summary with 8 pt horizontal text insets on one glass surface; no separate summary hover fill |
 | Quota details | 304 pt wide; the same glass surface and 14 pt corners as the chip; expands upward with a fixed bottom-left and fixed summary; 16 pt top and side insets, 12 pt bottom inset; 8 pt column and heading-to-row gaps, 30 pt rows, 16 pt between providers |
 | Find bar | Native search field, match counter, previous/next and close controls; compact rounded surface in the focused pane's top-right |
@@ -110,7 +110,7 @@ Repo headings collapse rows without changing selection or closing terminals. Col
 
 Hovered and selected rows share the neutral fill and appearance-adaptive text; hover does not select. Keep tracking areas alive during AppKit visible-rectangle updates to preserve paired enter/exit events across geometry changes.
 
-In either open catalog state, holding Command numbers the first nine visible workspace rows in display order, excluding collapsed rows. Cmd-1 through Cmd-9 selects them without dismissing the panel; unassigned numbers are consumed. With the catalog closed, Ghostty tab-number bindings apply.
+In either open catalog state, holding Command numbers the first nine visible workspace rows in display order, excluding collapsed rows. Cmd-1 through Cmd-9 selects them without dismissing the panel; unassigned numbers are consumed. With the catalog closed, holding Command numbers the first nine tabs from left to right and Ghostty's tab-number bindings apply. Tab hints use the same 18 pt marker on the right, replacing the close button while shown so labels do not move. Opening the catalog transfers the hints from tabs to workspace rows.
 
 ### Appearance and typography
 
@@ -125,9 +125,10 @@ The View menu offers Follow System (default), Light, and Dark. Overrides last fo
 | Chrome primary text | `#f1f1f2` | `#24292f` |
 | Active tab title | `#e6e7e9` | `#292d33` |
 | Secondary text and navigation symbols | `#9c9ea3` | `#656970` |
-| Header action symbols and shortcut hints | `#c3c4c7` | `#555960` |
+| Header action symbols | `#c3c4c7` | `#555960` |
+| Shortcut hint numeral | `#ffffff` | `#ffffff` |
 | Selected and hovered workspace | White at 7.1% | Black at 3.1% |
-| Shortcut hint fill | White at 5.1% | Black at 2.4% |
+| Shortcut hint fill | `#2f6fca` | `#0969da` |
 | Live session mark | `#65c888` | `#248247` |
 | Inactive session mark | `#85878d` | `#85878d` |
 

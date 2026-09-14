@@ -1209,6 +1209,9 @@ fn sync_tabs() {
             state.tabs.visible().map(|tab| (tab.id, tab.label.as_str())),
             active,
         );
+        state
+            .tab_bar
+            .set_shortcuts(sidebar_panel::tab_hints_visible());
         Some((
             state.tabs.current().map(str::to_owned),
             state
@@ -1223,6 +1226,14 @@ fn sync_tabs() {
         sidebar_panel::set_sessions(current, opened);
     }
     refresh_attention();
+}
+
+pub(crate) fn set_tab_shortcuts(visible: bool) {
+    STATE.with(|state| {
+        if let Some(state) = state.borrow().as_ref() {
+            state.tab_bar.set_shortcuts(visible);
+        }
+    });
 }
 
 define_class!(

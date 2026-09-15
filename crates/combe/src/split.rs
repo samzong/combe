@@ -55,6 +55,11 @@ impl Zoom {
         }
         self.tree.setHidden(false);
     }
+
+    pub fn pane_rect(&self, root: &NSView) -> NSRect {
+        self.placeholder
+            .convertRect_toView(self.placeholder.bounds(), Some(root))
+    }
 }
 
 pub fn leaf(

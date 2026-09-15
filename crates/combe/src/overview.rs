@@ -277,11 +277,7 @@ fn snapshot(tab: &Tab, context: &CIContext) -> Option<Retained<NSImage>> {
     NSGraphicsContext::setCurrentContext(Some(&graphics));
     NSColor::windowBackgroundColor().setFill();
     NSBezierPath::fillRect(NSRect::new(NSPoint::new(0.0, 0.0), size));
-    let surfaces = tab
-        .zoom
-        .as_ref()
-        .map(|zoom| vec![zoom.surface.clone()])
-        .unwrap_or_else(|| split::surfaces(&tab.root));
+    let surfaces = split::surfaces(&tab.root);
     for surface in surfaces {
         let Some(contents) = surface
             .layer()
@@ -299,7 +295,12 @@ fn snapshot(tab: &Tab, context: &CIContext) -> Option<Retained<NSImage>> {
             continue;
         };
         let pane = NSImage::initWithCGImage_size(NSImage::alloc(), &bitmap, surface.bounds().size);
-        let frame = surface.convertRect_toView(surface.bounds(), Some(&tab.root));
+        let frame = tab
+            .zoom
+            .as_ref()
+            .filter(|zoom| std::ptr::eq(&*zoom.surface, &*surface))
+            .map(|zoom| zoom.pane_rect(&tab.root))
+            .unwrap_or_else(|| surface.convertRect_toView(surface.bounds(), Some(&tab.root)));
         let frame = NSRect::new(
             NSPoint::new(frame.origin.x * scale, frame.origin.y * scale),
             NSSize::new(frame.size.width * scale, frame.size.height * scale),

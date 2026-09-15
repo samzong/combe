@@ -2,19 +2,17 @@
 
 # Combe
 
-A worktree-aware terminal for Macs, written for personal use.
-
-https://github.com/user-attachments/assets/34558c68-79ad-4fcd-972a-d896ed50097c
+A worktree-aware terminal for Apple Silicon. Catalog on the left, Ghostty surfaces on the right.
 
 ## Install
-
-> Apple Silicon only, macOS 13 Ventura or later.
 
 ```sh
 brew install samzong/tap/combe
 ```
 
-To compile a personal copy and change habits, see [docs/build-your-terminal.md](docs/build-your-terminal.md).
+Apple Silicon, macOS 13+. Not an agent IDE, not Intel, not iTerm. Lists worktrees; `gmc` is optional for creating them.
+
+https://github.com/user-attachments/assets/34558c68-79ad-4fcd-972a-d896ed50097c
 
 ## Shortcuts
 
@@ -54,6 +52,8 @@ To compile a personal copy and change habits, see [docs/build-your-terminal.md](
 | Ctrl-Cmd-F | Full screen |
 | Cmd-M | Minimize |
 | Cmd-Q | Quit. Confirms if a process is running |
+
+To compile from source, see [docs/build-your-terminal.md](docs/build-your-terminal.md).
 
 ## Acknowledgments
 

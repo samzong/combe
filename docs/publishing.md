@@ -1,6 +1,6 @@
 # Publish the interface prototype
 
-The public prototype is at [combe.pages.dev](https://combe.pages.dev/).
+The public prototype is at [combe.pages.dev](https://combe.pages.dev/). The product page is the [repository README](https://github.com/samzong/combe#combe); this site stays the interface-design inspector.
 
 Cloudflare Pages project: `combe`, account: `samzong`, production branch: `main`. The project uses Direct Upload; pushing Git commits does not update the site.
 

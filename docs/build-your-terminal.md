@@ -41,7 +41,7 @@ A separate product name needs all three:
 - `scripts/package_app.sh`: `APP_NAME`, `BUNDLE_ID`
 - `crates/combe-catalog/src/store.rs`: the `combe` directory under `dirs::data_dir()`
 
-`make install` overwrites `/Applications/Combe.app` until `APP_NAME` changes.
+`make install` overwrites `/Applications/Combe.app` and the `combe` link in Homebrew's bin, the same paths `brew install` owns, until `APP_NAME` changes.
 
 ```sh
 combe add ~/git/example

@@ -15,9 +15,7 @@
       --hover: #ffffff15;
       --button-pressed: #ffffff26;
       --selection: #ffffff12;
-      --hint: #2f6fca;
-      --hint-text: #ffffff;
-      --idle: #ffffff04;
+      --idle: #ffffff0d;
       --prompt: #8dbfac;
       --cursor: #2f81f7;
       --quota-glass: linear-gradient(145deg, #ffffff08, #ffffff00 48%, #ffffff03), #3b3d411a;
@@ -37,6 +35,8 @@
       --radius-control: 18px;
       --glass-control: linear-gradient(145deg, #ffffff12, #ffffff00 48%, #ffffff06), #3b3d4140;
       --glass-panel: linear-gradient(145deg, #ffffff1f, #ffffff03 44%, #ffffff0b), #35373b9e;
+      --glass-tab: linear-gradient(145deg, #ffffff1f, #ffffff03 48%, #ffffff0c), #4a4d53b3;
+      --glass-tab-edge: inset 0 0 0 .75px #ffffff36, inset 0 1px .5px #ffffff30;
       --glass-edge: inset 0 0 0 .75px #ffffff20, inset 0 1px .5px #ffffff18;
       --glass-panel-edge: inset 0 0 0 .75px #ffffff2e, inset 0 1px .5px #ffffff32;
       --glass-filter: blur(28px) saturate(145%) brightness(1.16);
@@ -57,13 +57,13 @@
       --hover: #00000009;
       --button-pressed: #00000018;
       --selection: #00000008;
-      --hint: #0969da;
-      --hint-text: #ffffff;
-      --idle: #00000003;
+      --idle: #0000000a;
       --prompt: #28654e;
       --cursor: #0969da;
       --glass-control: linear-gradient(145deg, #ffffffa6, #ffffff26 48%, #ffffff70), #dfe1e650;
       --glass-panel: linear-gradient(145deg, #ffffffbf, #ffffff40 44%, #ffffff80), #e1e3e8b0;
+      --glass-tab: linear-gradient(145deg, #ffffffb0, #ffffff30 48%, #ffffff70), #ffffffcc;
+      --glass-tab-edge: inset 0 0 0 .75px #00000014, inset 0 1px .5px #ffffffd0;
       --glass-edge: inset 0 0 0 .75px #ffffffb0, inset 0 1px .5px #ffffffd0;
       --glass-panel-edge: inset 0 0 0 .75px #ffffffb0, inset 0 1px .5px #ffffffd0;
       --glass-filter: blur(28px) saturate(135%);
@@ -192,18 +192,18 @@
     .row .check { margin-left: auto; width: 13px; height: 13px; opacity: 0; }
     .row.on { background: var(--selection); }
     .row.on .check { opacity: .85; }
-    .row .shortcut { position: absolute; right: 10px; top: 8px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 9px; background: var(--hint); color: var(--hint-text); font: 11px/normal -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; opacity: 0; }
+    .row .shortcut { position: absolute; right: 10px; top: 7px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 10px; background: var(--button-pressed); color: var(--fg); font: 500 11px/normal -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; opacity: 0; }
     .window.command-held .row[data-shortcut] .shortcut { opacity: 1; }
     .window.command-held .row[data-shortcut] .check { opacity: 0; }
     .row:hover, .row:focus-visible { background: var(--selection); }
     .right { position: absolute; inset: 0; border-radius: inherit; display: grid; grid-template-rows: calc(36px + 2 * var(--inset)) minmax(0, 1fr) calc(28px + var(--inset)); }
     .tabs { display: flex; gap: var(--inset); align-items: center; padding: var(--inset); padding-left: calc(var(--menu-right) + var(--inset)); padding-right: calc(48px + var(--inset)); }
     .tab { display: flex; align-items: center; justify-content: space-between; gap: 20px; height: 36px; width: 180px; padding: 0 14px; border-radius: var(--radius-control); color: var(--muted); font-size: 12px; white-space: nowrap; background: var(--idle); }
-    .tab.on { background: var(--glass-control); color: var(--text-strong); box-shadow: var(--glass-edge), 0 2px 6px #00000012; backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter); }
+    .tab.on { background: var(--glass-tab); color: var(--text-strong); box-shadow: var(--glass-tab-edge), 0 2px 6px #00000012; backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter); }
     .tab:hover { box-shadow: inset 0 0 0 100px var(--selection); }
-    .tab.on:hover { box-shadow: inset 0 0 0 100px var(--selection), var(--glass-edge), 0 2px 6px #00000012; }
+    .tab.on:hover { box-shadow: inset 0 0 0 100px var(--selection), var(--glass-tab-edge), 0 2px 6px #00000012; }
     .tab .label { overflow: hidden; text-overflow: ellipsis; }
-    .tab .shortcut { position: absolute; right: 9px; top: 9px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 9px; background: var(--hint); color: var(--hint-text); font: 11px/normal -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; opacity: 0; }
+    .tab .shortcut { position: absolute; right: 10px; top: 8px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 10px; background: var(--button-pressed); color: var(--fg); font: 500 11px/normal -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; opacity: 0; }
     .window.command-held:not(.peek):not(.pinned) .tab[data-shortcut] .shortcut { opacity: 1; }
     .window.command-held:not(.peek):not(.pinned) .tab[data-shortcut] .x { opacity: 0; pointer-events: none; }
     .tab .x { color: var(--muted); font-size: 15px; }
@@ -220,13 +220,13 @@
     .overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; padding: 24px; align-content: start; }
     .card { display: block; width: 100%; max-width: 400px; padding: 8px; border: 0; border-radius: var(--radius-row); background: transparent; color: var(--fg); text-align: center; }
     .card:hover, .card.on { background: var(--selection); }
-    .card .shot { aspect-ratio: 1.6; overflow: hidden; padding: 5px; background: var(--bg); color: var(--text-soft); font: 8px/10px "Fira Code", "Noto Sans Mono CJK SC", Menlo, monospace; text-align: left; white-space: pre-wrap; }
+    .card .shot { aspect-ratio: 1.6; overflow: hidden; padding: 5px; background: var(--bg); color: var(--text-soft); font: 300 8px/10px "Fira Code", "Noto Sans Mono CJK SC", Menlo, monospace; text-align: left; white-space: pre-wrap; }
     .card .shot [data-prompt] { color: var(--prompt); }
     .card .title { display: block; height: 20px; margin-top: 8px; line-height: 20px; font-size: 12px; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .term { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; margin: 0 var(--inset); overflow: hidden; transition: margin-left 380ms var(--ease); }
     .window.pinned .term, .window.pinned .status-line { margin-left: calc(var(--menu-right) + var(--inset)); }
     .term.single { grid-template-columns: 1fr; }
-    .pane { padding: 8px; border-left: .5px solid var(--line); color: var(--text-soft); font: 13px/16px "Fira Code", "Noto Sans Mono CJK SC", Menlo, monospace; white-space: pre-wrap; overflow: hidden; }
+    .pane { padding: 8px; border-left: .5px solid var(--line); color: var(--text-soft); font: 300 12px/15px "Fira Code", "Noto Sans Mono CJK SC", Menlo, monospace; white-space: pre-wrap; overflow: hidden; }
     .pane:first-child { border-left: 0; }
     .pane [data-prompt] { color: var(--prompt); }
     .caret { display: inline-block; width: 8px; height: 16px; background: var(--cursor); vertical-align: -2px; }
@@ -384,7 +384,7 @@
       <p id="spacing-selection" class="spacing-selection" role="status"></p>
       <div class="spacing-table-wrap"><table><thead><tr><th>ID</th><th>Relationship</th><th>Native source · pt</th><th>Prototype live · px</th><th>Recommended · pt</th></tr></thead><tbody id="spacing-rows"></tbody></table></div>
     </section>
-    <details class="components"><summary>Component contract</summary><p>The native app uses AppKit controls and complete Ghostty surfaces. This page demonstrates chrome states; shell execution, search results, native directory selection, and process confirmation come from the real app. Tabs and workspace selections retain their preview state. The sidebar owns catalog controls and interaction state; the tab bar owns tab controls. The window coordinates workspace sessions, terminal visibility, and overall layout. See <a href="DESIGN.md">DESIGN.md</a> for the behavior and verification contract.</p><p>Chrome: system font, 12–13 pt. Terminal: Fira Code, Noto Sans Mono CJK SC fallback, 13 pt. Appearance changes colors and materials while font family, size, weight, metrics, and terminal state remain stable.</p></details>
+    <details class="components"><summary>Component contract</summary><p>The native app uses AppKit controls and complete Ghostty surfaces. This page demonstrates chrome states; shell execution, search results, native directory selection, and process confirmation come from the real app. Tabs and workspace selections retain their preview state. The sidebar owns catalog controls and interaction state; the tab bar owns tab controls. The window coordinates workspace sessions, terminal visibility, and overall layout. See <a href="DESIGN.md">DESIGN.md</a> for the behavior and verification contract.</p><p>Chrome: system font, 12–13 pt. Terminal: Fira Code Light, Noto Sans Mono CJK SC fallback, 12 pt. Appearance changes colors and materials while font family, size, weight, metrics, and terminal state remain stable.</p></details>
   </main>
   <script>
     const repos = [

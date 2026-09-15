@@ -92,6 +92,7 @@ pub(crate) struct ClickIvars {
     opened: Cell<Option<bool>>,
     attention: Cell<bool>,
     dim_when_idle: Cell<bool>,
+    fill_when_idle: Cell<bool>,
     text_color: Cell<(u32, u32)>,
     warn: RefCell<Vec<(NSRange, Retained<NSColor>)>>,
     hovered: Cell<bool>,
@@ -117,14 +118,18 @@ define_class!(
 
         #[unsafe(method(drawRect:))]
         fn draw_rect(&self, _dirty: NSRect) {
+            let pill = NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(
+                self.bounds(),
+                self.ivars().corner_radius.get(),
+                self.ivars().corner_radius.get(),
+            );
+            if self.ivars().fill_when_idle.get() {
+                color(habits::CHROME_TAB_IDLE).setFill();
+                pill.fill();
+            }
             if self.ivars().selected.get() || (self.ivars().hovered.get() && self.ivars().hover_highlight.get()) {
                 color(habits::CHROME_SELECTION).setFill();
-                NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(
-                    self.bounds(),
-                    self.ivars().corner_radius.get(),
-                    self.ivars().corner_radius.get(),
-                )
-                .fill();
+                pill.fill();
             }
             if self.ivars().focus_visible.get() {
                 let bounds = self.bounds();
@@ -143,7 +148,7 @@ define_class!(
                 )).fill();
             }
             if let Some(number) = self.ivars().shortcut.get() {
-                self.draw_marker(&number.to_string(), self.bounds().size.width - 27.0, true);
+                self.draw_marker(&number.to_string(), self.bounds().size.width - 30.0, true);
             }
             let Some(opened) = self.ivars().opened.get() else {
                 return;
@@ -163,7 +168,7 @@ define_class!(
             ))
             .fill();
             if self.ivars().shortcut.get().is_none() && self.ivars().selected.get() {
-                self.draw_marker("✓", bounds.size.width - 27.0, false);
+                self.draw_marker("✓", bounds.size.width - 30.0, false);
             }
         }
 
@@ -256,6 +261,7 @@ impl ClickView {
             opened: Cell::new(None),
             attention: Cell::new(false),
             dim_when_idle: Cell::new(false),
+            fill_when_idle: Cell::new(false),
             text_color: Cell::new(habits::CHROME_TEXT),
             warn: RefCell::new(Vec::new()),
             hovered: Cell::new(false),
@@ -313,19 +319,19 @@ impl ClickView {
         let field = NSTextField::labelWithString(&NSString::from_str(marker), self.mtm());
         field.setFont(Some(&NSFont::monospacedDigitSystemFontOfSize_weight(
             11.0,
-            unsafe { objc2_app_kit::NSFontWeightRegular },
+            unsafe { objc2_app_kit::NSFontWeightMedium },
         )));
         field.setTextColor(Some(&color(if background {
-            habits::CHROME_HINT_TEXT
+            habits::CHROME_TEXT
         } else {
             habits::CHROME_SOFT
         })));
         let frame = NSRect::new(
-            NSPoint::new(x, (self.bounds().size.height - 18.0) / 2.0),
-            NSSize::new(18.0, 18.0),
+            NSPoint::new(x, (self.bounds().size.height - 20.0) / 2.0),
+            NSSize::new(20.0, 20.0),
         );
         if background {
-            color(habits::CHROME_HINT).setFill();
+            color(habits::CHROME_BUTTON_PRESSED).setFill();
             NSBezierPath::bezierPathWithOvalInRect(frame).fill();
         }
         field.setAlignment(objc2_app_kit::NSTextAlignment::Center);
@@ -368,6 +374,11 @@ impl ClickView {
     pub(crate) fn dim_when_idle(&self) {
         self.ivars().dim_when_idle.set(true);
         self.apply_label_color();
+    }
+
+    pub(crate) fn fill_when_idle(&self) {
+        self.ivars().fill_when_idle.set(true);
+        self.setNeedsDisplay(true);
     }
 
     pub(crate) fn set_selected(&self, selected: bool) {
@@ -479,6 +490,7 @@ pub(crate) struct GlassTintIvars {
     radius: f64,
     expanded: Cell<bool>,
     quota: Cell<bool>,
+    tab: Cell<bool>,
 }
 
 define_class!(
@@ -503,6 +515,7 @@ define_class!(
             let _: () = unsafe { msg_send![super(self), drawRect: dirty] };
             let expanded = self.ivars().expanded.get();
             let palette = match (self.ivars().quota.get(), expanded) {
+                _ if self.ivars().tab.get() => habits::GLASS_TAB,
                 (false, false) => habits::GLASS_CONTROL,
                 (false, true) => habits::GLASS_PANEL,
                 (true, false) => habits::GLASS_QUOTA,
@@ -522,7 +535,13 @@ define_class!(
             ) } {
                 gradient.drawInBezierPath_angle(&path, -55.0);
             }
-            let edge = if expanded { habits::GLASS_PANEL_EDGE } else { habits::GLASS_EDGE };
+            let edge = if self.ivars().tab.get() {
+                habits::GLASS_TAB_EDGE
+            } else if expanded {
+                habits::GLASS_PANEL_EDGE
+            } else {
+                habits::GLASS_EDGE
+            };
             rgba(if dark { edge.1 } else { edge.0 }).setStroke();
             path.setLineWidth(1.5);
             path.stroke();
@@ -550,6 +569,11 @@ impl GlassView {
         self.ivars().ivars().quota.set(true);
         self.ivars().setNeedsDisplay(true);
     }
+
+    pub(crate) fn set_tab(&self) {
+        self.ivars().ivars().tab.set(true);
+        self.ivars().setNeedsDisplay(true);
+    }
 }
 
 pub(crate) fn glass(mtm: MainThreadMarker, frame: NSRect, radius: f64) -> Retained<GlassView> {
@@ -557,6 +581,7 @@ pub(crate) fn glass(mtm: MainThreadMarker, frame: NSRect, radius: f64) -> Retain
         radius,
         expanded: Cell::new(false),
         quota: Cell::new(false),
+        tab: Cell::new(false),
     });
     let tint: Retained<GlassTint> = unsafe {
         msg_send![super(tint), initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), frame.size)]

@@ -5,8 +5,9 @@ pub const SHELL: &str = "/bin/zsh -l";
 
 pub const FONT_FAMILY: &str = "Fira Code";
 pub const FONT_FAMILY_CJK: &str = "Noto Sans Mono CJK SC";
+pub const FONT_STYLE: &str = "Light";
 pub const CJK_CODEPOINTS: &str = "U+2E80-U+2FFF,U+3000-U+303F,U+31C0-U+31EF,U+3400-U+4DBF,U+4E00-U+9FFF,U+F900-U+FAFF,U+FF00-U+FFEF";
-pub const FONT_SIZE: f64 = 13.0;
+pub const FONT_SIZE: f64 = 12.0;
 
 pub const CHROME_ICON_SIZE: f64 = 12.0;
 pub const CHROME_FONT_SIZE: f64 = 12.0;
@@ -19,8 +20,7 @@ pub const CHROME_SOFT: (u32, u32) = (0x555960ff, 0xc3c4c7ff);
 pub const CHROME_BUTTON_HOVER: (u32, u32) = (0x00000009, 0xffffff15);
 pub const CHROME_BUTTON_PRESSED: (u32, u32) = (0x00000018, 0xffffff26);
 pub const CHROME_SELECTION: (u32, u32) = (0x00000008, 0xffffff12);
-pub const CHROME_HINT: (u32, u32) = (0x0969daff, 0x2f6fcaff);
-pub const CHROME_HINT_TEXT: (u32, u32) = (0xffffffff, 0xffffffff);
+pub const CHROME_TAB_IDLE: (u32, u32) = (0x0000000a, 0xffffff0d);
 pub const CHROME_SESSION: (u32, u32) = (0x248247ff, 0x65c888ff);
 pub const CHROME_SESSION_IDLE: (u32, u32) = (0x85878dff, 0x85878dff);
 pub const CHROME_ATTENTION: (u32, u32) = (0x0969daff, 0x58a6ffff);
@@ -29,6 +29,12 @@ pub const GLASS_CONTROL: [(u32, u32); 4] = [
     (0xffffffa6, 0xffffff12),
     (0xffffff26, 0xffffff00),
     (0xffffff70, 0xffffff06),
+];
+pub const GLASS_TAB: [(u32, u32); 4] = [
+    (0xffffffcc, 0x4a4d53b3),
+    (0xffffffb0, 0xffffff1f),
+    (0xffffff30, 0xffffff03),
+    (0xffffff70, 0xffffff0c),
 ];
 pub const GLASS_PANEL: [(u32, u32); 4] = [
     (0xe1e3e8b0, 0x35373b9e),
@@ -50,6 +56,7 @@ pub const GLASS_QUOTA_PANEL: [(u32, u32); 4] = [
 ];
 pub const GLASS_EDGE: (u32, u32) = (0xffffffb0, 0xffffff20);
 pub const GLASS_PANEL_EDGE: (u32, u32) = (0xffffffb0, 0xffffff2e);
+pub const GLASS_TAB_EDGE: (u32, u32) = (0x00000014, 0xffffff36);
 
 pub const BACKGROUND: &str = "161719";
 pub const FOREGROUND: &str = "e6edf3";
@@ -126,6 +133,7 @@ pub fn ghostty_config(dark: bool) -> String {
     let mut config = String::new();
     let _ = writeln!(config, "font-family = {FONT_FAMILY}");
     let _ = writeln!(config, "font-family = {FONT_FAMILY_CJK}");
+    let _ = writeln!(config, "font-style = {FONT_STYLE}");
     let _ = writeln!(
         config,
         "font-codepoint-map = {CJK_CODEPOINTS}={FONT_FAMILY_CJK}"

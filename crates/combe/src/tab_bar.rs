@@ -103,10 +103,12 @@ impl TabBar {
             view.set_corner_radius(RADIUS);
             if Some(id) != active {
                 view.dim_when_idle();
+                view.fill_when_idle();
             }
             if Some(id) == active {
                 view.set_text_color(habits::CHROME_STRONG);
                 let glass = chrome_view::glass(mtm, frame, RADIUS);
+                glass.set_tab();
                 self.document.addSubview(&glass);
             }
             view.setAccessibilitySelected(Some(id) == active);

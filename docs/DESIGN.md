@@ -106,7 +106,7 @@ Startup shows the workspace chip. Hover for 150 ms to expand the catalog; click 
 
 Workspace selection keeps the catalog open and restores that workspace's tabs and focused pane. After entering the list, hovering the chip for 150 ms folds it; a quick crossing does not. Pointer exit closes the transient panel after 250 ms unless re-entry or keyboard focus inside protects it. Escape, outside click, or keyboard focus leaving dismisses it. Pinned panels survive these dismissals and reserve terminal space; unpinning returns to the chip. Cmd-B toggles pinned and chip states.
 
-Repo headings collapse rows without changing selection or closing terminals. Collapse state and session marks last for the app run. Green means a workspace owns a tab; dim means it does not. The chip has no session dot; Home has no collapsible heading.
+Repo groups start collapsed on every app launch, including newly added repos. Clicking a repo heading toggles its rows without changing selection or closing terminals. Collapse state and session marks last for the app run. Green means a workspace owns a tab; dim means it does not. The chip has no session dot; Home has no collapsible heading.
 
 Hovered and selected rows share the neutral fill and appearance-adaptive text; hover does not select. Keep tracking areas alive during AppKit visible-rectangle updates to preserve paired enter/exit events across geometry changes.
 

@@ -389,12 +389,12 @@
   <script>
     const repos = [
       { name: "home", heading: false, open: true, rows: [{ id: "home", label: "home", path: "~", live: false }] },
-      { name: "gmc", open: true, rows: [{ id: "gmc-main", label: "main", path: "~/projects/gmc", live: true }] },
-      { name: "confer", open: true, rows: [
+      { name: "gmc", open: false, rows: [{ id: "gmc-main", label: "main", path: "~/projects/gmc", live: true }] },
+      { name: "confer", open: false, rows: [
         { id: "confer-main", label: "main", path: "~/projects/confer", live: false },
         { id: "confer-old", label: "old-man", path: "~/projects/confer-old-man", live: false }
       ] },
-      { name: "combe", open: true, rows: [{ id: "combe-main", label: "main", path: "~/projects/combe", live: false }] }
+      { name: "combe", open: false, rows: [{ id: "combe-main", label: "main", path: "~/projects/combe", live: false }] }
     ];
     const win = document.getElementById("win");
     const hot = document.getElementById("hot");

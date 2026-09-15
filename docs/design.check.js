@@ -1,4 +1,9 @@
+function expandRepos() {
+  document.querySelectorAll('.group-head[aria-expanded="false"]').forEach(head => head.click());
+}
+
 export default async function checkCatalog() {
+  expandRepos();
   const trigger = document.querySelector('#trigger');
   const catalog = document.querySelector('#catalog');
   const hot = document.querySelector('#hot');
@@ -194,6 +199,7 @@ export async function checkQuota() {
 }
 
 export async function checkShortcuts() {
+  expandRepos();
   const win = document.querySelector('#win');
   const trigger = document.querySelector('#trigger');
   const pin = document.querySelector('#pin');
@@ -244,6 +250,7 @@ export async function checkShortcuts() {
 }
 
 export async function checkHoverIntent() {
+  expandRepos();
   const pin = document.querySelector('#pin');
   const hot = document.querySelector('#hot');
   const trigger = document.querySelector('#trigger');

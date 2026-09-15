@@ -58,7 +58,7 @@ struct State {
     toggle: Option<Retained<NSButton>>,
     add_repo: Option<Retained<NSButton>>,
     repos: Vec<sidebar::Repo>,
-    collapsed_repos: HashSet<PathBuf>,
+    expanded_repos: HashSet<PathBuf>,
     current: Option<String>,
     opened: HashSet<String>,
     attention: HashSet<String>,
@@ -198,7 +198,7 @@ pub(crate) fn mount(
             toggle,
             add_repo,
             repos: Vec::new(),
-            collapsed_repos: HashSet::new(),
+            expanded_repos: HashSet::new(),
             current: None,
             opened: HashSet::new(),
             attention: HashSet::new(),
@@ -269,8 +269,8 @@ fn toggle_repo(path: PathBuf) {
     STATE.with(|state| {
         let mut state = state.borrow_mut();
         let Some(state) = state.as_mut() else { return };
-        if !state.collapsed_repos.remove(&path) {
-            state.collapsed_repos.insert(path);
+        if !state.expanded_repos.remove(&path) {
+            state.expanded_repos.insert(path);
         }
     });
     rebuild();
@@ -712,7 +712,7 @@ pub(crate) fn handle_event(event: &NSEvent) -> bool {
             state
                 .repos
                 .iter()
-                .filter(|repo| !repo.has_heading || !state.collapsed_repos.contains(&repo.path))
+                .filter(|repo| !repo.has_heading || state.expanded_repos.contains(&repo.path))
                 .flat_map(|repo| &repo.rows)
                 .nth(index - 1)
                 .map(|row| (row.path.to_string_lossy().into_owned(), row.label.clone()))
@@ -926,7 +926,7 @@ pub(crate) fn rebuild() {
         for repo in &state.repos {
             if repo.has_heading {
                 height += HEADER_HEIGHT;
-                if !state.collapsed_repos.contains(&repo.path) {
+                if state.expanded_repos.contains(&repo.path) {
                     height += repo.rows.len() as f64 * ROW_HEIGHT;
                 }
             } else {
@@ -948,7 +948,7 @@ pub(crate) fn rebuild() {
             if index > 0 {
                 y += 16.5;
             }
-            let collapsed = repo.has_heading && state.collapsed_repos.contains(&repo.path);
+            let collapsed = repo.has_heading && !state.expanded_repos.contains(&repo.path);
 
             if repo.has_heading {
                 let path = repo.path.clone();

@@ -4,7 +4,7 @@
 
 A worktree-aware terminal for Macs, written for personal use.
 
-[![Watch the introduction](https://img.youtube.com/vi/RaGCmdP5sD4/maxresdefault.jpg)](https://www.youtube.com/watch?v=RaGCmdP5sD4)
+https://github.com/user-attachments/assets/34558c68-79ad-4fcd-972a-d896ed50097c
 
 ## Install
 

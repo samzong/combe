@@ -342,7 +342,7 @@
               </button>
               <div class="tools">
                 <button class="icon" id="add" type="button" title="Add repo" aria-label="Add repo"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
-                <button class="icon" id="pin" type="button" title="Pin sidebar" aria-label="Pin sidebar" aria-pressed="false"><svg viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M6.5 3v10"/></svg></button>
+                <button class="icon" id="pin" type="button" title="Pin sidebar (⌘B)" aria-label="Pin sidebar" aria-pressed="false"><svg viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M6.5 3v10"/></svg></button>
               </div>
             </div>
             <nav class="catalog" id="catalog" aria-label="Workspaces" inert><div class="list" id="list"></div></nav>
@@ -405,6 +405,7 @@
     const list = document.getElementById("list");
     const current = document.getElementById("current");
     const pin = document.getElementById("pin");
+    const pinShortcut = "⌘B";
     const tabs = document.getElementById("tabs");
     const left = document.getElementById("left");
     const right = document.getElementById("right");
@@ -767,8 +768,9 @@
       trigger.setAttribute("aria-expanded", String(mode !== "closed"));
       catalog.inert = mode === "closed";
       pin.setAttribute("aria-pressed", String(mode === "pinned"));
-      pin.title = mode === "pinned" ? "Unpin sidebar" : "Pin sidebar";
-      pin.setAttribute("aria-label", pin.title);
+      const pinLabel = mode === "pinned" ? "Unpin sidebar" : "Pin sidebar";
+      pin.title = `${pinLabel} (${pinShortcut})`;
+      pin.setAttribute("aria-label", pinLabel);
     }
 
     function closeMenuFromPointer() {

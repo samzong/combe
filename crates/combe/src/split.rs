@@ -4,6 +4,7 @@ use objc2::{ClassType, MainThreadOnly, Message, msg_send};
 use objc2_app_kit::{NSAutoresizingMaskOptions, NSSplitView, NSView, NSWindowOrderingMode};
 use objc2_foundation::{MainThreadMarker, NSRect};
 
+use crate::chrome_view::ZoomCorners;
 use crate::surface::SurfaceView;
 
 const FILL: NSAutoresizingMaskOptions = NSAutoresizingMaskOptions(
@@ -24,6 +25,7 @@ pub struct Zoom {
     pub surface: Retained<SurfaceView>,
     tree: Retained<NSView>,
     placeholder: Retained<NSView>,
+    corners: Retained<ZoomCorners>,
 }
 
 impl Zoom {
@@ -40,14 +42,18 @@ impl Zoom {
         tree.setHidden(true);
         root.addSubview(&surface);
         surface.setFrame(root.bounds());
+        let corners = ZoomCorners::new(surface.mtm(), root.bounds());
+        root.addSubview(&corners);
         Some(Self {
             surface,
             tree,
             placeholder,
+            corners,
         })
     }
 
     pub fn restore(self) {
+        self.corners.removeFromSuperview();
         if let Some(parent) = unsafe { self.placeholder.superview() } {
             self.surface.removeFromSuperview();
             self.surface.setFrame(self.placeholder.frame());

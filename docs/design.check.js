@@ -498,3 +498,32 @@ export async function checkSpacing() {
     if ($('#spacing-toggle').checked) $('#spacing-toggle').click();
   }
 }
+
+export async function checkZoom() {
+  const results = [];
+  const assert = (condition, name) => { if (!condition) throw new Error(name); results.push(name); };
+  const component = document.querySelector('#component');
+  component.value = 'zoom';
+  component.dispatchEvent(new Event('change'));
+  const term = document.querySelector('.term');
+  const corners = getComputedStyle(term, '::after');
+  assert(term.classList.contains('zoomed'), 'Zoom marks the pane');
+  assert(corners.backgroundImage.split('linear-gradient').length - 1 === 8 && corners.opacity === '0.5', 'Four neutral corners at half opacity, no continuous border');
+  if (document.querySelector('#pin').getAttribute('aria-pressed') === 'true') document.querySelector('#pin').click();
+  document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  await new Promise(resolve => setTimeout(resolve, 450));
+  const bounds = term.getBoundingClientRect();
+  const index = [...document.querySelectorAll('.tab')].indexOf(document.querySelector('.tab[aria-selected="true"]'));
+  document.querySelector('.newtab').click();
+  assert(!term.classList.contains('zoomed'), 'A new single-pane tab has no zoom marks');
+  document.querySelectorAll('.tab')[index].click();
+  assert(term.classList.contains('zoomed'), 'Returning restores the pane marks');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, shiftKey: true, bubbles: true }));
+  document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Meta', bubbles: true }));
+  assert(!term.classList.contains('zoomed') && !document.querySelector('#right').hidden, 'Restore removes the marks and reveals the sibling');
+  assert(term.getBoundingClientRect().width === bounds.width && term.getBoundingClientRect().height === bounds.height, 'Zoom chrome reserves no terminal space');
+  assert(!document.querySelector('.tab [class*="zoom"]'), 'Tabs carry no zoom mark');
+  component.value = 'workspace';
+  component.dispatchEvent(new Event('change'));
+  return { passed: results.length, results };
+}

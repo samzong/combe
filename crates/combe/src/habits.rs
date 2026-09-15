@@ -103,6 +103,8 @@ pub const QUOTA_FRESH: Duration = Duration::from_secs(5 * 60);
 pub const COMMAND_NOTIFY_AFTER: Duration = Duration::from_secs(5);
 pub const NOTIFICATION_BATCH: Duration = Duration::from_millis(250);
 pub const NOTIFICATION_INTERVAL: Duration = Duration::from_secs(5);
+pub const ZOOM_CORNER_LENGTH: f64 = 12.0;
+pub const ZOOM_CORNER_INSET: f64 = 4.0;
 pub const PANE_GUIDE_DURATION: f64 = 1.2;
 
 pub const ALLOW_OSC52_READ: bool = false;

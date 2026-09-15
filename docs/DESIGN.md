@@ -67,7 +67,7 @@ Rejected:
 
 ## Window
 
-One window with a transparent titlebar, hidden title, and native traffic lights. Window and terminals share a background; panes have no independent card, shadow, blur, or rounded border. Only split dividers separate surfaces.
+One window with a transparent titlebar, hidden title, and native traffic lights. Window and terminals share a background; panes have no independent card, shadow, blur, or rounded border. Only split dividers separate surfaces. A zoomed pane carries four neutral corner marks, without a continuous border or any change to surface geometry.
 
 The sidebar's single glass surface has chip, transient catalog, and pinned states. It expands leftward under the traffic lights and downward, keeping its right edge, selected-workspace text, add and pin buttons fixed. The workspace trigger has no separate hover background. Traffic lights and tabs keep their window positions through every transition; tabs always remain beyond the sidebar's right edge.
 
@@ -187,6 +187,10 @@ Use a 180 ms ease-in-out crossfade, immediate under Reduce Motion. Repeated togg
 ### Zoom and pane movement
 
 Zoom moves the focused surface above its hidden split tree, leaving a placeholder for restoration without recreating terminals. Zoom is retained per tab; toggling restores it. Closing a pane or adding a split restores the tree first. Single-surface tabs are unchanged.
+
+The enlarged surface keeps its full bounds. A non-interactive overlay draws four square corner marks, each 12 pt along either edge and 1 pt thick, inset 4 pt from the surface edge so the bottom status strip keeps a clear gap, in muted chrome color at 50% opacity. It has no fill, shadow, animation, or continuous edge. It follows effective appearance and root resizing, never takes focus or intercepts input, and exists only for the lifetime of `Zoom`. Restore removes it before restoring the split tree, including close, divide, move-to-tab, and `goto_split` paths. Unlike the transient attention-colored PaneGuide, these neutral corners remain until restoration. No attention color is used for zoom.
+
+Tabs carry no zoom mark; the corners are the only signal, and they are visible whenever the zoomed tab is. The prototype's Zoomed pane selector enters zoom on the current tab; Cmd-Shift-Return toggles it. Switching tabs or workspaces preserves each tab's zoom state. Native acceptance must check nested zoom/restore, window resizing, workspace and tab return, light/dark changes, restore-before-close/divide/navigation, and immediate typing.
 
 Moving a pane to a new tab restores zoom first, reparents the surface without recreating its terminal, collapses the old split, and focuses the new tab in the same workspace. Single-pane tabs are unchanged. There is no inverse tab-to-split merge.
 
@@ -325,7 +329,7 @@ Run `make check` and inspect the real AppKit window. After menu changes verify C
 
 ```js
 const checks = await import("./design.check.js");
-for (const name of ["default", "checkQuota", "checkShortcuts", "checkHoverIntent", "checkAppearanceAndComponents", "checkSpacing"]) {
+for (const name of ["default", "checkQuota", "checkShortcuts", "checkHoverIntent", "checkAppearanceAndComponents", "checkSpacing", "checkZoom"]) {
   console.log(name, await checks[name]());
 }
 ```

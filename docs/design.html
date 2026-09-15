@@ -223,7 +223,7 @@
     .card .shot { aspect-ratio: 1.6; overflow: hidden; padding: 5px; background: var(--bg); color: var(--text-soft); font: 300 8px/10px "Fira Code", "Noto Sans Mono CJK SC", Menlo, monospace; text-align: left; white-space: pre-wrap; }
     .card .shot [data-prompt] { color: var(--prompt); }
     .card .title { display: block; height: 20px; margin-top: 8px; line-height: 20px; font-size: 12px; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .term { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; margin: 0 var(--inset); overflow: hidden; transition: margin-left 380ms var(--ease); }
+    .term { position: relative; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; margin: 0 var(--inset); overflow: hidden; transition: margin-left 380ms var(--ease); }
     .window.pinned .term, .window.pinned .status-line { margin-left: calc(var(--menu-right) + var(--inset)); }
     .term.single { grid-template-columns: 1fr; }
     .pane { padding: 8px; border-left: .5px solid var(--line); color: var(--text-soft); font: 300 12px/15px "Fira Code", "Noto Sans Mono CJK SC", Menlo, monospace; white-space: pre-wrap; overflow: hidden; }
@@ -267,8 +267,10 @@
 
     .tabs { overflow-x: auto; scrollbar-width: none; }
     .term.down { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+    .term.down.single { grid-template-rows: 1fr; }
     .term.down .pane + .pane { border-left: 0; border-top: .5px solid var(--line); }
     .pane { position: relative; }
+    .term.zoomed::after { content: ""; position: absolute; inset: 4px; pointer-events: none; z-index: 3; opacity: .5; --zoom-corner: var(--muted); background: linear-gradient(var(--zoom-corner), var(--zoom-corner)) left top / 12px 1px, linear-gradient(var(--zoom-corner), var(--zoom-corner)) left top / 1px 12px, linear-gradient(var(--zoom-corner), var(--zoom-corner)) right top / 12px 1px, linear-gradient(var(--zoom-corner), var(--zoom-corner)) right top / 1px 12px, linear-gradient(var(--zoom-corner), var(--zoom-corner)) left bottom / 12px 1px, linear-gradient(var(--zoom-corner), var(--zoom-corner)) left bottom / 1px 12px, linear-gradient(var(--zoom-corner), var(--zoom-corner)) right bottom / 12px 1px, linear-gradient(var(--zoom-corner), var(--zoom-corner)) right bottom / 1px 12px; background-repeat: no-repeat; }
     .find-bar { position: absolute; right: 12px; top: 8px; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--glass-panel); box-shadow: var(--glass-edge), 0 6px 20px #0002; border-radius: 12px; font: var(--font); }
     .find-bar input { width: 120px; }
     .find-bar button { border: 0; background: transparent; width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border-radius: 50%; }
@@ -613,7 +615,8 @@
       const content = `Last login: Tue Sep 8 00:12:27 on ttys002\n\n<span data-prompt>${row.path}  ${row.label}</span>\n❯ <span class="caret"></span>`;
       left.innerHTML = content;
       right.innerHTML = content.replace("ttys002", "ttys013");
-      right.hidden = !session.items.find(item => item.id === session.active)?.split;
+      right.hidden = !activeItem.split || activeItem.zoomed;
+      document.querySelector(".term").classList.toggle("zoomed", !!activeItem.zoomed);
       document.querySelector(".term").classList.toggle("single", right.hidden);
       applyComponent();
       updateAttention();
@@ -638,8 +641,7 @@
       const term = document.querySelector(".term");
       left.querySelector(".find-bar")?.remove();
       term.classList.toggle("down", value === "down");
-      if (value === "down") { right.hidden = false; term.classList.remove("single"); }
-      if (value === "zoom") { right.hidden = true; term.classList.add("single"); }
+      if (value === "down" && !term.classList.contains("zoomed")) { right.hidden = false; term.classList.remove("single"); }
       if (value === "typography") left.innerHTML += '\n\nLatin ABC — 0123456789\n中文排版 — 日本語 — 한국어\n<strong>Bold text</strong>  <span data-prompt>ANSI color</span>';
       if (value === "find") {
         const bar = document.createElement("div");
@@ -654,7 +656,22 @@
       const dialog = document.getElementById("close-confirm");
       if (value === "confirm" && !dialog.open) dialog.showModal();
     }
-    document.getElementById("component").addEventListener("change", renderTabs);
+    document.getElementById("component").addEventListener("change", event => {
+      const session = sessions.get(selected);
+      const item = session.items.find(item => item.id === session.active);
+      item.zoomed = event.target.value === "zoom";
+      if (item.zoomed || event.target.value === "down") item.split = true;
+      renderTabs();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.metaKey && event.shiftKey && event.key === "Enter") {
+        event.preventDefault();
+        const session = sessions.get(selected);
+        const item = session.items.find(item => item.id === session.active);
+        if (item.split) item.zoomed = !item.zoomed;
+        renderTabs();
+      }
+    });
 
     const overviewButton = document.getElementById("overview-button");
     let overviewReturn = null;

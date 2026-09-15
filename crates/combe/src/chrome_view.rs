@@ -84,6 +84,60 @@ impl PaneGuide {
     }
 }
 
+define_class!(
+    #[unsafe(super(NSView))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "CombeZoomCorners"]
+    pub(crate) struct ZoomCorners;
+
+    impl ZoomCorners {
+        #[unsafe(method(hitTest:))]
+        fn hit_test(&self, _point: NSPoint) -> *mut NSView {
+            std::ptr::null_mut()
+        }
+
+        #[unsafe(method(viewDidChangeEffectiveAppearance))]
+        fn appearance_changed(&self) {
+            let _: () = unsafe { msg_send![super(self), viewDidChangeEffectiveAppearance] };
+            self.setNeedsDisplay(true);
+        }
+
+        #[unsafe(method(drawRect:))]
+        fn draw_rect(&self, _dirty: NSRect) {
+            let size = self.bounds().size;
+            let inset = habits::ZOOM_CORNER_INSET;
+            let length = habits::ZOOM_CORNER_LENGTH
+                .min(size.width / 2.0 - inset)
+                .min(size.height / 2.0 - inset)
+                .max(0.0);
+            color(habits::CHROME_MUTED).colorWithAlphaComponent(0.5).setStroke();
+            let path = NSBezierPath::bezierPath();
+            path.setLineWidth(1.0);
+            for (x, dx) in [(inset + 0.5, 1.0), (size.width - inset - 0.5, -1.0)] {
+                for (y, dy) in [(inset + 0.5, 1.0), (size.height - inset - 0.5, -1.0)] {
+                    path.moveToPoint(NSPoint::new(x + dx * (length - 0.5), y));
+                    path.lineToPoint(NSPoint::new(x, y));
+                    path.lineToPoint(NSPoint::new(x, y + dy * (length - 0.5)));
+                }
+            }
+            path.stroke();
+        }
+    }
+);
+
+impl ZoomCorners {
+    pub(crate) fn new(mtm: MainThreadMarker, frame: NSRect) -> Retained<Self> {
+        let view: Retained<Self> = unsafe { msg_send![Self::alloc(mtm), initWithFrame: frame] };
+        view.setAutoresizingMask(
+            NSAutoresizingMaskOptions::ViewWidthSizable
+                | NSAutoresizingMaskOptions::ViewHeightSizable,
+        );
+        view.setAccessibilityElement(false);
+        view.setWantsLayer(true);
+        view
+    }
+}
+
 pub(crate) struct ClickIvars {
     click: Box<dyn Fn()>,
     hover_button: RefCell<Option<Retained<ActionButton>>>,

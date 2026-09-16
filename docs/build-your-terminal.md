@@ -12,7 +12,7 @@ make run
 
 The first `make` that needs `vendor/ghostty/build.zig` runs `git submodule update --init` and checks Zig against `vendor/ghostty/build.zig.zon`. Missing `zig` with Homebrew on `PATH` runs `brew install zig`. Later `make` calls skip that recipe.
 
-`make build` is a debug binary. `make install` copies `build/Combe.app` to `/Applications` and links `combe` onto `PATH`.
+`make build` is a debug binary. `make install` copies `build/Combe.app` to `/Applications` and links `combe` onto `PATH`. About reads the version from the running bundle; `make app` stamps it from `Cargo.toml`.
 
 ## Habits
 
@@ -47,3 +47,26 @@ A separate product name needs all three:
 combe add ~/git/example
 combe list
 ```
+
+## Release
+
+Version lives in `[workspace.package]` of `Cargo.toml` and `packaging/Info.plist`. `cargo-release` bumps both, commits, tags `vX.Y.Z`, and pushes. The tag workflow packages the app and publishes the GitHub Release. The Homebrew tap watches that release.
+
+Commit or stash everything first. `cargo-release` refuses a dirty tree, including staged files.
+
+```sh
+cargo install cargo-release
+make release-patch              # dry-run
+make release-patch EXECUTE=1    # bump, commit, tag, push
+```
+
+`release-minor` and `release-major` work the same way. The commit subject must be `chore(release): bump to vX.Y.Z`; the tag workflow refuses anything else.
+
+If `Cargo.toml` is behind already-published tags, a patch bump will collide. Skip to the next free version:
+
+```sh
+cargo release 0.2.7
+cargo release 0.2.7 --execute
+```
+
+Users pick up the cask with `brew upgrade --cask samzong/tap/combe` after the tap updates.

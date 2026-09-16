@@ -30,7 +30,9 @@ Standard macOS key equivalents live on menu items. `setMainMenu` replaces the sy
 | Opt-Cmd-W | Close every titled window. |
 | Cmd-Q | `terminate:`. `applicationShouldTerminate:` asks first when `ghostty_app_needs_confirm_quit` is true; `windowShouldClose:` asks the same way for the red button and `performClose:`. |
 
-After a menu change, verify Cmd-H, Opt-Cmd-H, Cmd-M, Cmd-Q, Cmd-W, and Opt-Cmd-W.
+After a menu change, verify Cmd-H, Opt-Cmd-H, Cmd-M, Cmd-Q, Cmd-W, and Opt-Cmd-W. About Combe uses `orderFrontStandardAboutPanel:`.
+
+Releases use `make release-patch` / `release-minor` / `release-major`. Dry-run by default; `EXECUTE=1` bumps, commits, tags, and pushes. See [docs/build-your-terminal.md](docs/build-your-terminal.md).
 
 ## Verify
 

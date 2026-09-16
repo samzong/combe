@@ -90,6 +90,23 @@ uninstall: ## Remove Combe.app and the combe symlink
 	fi
 	@echo removed $(APP)
 
+# ── Release ──────────────────────────────────────────────────────────────────
+
+.PHONY: release-ready release-patch release-minor release-major
+
+release-ready:
+	@command -v cargo-release >/dev/null || { echo 'error: cargo-release is required (cargo install cargo-release)'; exit 1; }
+	@git diff --quiet && git diff --cached --quiet || { echo 'error: commit or stash changes before release'; exit 1; }
+
+release-patch: release-ready ## Bump patch + commit + tag + push (append EXECUTE=1 to apply)
+	cargo release patch $(if $(EXECUTE),--execute,)
+
+release-minor: release-ready ## Bump minor + commit + tag + push (append EXECUTE=1 to apply)
+	cargo release minor $(if $(EXECUTE),--execute,)
+
+release-major: release-ready ## Bump major + commit + tag + push (append EXECUTE=1 to apply)
+	cargo release major $(if $(EXECUTE),--execute,)
+
 # ── Maintenance ──────────────────────────────────────────────────────────────
 
 .PHONY: clean

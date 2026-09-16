@@ -226,6 +226,8 @@ libghostty owns search. `GHOSTTY_ACTION_START_SEARCH` adds the surface's top-rig
 | Cmd-C / Cmd-V | Copy / paste through `ghostty_surface_binding_action`; while a text field such as the find bar has focus they act on that field |
 | Ctrl-Cmd-F | Toggle full screen, the standard `toggleFullScreen:` item in a View menu |
 
+The application menu's first item is **About Combe**. It opens the system About panel from the running bundle: name, version, copyright, and icon. There is no custom About window, update check, or release notes surface.
+
 ## CLI
 
 `argv[0]` selects between two entry points in one binary: `<something>.app/Contents/MacOS/Combe` without arguments opens the GUI (Dock, Finder, `open -a`); every other invocation is CLI, with no arguments showing help. Use `argv[0]` because `current_exe()` resolves the `make install` symlink on `PATH` back into the bundle.
@@ -295,7 +297,7 @@ crates/combe
   tab_bar.rs           tab controls, titles, selection, and scrolling
   overview.rs          static tab images and overview grid
   window.rs            window lifecycle, workspace sessions, focus, and overall layout
-  menu.rs              native menu items, shortcuts, and action targets
+  menu.rs              native menu items including About, shortcuts, and action targets
   chrome_view.rs       shared clickable views, native glass, and symbols
   sidebar.rs           catalog adapter
   sidebar_panel.rs     catalog refresh, sidebar controls, interaction state, and geometry

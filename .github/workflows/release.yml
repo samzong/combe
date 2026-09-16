@@ -39,6 +39,26 @@ jobs:
           rustup component add rustfmt clippy
           cargo install cargo-audit --locked
 
+      - name: Validate release tag
+        run: |
+          set -eu
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          plist_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' packaging/Info.plist)"
+          if [ -z "$version" ] || [ "$RELEASE_TAG" != "v$version" ]; then
+            echo "::error::release tag $RELEASE_TAG does not match Cargo.toml version ${version:-missing}"
+            exit 1
+          fi
+          if [ "$plist_version" != "$version" ]; then
+            echo "::error::Info.plist version $plist_version does not match Cargo.toml version $version"
+            exit 1
+          fi
+          subject="$(git log -1 --format=%s)"
+          expected_subject="chore(release): bump to v$version"
+          if [ "$subject" != "$expected_subject" ]; then
+            echo "::error::release commit subject '$subject' does not match '$expected_subject'"
+            exit 1
+          fi
+
       - name: Check
         run: make check
 

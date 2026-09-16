@@ -181,6 +181,15 @@ pub(crate) fn install(mtm: MainThreadMarker, app: &NSApplication) {
     let app_menu = NSMenu::new(mtm);
     app_menu.addItem(&item(
         mtm,
+        "About Combe",
+        sel!(orderFrontStandardAboutPanel:),
+        None,
+        "",
+        NSEventModifierFlags::empty(),
+    ));
+    app_menu.addItem(&NSMenuItem::separatorItem(mtm));
+    app_menu.addItem(&item(
+        mtm,
         "Hide Combe",
         sel!(hide:),
         None,

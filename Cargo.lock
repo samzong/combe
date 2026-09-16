@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "combe"
-version = "0.1.0"
+version = "0.2.6"
 dependencies = [
  "block2",
  "combe-catalog",
@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "combe-catalog"
-version = "0.1.0"
+version = "0.2.6"
 dependencies = [
  "dirs",
  "serde",
@@ -178,7 +178,7 @@ dependencies = [
 
 [[package]]
 name = "ghostty-sys"
-version = "0.1.0"
+version = "0.2.6"
 dependencies = [
  "bindgen",
 ]

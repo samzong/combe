@@ -3,6 +3,19 @@ name = "combe"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
+
+[[package.metadata.release.pre-release-replacements]]
+file = "../../packaging/Info.plist"
+search = "<key>CFBundleShortVersionString</key>\n    <string>.*</string>"
+replace = "<key>CFBundleShortVersionString</key>\n    <string>{{version}}</string>"
+exactly = 1
+
+[[package.metadata.release.pre-release-replacements]]
+file = "../../packaging/Info.plist"
+search = "<key>CFBundleVersion</key>\n    <string>.*</string>"
+replace = "<key>CFBundleVersion</key>\n    <string>{{version}}</string>"
+exactly = 1
 
 [[bin]]
 name = "combe"

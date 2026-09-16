@@ -163,7 +163,7 @@ pub fn ghostty_config(dark: bool) -> String {
     let _ = writeln!(config, "copy-on-select = {COPY_ON_SELECT}");
     let _ = writeln!(config, "scrollback-limit-lines = {SCROLLBACK_LINES}");
     let _ = writeln!(config, "command = {SHELL}");
-    let _ = writeln!(config, "env = {NEST_ENV}=1");
+    let _ = writeln!(config, "env = {NEST_ENV}={}", std::process::id());
     let _ = writeln!(config, "bell-features = no-attention,no-title");
     let _ = writeln!(config, "link-url = true");
     let _ = writeln!(config, "mouse-hide-while-typing = true");

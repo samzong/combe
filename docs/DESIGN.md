@@ -249,7 +249,7 @@ The window resolves the hop against the displayed catalog's registered rows; the
 
 Always open a new tab; never reuse one, inject `cd` into a live surface, or infer a main worktree from an unregistered path. `combe ~` opens a plain Home tab unless `$HOME` is registered, when normal matching applies.
 
-Every surface sets `COMBE=1` through Ghostty's `env` override after `TERM_PROGRAM=ghostty`. That mark makes hops print a message and exit without opening a URL. Catalog subcommands and a bundle GUI launch still run.
+Every surface sets `COMBE=<app pid>` through Ghostty's `env` override after `TERM_PROGRAM=ghostty`. A hop trusts that mark only when the marked pid is an ancestor of the running CLI, so a GUI editor launched from a tab inherits the variable without inheriting the verdict. A confirmed mark makes hops print a message and exit without opening a URL. Catalog subcommands and a bundle GUI launch still run.
 
 ## System entry points
 

@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Command, ExitCode};
 
 use combe_catalog::{
     State, add_repo, catalog, cleanup, home_dir, load_state, remove_repo, save_state, state_path,
@@ -120,7 +121,33 @@ fn expand(target: &str) -> PathBuf {
 }
 
 fn inside() -> bool {
-    std::env::var(habits::NEST_ENV).as_deref() == Ok("1")
+    let Ok(marker) = std::env::var(habits::NEST_ENV) else {
+        return false;
+    };
+    let Ok(app) = marker.parse::<u32>() else {
+        return false;
+    };
+    let Ok(output) = Command::new("ps").args(["-Ao", "pid=,ppid="]).output() else {
+        return false;
+    };
+    let parents: HashMap<u32, u32> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            Some((fields.next()?.parse().ok()?, fields.next()?.parse().ok()?))
+        })
+        .collect();
+    let mut pid = std::process::id();
+    while let Some(&parent) = parents.get(&pid) {
+        if parent <= 1 {
+            return false;
+        }
+        if parent == app {
+            return true;
+        }
+        pid = parent;
+    }
+    false
 }
 
 fn looks_like_path(target: &str) -> bool {

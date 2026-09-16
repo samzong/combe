@@ -1,34 +1,30 @@
+use crate::geometry::rect;
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::ffi::c_void;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use objc2::rc::Retained;
-use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject};
+use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{ClassType, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSAccessibility, NSAlert, NSAlertFirstButtonReturn, NSAlertStyle, NSAnimationContext,
     NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication,
-    NSApplicationDelegate, NSApplicationTerminateReply, NSAutoresizingMaskOptions,
-    NSBackingStoreType, NSButton, NSColor, NSEvent, NSEventModifierFlags, NSEventType,
-    NSPasteboard, NSPasteboardTypeString, NSResponder, NSSplitView, NSSplitViewDelegate,
-    NSSplitViewDividerStyle, NSText, NSView, NSWindow, NSWindowButton, NSWindowDelegate,
-    NSWindowStyleMask, NSWindowTitleVisibility, NSWorkspace,
+    NSAutoresizingMaskOptions, NSBackingStoreType, NSButton, NSColor, NSEvent, NSSplitView,
+    NSSplitViewDelegate, NSSplitViewDividerStyle, NSText, NSView, NSWindow, NSWindowButton,
+    NSWindowDelegate, NSWindowStyleMask, NSWindowTitleVisibility, NSWorkspace,
 };
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{
-    MainThreadMarker, NSArray, NSInteger, NSNotification, NSPoint, NSRect, NSSize, NSString, NSURL,
+    MainThreadMarker, NSArray, NSInteger, NSNotification, NSPoint, NSRect, NSString,
 };
 use objc2_quartz_core::CAMediaTimingFunction;
 
-use combe_catalog::home_dir;
-
-use crate::chrome_view::{self, ClickView};
-use crate::entry::{self, Entry};
+use crate::chrome_view;
 use crate::ghostty;
 use crate::habits;
 use crate::menu;
-use crate::overview::{Overview, Step};
+use crate::overview::Session;
 use crate::quota_panel;
 use crate::split;
 use crate::surface::SurfaceView;
@@ -59,9 +55,7 @@ struct State {
     split: Retained<SplitView>,
     _split_delegate: Retained<SplitDelegate>,
     sidebar_pane: Retained<NSView>,
-    overview: Option<Retained<Overview>>,
-    overview_return: Option<Retained<NSResponder>>,
-    overview_tab: Option<u64>,
+    overview: Option<Session>,
     overview_button: Option<Retained<NSButton>>,
     tab_bar: TabBar,
     content: Retained<NSView>,
@@ -97,84 +91,6 @@ define_class!(
 define_class!(
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]
-    #[name = "CombeAppDelegate"]
-    #[ivars = ()]
-    pub struct AppDelegate;
-
-    unsafe impl NSObjectProtocol for AppDelegate {}
-
-    unsafe impl NSApplicationDelegate for AppDelegate {
-        #[unsafe(method(applicationShouldTerminateAfterLastWindowClosed:))]
-        fn should_terminate_after_last_window_closed(&self, _app: &NSApplication) -> bool {
-            false
-        }
-
-        #[unsafe(method(applicationShouldTerminate:))]
-        fn should_terminate(&self, _app: &NSApplication) -> NSApplicationTerminateReply {
-            let open = STATE.with(|state| {
-                state
-                    .borrow()
-                    .as_ref()
-                    .is_some_and(|state| state.window.isVisible() || state.window.isMiniaturized())
-            });
-            if !open || confirm_quit() {
-                NSApplicationTerminateReply::TerminateNow
-            } else {
-                NSApplicationTerminateReply::TerminateCancel
-            }
-        }
-
-        #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
-        fn should_handle_reopen(&self, _app: &NSApplication, _has_visible_windows: bool) -> bool {
-            reveal_window();
-            true
-        }
-
-        #[unsafe(method(application:openURLs:))]
-        fn open_urls(&self, _app: &NSApplication, urls: &NSArray<NSURL>) {
-            open_urls(urls);
-        }
-
-        #[unsafe(method(applicationDidBecomeActive:))]
-        fn did_become_active(&self, _notification: &AnyObject) {
-            ghostty::set_focus(true);
-            refresh_attention();
-            sidebar_panel::refresh();
-            quota_panel::refresh();
-        }
-
-        #[unsafe(method(applicationDidResignActive:))]
-        fn did_resign_active(&self, _notification: &AnyObject) {
-            ghostty::set_focus(false);
-            deactivate_chrome();
-        }
-    }
-
-    impl AppDelegate {
-        #[unsafe(method(openTab:userData:error:))]
-        fn open_tab_service(
-            &self,
-            pasteboard: &NSPasteboard,
-            _user_data: Option<&NSString>,
-            _error: *mut *mut NSString,
-        ) {
-            if let Some(text) = unsafe { pasteboard.stringForType(NSPasteboardTypeString) } {
-                open_paths(&text.to_string());
-            }
-        }
-    }
-);
-
-impl AppDelegate {
-    fn new(mtm: MainThreadMarker) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(());
-        unsafe { msg_send![super(this), init] }
-    }
-}
-
-define_class!(
-    #[unsafe(super(NSObject))]
-    #[thread_kind = MainThreadOnly]
     #[name = "CombeWindowDelegate"]
     #[ivars = ()]
     struct WindowDelegate;
@@ -198,18 +114,8 @@ define_class!(
     }
 );
 
-pub fn install_delegate(mtm: MainThreadMarker, app: &NSApplication) -> Retained<AppDelegate> {
-    let delegate = AppDelegate::new(mtm);
-    app.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
-    unsafe { app.setServicesProvider(Some(delegate.as_ref())) };
-    delegate
-}
-
 pub fn open(mtm: MainThreadMarker) {
-    let frame = NSRect::new(
-        NSPoint::new(0.0, 0.0),
-        NSSize::new(habits::WINDOW_WIDTH, habits::WINDOW_HEIGHT),
-    );
+    let frame = rect(0.0, 0.0, habits::WINDOW_WIDTH, habits::WINDOW_HEIGHT);
     let style = NSWindowStyleMask::Titled
         | NSWindowStyleMask::Closable
         | NSWindowStyleMask::Miniaturizable
@@ -234,30 +140,33 @@ pub fn open(mtm: MainThreadMarker) {
     split.setDividerStyle(NSSplitViewDividerStyle::Thin);
     split.setAutoresizingMask(FILL);
 
-    let sidebar_frame = NSRect::new(
-        NSPoint::new(0.0, 0.0),
-        NSSize::new(habits::SIDEBAR_WIDTH + 2.0 * INSET, frame.size.height),
+    let sidebar_frame = rect(
+        0.0,
+        0.0,
+        habits::SIDEBAR_WIDTH + 2.0 * INSET,
+        frame.size.height,
     );
     let sidebar_pane = NSView::initWithFrame(NSView::alloc(mtm), sidebar_frame);
     sidebar_pane.setAutoresizingMask(NSAutoresizingMaskOptions::ViewHeightSizable);
 
     split.addSubview(&sidebar_pane);
 
-    let right_frame = NSRect::new(
-        NSPoint::new(0.0, 0.0),
-        NSSize::new(
-            frame.size.width - habits::SIDEBAR_WIDTH - 2.0 * INSET,
-            frame.size.height,
-        ),
+    let right_frame = rect(
+        0.0,
+        0.0,
+        frame.size.width - habits::SIDEBAR_WIDTH - 2.0 * INSET,
+        frame.size.height,
     );
     let right = NSView::initWithFrame(NSView::alloc(mtm), right_frame);
     right.setAutoresizingMask(FILL);
 
     let tab_bar = TabBar::new(
         mtm,
-        NSRect::new(
-            NSPoint::new(0.0, right_frame.size.height - TOP_BAR_HEIGHT),
-            NSSize::new(right_frame.size.width, TOP_BAR_HEIGHT),
+        rect(
+            0.0,
+            right_frame.size.height - TOP_BAR_HEIGHT,
+            right_frame.size.width,
+            TOP_BAR_HEIGHT,
         ),
         activate_tab,
         request_close_tab,
@@ -275,12 +184,11 @@ pub fn open(mtm: MainThreadMarker) {
 
     let content = NSView::initWithFrame(
         NSView::alloc(mtm),
-        NSRect::new(
-            NSPoint::new(0.0, status_h),
-            NSSize::new(
-                right_frame.size.width,
-                (right_frame.size.height - TOP_BAR_HEIGHT - status_h).max(0.0),
-            ),
+        rect(
+            0.0,
+            status_h,
+            right_frame.size.width,
+            (right_frame.size.height - TOP_BAR_HEIGHT - status_h).max(0.0),
         ),
     );
     content.setAutoresizingMask(FILL);
@@ -339,8 +247,6 @@ pub fn open(mtm: MainThreadMarker) {
             _split_delegate: split_delegate,
             sidebar_pane: sidebar_pane.clone(),
             overview: None,
-            overview_return: None,
-            overview_tab: None,
             overview_button,
             tab_bar,
             content: content.clone(),
@@ -402,92 +308,6 @@ fn leaf_name(path: &str) -> String {
         .to_string()
 }
 
-fn open_urls(urls: &NSArray<NSURL>) {
-    for url in urls {
-        if let Some(entry) = resolve(&url) {
-            accept(entry);
-        }
-    }
-}
-
-fn open_paths(text: &str) {
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        if let Some(entry) = entry::file(Path::new(line)) {
-            accept(entry);
-        }
-    }
-}
-
-fn resolve(url: &NSURL) -> Option<Entry> {
-    if url.isFileURL() {
-        return entry::file(Path::new(&url.path()?.to_string()));
-    }
-    let scheme = url.scheme()?.to_string().to_ascii_lowercase();
-    if scheme == entry::HOP_SCHEME {
-        return entry::directory(Path::new(&url.path()?.to_string()));
-    }
-    let host = url.host()?.to_string();
-    match scheme.as_str() {
-        "ssh" => entry::ssh(
-            url.user().map(|user| user.to_string()).as_deref(),
-            &host,
-            url.port()
-                .and_then(|port| u16::try_from(port.as_i64()).ok()),
-        ),
-        "x-man-page" => {
-            let path = url.path().map(|path| path.to_string());
-            match path.as_deref().map(|path| path.trim_start_matches('/')) {
-                Some(page) if !page.is_empty() => entry::man(Some(&host), page),
-                _ => entry::man(None, &host),
-            }
-        }
-        _ => None,
-    }
-}
-
-fn accept(entry: Entry) {
-    match entry {
-        Entry::Workspace(path) => {
-            sidebar::add(std::slice::from_ref(&path));
-            let repos = sidebar::repos();
-            let label = repos
-                .iter()
-                .flat_map(|repo| repo.rows.iter())
-                .find(|row| row.path == path)
-                .map(|row| row.label.clone())
-                .unwrap_or_else(|| entry::name_of(&path));
-            sidebar_panel::set_repos(repos);
-            sidebar_panel::select(&path.to_string_lossy(), &label);
-        }
-        Entry::Hop(dir) => {
-            let hop = entry::hop(&dir, &sidebar::rows(), home_dir().as_deref());
-            new_tab(
-                &hop.workspace.to_string_lossy(),
-                &hop.cwd.to_string_lossy(),
-                &hop.name,
-                None,
-            );
-        }
-        Entry::Run { cwd, name, input } => {
-            if !confirm("Run this command in Combe?", &input, "Run") {
-                return;
-            }
-            let cwd = cwd
-                .map(|cwd| cwd.to_string_lossy().into_owned())
-                .or_else(|| {
-                    STATE.with(|state| state.borrow().as_ref()?.tabs.current().map(str::to_owned))
-                })
-                .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| "/".to_owned()));
-            new_tab(&cwd, &cwd, &name, Some(&input));
-        }
-    }
-    reveal_window();
-}
-
 fn open_worktree(path: &str, name: &str) {
     let existing = STATE.with(|state| {
         let mut state = state.borrow_mut();
@@ -500,11 +320,9 @@ fn open_worktree(path: &str, name: &str) {
     }
 }
 
-fn new_tab(workspace: &str, cwd: &str, name: &str, input: Option<&str>) {
+pub(crate) fn new_tab(workspace: &str, cwd: &str, name: &str, input: Option<&str>) {
     let mtm = MainThreadMarker::new().expect("main thread");
-    STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        let Some(state) = state.as_mut() else { return };
+    with_mut_state(|state| {
         let root = split::root(mtm, state.content.bounds(), cwd, input);
         state.content.addSubview(&root);
         state.tabs.push(workspace.to_owned(), name.to_owned(), root);
@@ -516,9 +334,7 @@ fn new_tab(workspace: &str, cwd: &str, name: &str, input: Option<&str>) {
 
 fn activate_tab(id: u64) {
     dismiss_overview(false);
-    STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        let Some(state) = state.as_mut() else { return };
+    with_mut_state(|state| {
         state.tabs.set_active(id);
     });
     sync_tabs();
@@ -601,7 +417,7 @@ fn confirm_close_tab(id: u64) -> bool {
         )
 }
 
-fn confirm_quit() -> bool {
+pub(crate) fn confirm_quit() -> bool {
     !ghostty::needs_confirm_quit()
         || confirm(
             "Quit Combe?",
@@ -610,7 +426,7 @@ fn confirm_quit() -> bool {
         )
 }
 
-fn confirm(message: &str, informative: &str, action: &str) -> bool {
+pub(crate) fn confirm(message: &str, informative: &str, action: &str) -> bool {
     let mtm = MainThreadMarker::new().expect("main thread");
     let alert = NSAlert::new(mtm);
     alert.setAlertStyle(NSAlertStyle::Warning);
@@ -621,10 +437,8 @@ fn confirm(message: &str, informative: &str, action: &str) -> bool {
     alert.runModal() == NSAlertFirstButtonReturn
 }
 
-fn reveal_window() {
-    STATE.with(|state| {
-        let state = state.borrow();
-        let Some(state) = state.as_ref() else { return };
+pub(crate) fn reveal_window() {
+    with_state(|state| {
         if state.window.isMiniaturized() {
             state.window.deminiaturize(None);
         }
@@ -654,9 +468,7 @@ pub(crate) fn close_all_windows() {
 }
 
 fn close_tab(id: u64) {
-    STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        let Some(state) = state.as_mut() else { return };
+    with_mut_state(|state| {
         let Some(tab) = state.tabs.remove(id) else {
             return;
         };
@@ -673,13 +485,8 @@ pub(crate) fn toggle_split_zoom() {
     let Some(view) = focused_surface() else {
         return;
     };
-    STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        let Some(state) = state.as_mut() else { return };
-        let Some(id) = state.tabs.active_id() else {
-            return;
-        };
-        let Some(tab) = state.tabs.get_mut(id) else {
+    with_mut_state(|state| {
+        let Some(tab) = state.tabs.active_mut() else {
             return;
         };
         if let Some(zoom) = tab.zoom.take() {
@@ -695,19 +502,8 @@ pub(crate) fn toggle_split_zoom() {
 }
 
 fn restore_zoom(view: &SurfaceView) {
-    STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        let Some(state) = state.as_mut() else { return };
-        let id = state
-            .tabs
-            .items()
-            .iter()
-            .find(|tab| {
-                split::surfaces(&tab.root)
-                    .iter()
-                    .any(|leaf| std::ptr::eq(&**leaf, view))
-            })
-            .map(|tab| tab.id);
+    with_mut_state(|state| {
+        let id = state.tabs.owner(view).map(|tab| tab.id);
         if let Some(tab) = id.and_then(|id| state.tabs.get_mut(id))
             && let Some(zoom) = tab.zoom.take()
         {
@@ -776,9 +572,7 @@ pub(crate) fn move_pane_to_new_tab() {
         return;
     };
     restore_zoom(&view);
-    STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        let Some(state) = state.as_mut() else { return };
+    with_mut_state(|state| {
         let root = split::adopt(mtm, state.content.bounds(), &view);
         state.content.addSubview(&root);
         state.tabs.push(workspace, name, root);
@@ -837,11 +631,7 @@ pub fn goto_split(view: &SurfaceView, target: split::Target) -> bool {
     let found = STATE.with(|state| {
         let state = state.borrow();
         let state = state.as_ref()?;
-        let tab = state.tabs.items().iter().find(|tab| {
-            split::surfaces(&tab.root)
-                .iter()
-                .any(|leaf| std::ptr::eq(&**leaf, view))
-        })?;
+        let tab = state.tabs.owner(view)?;
         let next = split::target(&tab.root, view, target);
         Some(next)
     });
@@ -855,14 +645,7 @@ pub fn goto_split(view: &SurfaceView, target: split::Target) -> bool {
 }
 
 fn responder_surface(state: &State) -> Option<Retained<SurfaceView>> {
-    let responder = state.window.firstResponder()?;
-    let object: &AnyObject = responder.as_ref();
-    let matches: bool = unsafe { msg_send![object, isKindOfClass: SurfaceView::class()] };
-    if !matches {
-        return None;
-    }
-    let raw = Retained::into_raw(responder) as *mut SurfaceView;
-    unsafe { Retained::from_raw(raw) }
+    state.window.firstResponder()?.downcast().ok()
 }
 
 fn focused_surface() -> Option<Retained<SurfaceView>> {
@@ -1011,14 +794,9 @@ pub fn refresh_labels() {
             .items()
             .iter()
             .map(|tab| {
-                let leaves = split::surfaces(&tab.root);
                 let view = focused
                     .as_ref()
-                    .filter(|view| {
-                        leaves
-                            .iter()
-                            .any(|leaf| std::ptr::eq(&**leaf, &***view as *const SurfaceView))
-                    })
+                    .filter(|view| tab.contains(view))
                     .cloned()
                     .or_else(|| tab.focused_surface());
                 let label = view
@@ -1050,26 +828,21 @@ pub(crate) fn toggle_overview() {
         dismiss_overview(true);
         return;
     }
-    let mtm = MainThreadMarker::new().expect("main thread");
     let mounted = STATE.with(|state| {
         let mut state = state.borrow_mut();
         let state = state.as_mut()?;
         let active = state.tabs.active_id()?;
         let tabs: Vec<_> = state.tabs.visible().collect();
-        let overview = Overview::new(mtm, state.content.bounds(), &tabs, active, activate_tab);
-        state.overview_return = state.window.firstResponder();
-        state.overview_tab = Some(active);
-        Overview::transition(&state.content);
-        state.content.addSubview(&overview);
-        state.overview = Some(overview.clone());
+        let session = Session::mount(&state.window, &state.content, &tabs, active, activate_tab);
+        let view = session.view();
+        state.overview = Some(session);
         if let Some(button) = state.overview_button.as_ref() {
             button.setAccessibilityExpanded(true);
         }
-        Some((state.window.clone(), overview))
+        Some(view)
     });
-    if let Some((window, overview)) = mounted {
-        window.makeFirstResponder(Some(&*overview));
-        overview.focus_active();
+    if let Some(view) = mounted {
+        view.focus();
     }
 }
 
@@ -1077,94 +850,27 @@ pub(crate) fn dismiss_overview(restore: bool) {
     let removed = STATE.with(|state| {
         let mut state = state.borrow_mut();
         let state = state.as_mut()?;
-        let view = state.overview.take()?;
-        state.overview_tab = None;
+        let session = state.overview.take()?;
         if let Some(button) = state.overview_button.as_ref() {
             button.setAccessibilityExpanded(false);
         }
-        Some((state.window.clone(), view, state.overview_return.take()))
+        Some(session)
     });
-    if let Some((window, view, responder)) = removed {
-        if let Some(parent) = unsafe { view.superview() } {
-            Overview::transition(&parent);
-        }
-        view.removeFromSuperview();
-        if restore {
-            if let Some(responder) = responder {
-                if !window.makeFirstResponder(Some(&*responder)) {
-                    focus_active();
-                }
-            } else {
-                focus_active();
-            }
-        }
+    if let Some(session) = removed {
+        session.dismiss(restore, focus_active);
     }
 }
 
 fn handle_overview_event(event: &NSEvent) -> bool {
-    let active = STATE.with(|state| state.borrow().as_ref().and_then(|state| state.overview_tab));
-    let Some(active) = active else { return false };
-    if event.r#type() != NSEventType::KeyDown {
-        return false;
-    }
-    if event
-        .modifierFlags()
-        .contains(NSEventModifierFlags::Command)
-    {
-        let flags = event.modifierFlags();
-        let toggle = flags.contains(NSEventModifierFlags::Shift)
-            && !flags.intersects(NSEventModifierFlags::Option.union(NSEventModifierFlags::Control))
-            && event
-                .charactersIgnoringModifiers()
-                .is_some_and(|key| matches!(key.to_string().as_str(), "\\" | "|"));
-        if !toggle {
-            dismiss_overview(true);
-        }
-        return false;
-    }
-    match event.keyCode() {
-        53 => dismiss_overview(true),
-        123..=126 => {
-            let step = match event.keyCode() {
-                123 => Step::Left,
-                124 => Step::Right,
-                125 => Step::Down,
-                _ => Step::Up,
-            };
-            let overview = STATE.with(|state| {
-                state
-                    .borrow()
-                    .as_ref()
-                    .and_then(|state| state.overview.clone())
-            });
-            if let Some(overview) = overview {
-                overview.move_focus(step);
-            }
-        }
-        36 | 76 | 49 => {
-            let card = STATE.with(|state| {
-                let state = state.borrow();
-                let state = state.as_ref()?;
-                let responder = state.window.firstResponder()?;
-                let object: &AnyObject = responder.as_ref();
-                let is_card: bool = unsafe { msg_send![object, isKindOfClass: ClickView::class()] };
-                if !is_card {
-                    return None;
-                }
-                let overview = state.overview.as_ref()?;
-                let inside: bool = unsafe { msg_send![object, isDescendantOf: &**overview] };
-                inside.then_some(responder)
-            });
-            if let Some(card) = card {
-                let _: bool = unsafe { msg_send![&*card, accessibilityPerformPress] };
-            } else {
-                activate_tab(active);
-            }
-        }
-        48 => return false,
-        _ => {}
-    }
-    true
+    let view = STATE.with(|state| {
+        state
+            .borrow()
+            .as_ref()?
+            .overview
+            .as_ref()
+            .map(Session::view)
+    });
+    view.is_some_and(|view| view.handle_event(event, dismiss_overview, activate_tab))
 }
 
 fn focus_active() {
@@ -1347,9 +1053,11 @@ define_class!(
             if index != 0 {
                 return NSRect::default();
             }
-            NSRect::new(
-                NSPoint::new(drawn.origin.x - INSET, drawn.origin.y),
-                NSSize::new(drawn.size.width + DIVIDER_GRAB, drawn.size.height),
+            rect(
+                drawn.origin.x - INSET,
+                drawn.origin.y,
+                drawn.size.width + DIVIDER_GRAB,
+                drawn.size.height,
             )
         }
     }
@@ -1407,7 +1115,7 @@ pub(crate) fn sync_appearance() {
             .as_ref()
             .and_then(|state| state.overview.as_ref())
         {
-            overview.setNeedsDisplay(true);
+            overview.view().setNeedsDisplay(true);
         }
     });
     window.invalidateShadow();
@@ -1417,7 +1125,7 @@ pub(crate) fn sync_appearance() {
     }
 }
 
-fn deactivate_chrome() {
+pub(crate) fn deactivate_chrome() {
     sidebar_panel::deactivate();
     quota_panel::deactivate();
 }
@@ -1457,9 +1165,7 @@ fn layout_chrome() {
             0.22, 0.8, 0.2, 1.0,
         )));
     }
-    STATE.with(|state| {
-        let state = state.borrow();
-        let Some(state) = state.as_ref() else { return };
+    with_state(|state| {
         let Some(root) = state.window.contentView() else {
             return;
         };
@@ -1483,29 +1189,29 @@ fn layout_chrome() {
         let inset = leading_inset(&state.window);
         let pinned = sidebar_panel::pinned();
         let edge = sidebar_panel::layout(size, inset, animate);
-        state.tab_bar.set_frame(NSRect::new(
-            NSPoint::new(edge + INSET, size.height - TOP_BAR_HEIGHT),
-            NSSize::new(
-                (size.width - edge - 2.0 * INSET - 48.0).max(0.0),
-                TOP_BAR_HEIGHT,
-            ),
+        state.tab_bar.set_frame(rect(
+            edge + INSET,
+            size.height - TOP_BAR_HEIGHT,
+            (size.width - edge - 2.0 * INSET - 48.0).max(0.0),
+            TOP_BAR_HEIGHT,
         ));
         if let Some(button) = state.overview_button.as_ref() {
-            button.setFrame(NSRect::new(
-                NSPoint::new(size.width - INSET - 36.0, size.height - INSET - 36.0),
-                NSSize::new(36.0, 36.0),
+            button.setFrame(rect(
+                size.width - INSET - 36.0,
+                size.height - INSET - 36.0,
+                36.0,
+                36.0,
             ));
         }
         if let Some(right) = unsafe { state.content.superview() } {
             let right_size = right.frame().size;
             let terminal_inset = if pinned { 0.0 } else { INSET };
             let status_h = quota_panel::layout(right_size.width, terminal_inset);
-            state.content.setFrame(NSRect::new(
-                NSPoint::new(terminal_inset, status_h.max(INSET)),
-                NSSize::new(
-                    (right_size.width - terminal_inset - INSET).max(0.0),
-                    (right_size.height - TOP_BAR_HEIGHT - status_h.max(INSET)).max(0.0),
-                ),
+            state.content.setFrame(rect(
+                terminal_inset,
+                status_h.max(INSET),
+                (right_size.width - terminal_inset - INSET).max(0.0),
+                (right_size.height - TOP_BAR_HEIGHT - status_h.max(INSET)).max(0.0),
             ));
         }
         if !state
@@ -1566,13 +1272,7 @@ fn close_leaf(view: &SurfaceView) {
         let state = state.as_ref()?;
         state
             .tabs
-            .items()
-            .iter()
-            .find(|tab| {
-                split::surfaces(&tab.root)
-                    .iter()
-                    .any(|leaf| std::ptr::eq(&**leaf, view))
-            })
+            .owner(view)
             .map(|tab| (tab.id, split::surfaces(&tab.root).len()))
     });
     let Some((id, leaves)) = owner else { return };
@@ -1596,4 +1296,33 @@ fn quota_window_live() -> bool {
                 .as_ref()
                 .is_some_and(|state| state.window.isKeyWindow() && !state.window.isMiniaturized())
         })
+}
+
+pub(crate) fn is_open() -> bool {
+    STATE.with(|state| {
+        state
+            .borrow()
+            .as_ref()
+            .is_some_and(|state| state.window.isVisible() || state.window.isMiniaturized())
+    })
+}
+
+pub(crate) fn current_workspace() -> Option<String> {
+    STATE.with(|state| state.borrow().as_ref()?.tabs.current().map(str::to_owned))
+}
+
+fn with_state(f: impl FnOnce(&State)) {
+    STATE.with(|state| {
+        if let Some(state) = state.borrow().as_ref() {
+            f(state);
+        }
+    });
+}
+
+fn with_mut_state(f: impl FnOnce(&mut State)) {
+    STATE.with(|state| {
+        if let Some(state) = state.borrow_mut().as_mut() {
+            f(state);
+        }
+    });
 }

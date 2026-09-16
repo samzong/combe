@@ -176,168 +176,101 @@ pub(crate) fn install(mtm: MainThreadMarker, app: &NSApplication) {
 
     let menubar = NSMenu::new(mtm);
 
-    let app_item = NSMenuItem::new(mtm);
-    menubar.addItem(&app_item);
-    let app_menu = NSMenu::new(mtm);
-    app_menu.addItem(&item(
-        mtm,
-        "About Combe",
-        sel!(orderFrontStandardAboutPanel:),
-        None,
-        "",
-        NSEventModifierFlags::empty(),
-    ));
-    app_menu.addItem(&NSMenuItem::separatorItem(mtm));
-    app_menu.addItem(&item(
-        mtm,
-        "Hide Combe",
-        sel!(hide:),
-        None,
-        "h",
-        NSEventModifierFlags::Command,
-    ));
-    app_menu.addItem(&item(
-        mtm,
-        "Hide Others",
-        sel!(hideOtherApplications:),
-        None,
-        "h",
-        NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
-    ));
-    app_menu.addItem(&item(
-        mtm,
-        "Show All",
-        sel!(unhideAllApplications:),
-        None,
-        "",
-        NSEventModifierFlags::empty(),
-    ));
-    app_menu.addItem(&NSMenuItem::separatorItem(mtm));
-    app_menu.addItem(&item(
-        mtm,
-        "Quit Combe",
-        sel!(terminate:),
-        None,
-        "q",
-        NSEventModifierFlags::Command,
-    ));
-    app_item.setSubmenu(Some(&app_menu));
+    let command = NSEventModifierFlags::Command;
+    let shift_command = command.union(NSEventModifierFlags::Shift);
+    let option_command = command.union(NSEventModifierFlags::Option);
+    let no_modifiers = NSEventModifierFlags::empty();
 
-    let terminal_item = NSMenuItem::new(mtm);
-    menubar.addItem(&terminal_item);
-    let terminal_menu = NSMenu::new(mtm);
-    terminal_menu.setTitle(&NSString::from_str("Terminal"));
-    let entries: [(&str, objc2::runtime::Sel, &str, NSEventModifierFlags); 18] = [
+    let app_menu = submenu(mtm, &menubar, "");
+    for (title, action, key, mask) in [
         (
-            "Zoom Split",
-            sel!(toggleSplitZoom:),
-            "\r",
-            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
+            "About Combe",
+            Some(sel!(orderFrontStandardAboutPanel:)),
+            "",
+            no_modifiers,
         ),
-        ("New Tab", sel!(newTab:), "t", NSEventModifierFlags::Command),
+        ("", None, "", no_modifiers),
+        ("Hide Combe", Some(sel!(hide:)), "h", command),
         (
-            "Close",
-            sel!(closeFocused:),
-            "w",
-            NSEventModifierFlags::Command,
+            "Hide Others",
+            Some(sel!(hideOtherApplications:)),
+            "h",
+            option_command,
         ),
         (
-            "Split Right",
-            sel!(splitRight:),
-            "d",
-            NSEventModifierFlags::Command,
+            "Show All",
+            Some(sel!(unhideAllApplications:)),
+            "",
+            no_modifiers,
         ),
-        (
-            "Split Down",
-            sel!(splitDown:),
-            "D",
-            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
-        ),
+        ("", None, "", no_modifiers),
+        ("Quit Combe", Some(sel!(terminate:)), "q", command),
+    ] {
+        let entry = match action {
+            Some(action) => item(mtm, title, action, None, key, mask),
+            None => NSMenuItem::separatorItem(mtm),
+        };
+        app_menu.addItem(&entry);
+    }
+
+    let terminal_menu = submenu(mtm, &menubar, "Terminal");
+    let entries = [
+        ("Zoom Split", sel!(toggleSplitZoom:), "\r", shift_command),
+        ("New Tab", sel!(newTab:), "t", command),
+        ("Close", sel!(closeFocused:), "w", command),
+        ("Split Right", sel!(splitRight:), "d", command),
+        ("Split Down", sel!(splitDown:), "D", shift_command),
         (
             "Move Pane to New Tab",
             sel!(movePaneToNewTab:),
             "T",
-            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
+            shift_command,
         ),
         (
             "Focus Split Left",
             sel!(focusSplitLeft:),
             "\u{F702}",
-            NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
+            option_command,
         ),
         (
             "Focus Split Right",
             sel!(focusSplitRight:),
             "\u{F703}",
-            NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
+            option_command,
         ),
         (
             "Focus Split Up",
             sel!(focusSplitUp:),
             "\u{F700}",
-            NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
+            option_command,
         ),
         (
             "Focus Split Down",
             sel!(focusSplitDown:),
             "\u{F701}",
-            NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
+            option_command,
         ),
-        (
-            "Previous Tab",
-            sel!(previousTab:),
-            "[",
-            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
-        ),
-        (
-            "Next Tab",
-            sel!(nextTab:),
-            "]",
-            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
-        ),
-        (
-            "Toggle Sidebar",
-            sel!(toggleSidebar:),
-            "b",
-            NSEventModifierFlags::Command,
-        ),
-        ("Find", sel!(find:), "f", NSEventModifierFlags::Command),
-        (
-            "Find Next",
-            sel!(findNext:),
-            "g",
-            NSEventModifierFlags::Command,
-        ),
-        (
-            "Find Previous",
-            sel!(findPrevious:),
-            "g",
-            NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
-        ),
-        ("Copy", sel!(copyText:), "c", NSEventModifierFlags::Command),
-        (
-            "Paste",
-            sel!(pasteText:),
-            "v",
-            NSEventModifierFlags::Command,
-        ),
+        ("Previous Tab", sel!(previousTab:), "[", shift_command),
+        ("Next Tab", sel!(nextTab:), "]", shift_command),
+        ("Toggle Sidebar", sel!(toggleSidebar:), "b", command),
+        ("Find", sel!(find:), "f", command),
+        ("Find Next", sel!(findNext:), "g", command),
+        ("Find Previous", sel!(findPrevious:), "g", shift_command),
+        ("Copy", sel!(copyText:), "c", command),
+        ("Paste", sel!(pasteText:), "v", command),
     ];
     for (title, action, key, mask) in entries {
         terminal_menu.addItem(&item(mtm, title, action, Some(&commands), key, mask));
     }
-    terminal_item.setSubmenu(Some(&terminal_menu));
 
-    let view_item = NSMenuItem::new(mtm);
-    menubar.addItem(&view_item);
-    let view_menu = NSMenu::new(mtm);
-    view_menu.setTitle(&NSString::from_str("View"));
+    let view_menu = submenu(mtm, &menubar, "View");
     view_menu.addItem(&item(
         mtm,
         "Tab Overview",
         sel!(toggleTabOverview:),
         Some(&commands),
         "\\",
-        NSEventModifierFlags::Command.union(NSEventModifierFlags::Shift),
+        shift_command,
     ));
     view_menu.addItem(&item(
         mtm,
@@ -345,7 +278,7 @@ pub(crate) fn install(mtm: MainThreadMarker, app: &NSApplication) {
         sel!(toggleFullScreen:),
         None,
         "f",
-        NSEventModifierFlags::Command.union(NSEventModifierFlags::Control),
+        command.union(NSEventModifierFlags::Control),
     ));
     view_menu.addItem(&NSMenuItem::separatorItem(mtm));
     for (index, title) in ["Follow System", "Light", "Dark"].into_iter().enumerate() {
@@ -355,25 +288,21 @@ pub(crate) fn install(mtm: MainThreadMarker, app: &NSApplication) {
             sel!(changeAppearance:),
             Some(&commands),
             "",
-            NSEventModifierFlags::empty(),
+            no_modifiers,
         );
         entry.setTag(index as NSInteger);
         entry.setState(if index == 0 { 1 } else { 0 });
         view_menu.addItem(&entry);
     }
-    view_item.setSubmenu(Some(&view_menu));
 
-    let window_item = NSMenuItem::new(mtm);
-    menubar.addItem(&window_item);
-    let window_menu = NSMenu::new(mtm);
-    window_menu.setTitle(&NSString::from_str("Window"));
+    let window_menu = submenu(mtm, &menubar, "Window");
     window_menu.addItem(&item(
         mtm,
         "Minimize",
         sel!(performMiniaturize:),
         None,
         "m",
-        NSEventModifierFlags::Command,
+        command,
     ));
     window_menu.addItem(&item(
         mtm,
@@ -381,12 +310,20 @@ pub(crate) fn install(mtm: MainThreadMarker, app: &NSApplication) {
         sel!(closeAllWindows:),
         Some(&commands),
         "w",
-        NSEventModifierFlags::Command.union(NSEventModifierFlags::Option),
+        option_command,
     ));
-    window_item.setSubmenu(Some(&window_menu));
     app.setWindowsMenu(Some(&window_menu));
 
     app.setMainMenu(Some(&menubar));
+}
+
+fn submenu(mtm: MainThreadMarker, menubar: &NSMenu, title: &str) -> Retained<NSMenu> {
+    let entry = NSMenuItem::new(mtm);
+    let menu = NSMenu::new(mtm);
+    menu.setTitle(&NSString::from_str(title));
+    entry.setSubmenu(Some(&menu));
+    menubar.addItem(&entry);
+    menu
 }
 
 fn item(

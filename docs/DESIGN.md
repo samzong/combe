@@ -296,9 +296,13 @@ crates/combe
   tabs.rs              tabs keyed by worktree, active tab per worktree
   tab_bar.rs           tab controls, titles, selection, and scrolling
   overview.rs          static tab images and overview grid
+  app.rs               application delegate, external open requests, and Finder service
   window.rs            window lifecycle, workspace sessions, focus, and overall layout
   menu.rs              native menu items including About, shortcuts, and action targets
-  chrome_view.rs       shared clickable views, native glass, and symbols
+  chrome_view.rs       shared clickable views and symbols
+  glass.rs             native material and appearance-adaptive colors
+  pane_overlay.rs      attention guides and zoom corner marks
+  geometry.rs          shared native rectangle construction
   sidebar.rs           catalog adapter
   sidebar_panel.rs     catalog refresh, sidebar controls, interaction state, and geometry
   quota.rs             Claude and Codex subscription windows

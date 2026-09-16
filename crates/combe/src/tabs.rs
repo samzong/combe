@@ -17,6 +17,12 @@ pub struct Tab {
 }
 
 impl Tab {
+    pub fn contains(&self, view: &SurfaceView) -> bool {
+        split::surfaces(&self.root)
+            .iter()
+            .any(|leaf| std::ptr::eq(&**leaf, view))
+    }
+
     pub fn focused_surface(&self) -> Option<Retained<SurfaceView>> {
         let leaves = split::surfaces(&self.root);
         self.zoom
@@ -62,6 +68,14 @@ impl Tabs {
 
     pub fn active(&self) -> Option<&Tab> {
         self.get(self.active_id()?)
+    }
+
+    pub fn active_mut(&mut self) -> Option<&mut Tab> {
+        self.get_mut(self.active_id()?)
+    }
+
+    pub fn owner(&self, view: &SurfaceView) -> Option<&Tab> {
+        self.items.iter().find(|tab| tab.contains(view))
     }
 
     pub fn get(&self, id: u64) -> Option<&Tab> {

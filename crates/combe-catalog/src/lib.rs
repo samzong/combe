@@ -86,11 +86,7 @@ pub fn catalog(state: &State) -> Result<Catalog, CatalogError> {
 
 pub fn add_repo(state: &mut State, path: &Path) -> Result<PathBuf, CatalogError> {
     let resolved = resolve_dir(path)?;
-    if state
-        .repos
-        .iter()
-        .any(|repo| paths_equal(&repo.path, &resolved))
-    {
+    if state.repos.iter().any(|repo| repo.path == resolved) {
         return Ok(resolved);
     }
     state.repos.push(Repo {
@@ -99,36 +95,37 @@ pub fn add_repo(state: &mut State, path: &Path) -> Result<PathBuf, CatalogError>
     Ok(resolved)
 }
 
-pub fn remove_repo(state: &mut State, path: &Path) -> Result<bool, CatalogError> {
-    let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+pub fn remove_repo(state: &mut State, path: &Path) -> bool {
+    let resolved = resolve_vanished(path);
     let before = state.repos.len();
-    state
-        .repos
-        .retain(|repo| !paths_equal(&repo.path, &resolved));
-    Ok(before != state.repos.len())
+    state.repos.retain(|repo| repo.path != resolved);
+    before != state.repos.len()
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct Cleaned {
-    pub repos: Vec<PathBuf>,
-}
-
-impl Cleaned {
-    pub fn is_empty(&self) -> bool {
-        self.repos.is_empty()
-    }
-}
-
-pub fn cleanup(state: &mut State) -> Cleaned {
-    let mut cleaned = Cleaned::default();
+pub fn cleanup(state: &mut State) -> Vec<PathBuf> {
+    let mut cleaned = Vec::new();
     state.repos.retain(|repo| {
         if repo.path.is_dir() {
             return true;
         }
-        cleaned.repos.push(repo.path.clone());
+        cleaned.push(repo.path.clone());
         false
     });
     cleaned
+}
+
+fn resolve_vanished(path: &Path) -> PathBuf {
+    if let Ok(resolved) = std::fs::canonicalize(path) {
+        return resolved;
+    }
+    let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let (Some(parent), Some(name)) = (absolute.parent(), absolute.file_name()) else {
+        return absolute;
+    };
+    match std::fs::canonicalize(parent) {
+        Ok(parent) => parent.join(name),
+        Err(_) => absolute,
+    }
 }
 
 fn resolve_dir(path: &Path) -> Result<PathBuf, CatalogError> {
@@ -140,10 +137,6 @@ fn resolve_dir(path: &Path) -> Result<PathBuf, CatalogError> {
         return Err(CatalogError::NotADirectory(resolved));
     }
     Ok(resolved)
-}
-
-fn paths_equal(left: &Path, right: &Path) -> bool {
-    left == right
 }
 
 #[cfg(test)]
@@ -191,7 +184,20 @@ mod tests {
 
         let live = std::fs::canonicalize(&live).unwrap();
         assert_eq!(state.repos, vec![Repo { path: live }]);
-        assert_eq!(cleaned.repos.len(), 1);
+        assert_eq!(cleaned.len(), 1);
+    }
+
+    #[test]
+    fn remove_repo_matches_a_vanished_path() {
+        let root = tempfile::tempdir().unwrap();
+        let gone = root.path().join("gone");
+        std::fs::create_dir_all(&gone).unwrap();
+        let mut state = State::default();
+        add_repo(&mut state, &gone).unwrap();
+        std::fs::remove_dir_all(&gone).unwrap();
+
+        assert!(remove_repo(&mut state, &root.path().join(".").join("gone")));
+        assert!(state.repos.is_empty());
     }
 
     #[test]

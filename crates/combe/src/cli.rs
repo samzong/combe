@@ -3,8 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use combe_catalog::{
-    Catalog, State, add_repo, catalog, cleanup, home_dir, load_state, remove_repo, save_state,
-    state_path,
+    State, add_repo, catalog, cleanup, home_dir, load_state, remove_repo, save_state, state_path,
 };
 use objc2::AnyThread;
 use objc2::rc::Retained;
@@ -18,38 +17,38 @@ const USAGE: &str = "\
 combe — a worktree-aware terminal
 
 Usage:
-  combe <path>              Raise Combe and open a tab on that directory
-  combe list                Show registered repos and their worktrees
+  combe <path>              Open a tab on that directory
+  combe list                List registered repos and their worktrees
   combe add <path>...       Register repos
   combe remove <path>...    Unregister repos
-  combe cleanup             Drop registered paths that no longer exist on disk
+  combe cleanup             Drop registered paths missing from disk
   combe help                Show this help
-
-`combe .` opens the registered worktree or folder workspace that owns the
-directory. An unregistered directory opens as a tab of the Home workspace
-starting there; nothing is registered. A hop from a shell already inside
-Combe does not raise the app.
-
-The window also opens from the Dock, Finder, or `open -a Combe`.
 ";
 
 pub fn run() -> Option<ExitCode> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = Vec::new();
+    for arg in std::env::args_os().skip(1) {
+        let Ok(arg) = arg.into_string() else {
+            eprintln!("combe: argument is not valid UTF-8");
+            return Some(ExitCode::FAILURE);
+        };
+        args.push(arg);
+    }
     let Some(command) = args.first().map(String::as_str) else {
         if launched_from_bundle() {
             return None;
         }
-        print_usage();
+        print!("{USAGE}");
         return Some(ExitCode::SUCCESS);
     };
     let rest = &args[1..];
     match command {
-        "list" => Some(list()),
+        "list" => Some(no_args("list", rest).unwrap_or_else(list)),
         "add" => Some(add(rest)),
         "remove" => Some(remove(rest)),
-        "cleanup" => Some(clean()),
+        "cleanup" => Some(no_args("cleanup", rest).unwrap_or_else(clean)),
         "help" | "-h" | "--help" => {
-            print_usage();
+            print!("{USAGE}");
             Some(ExitCode::SUCCESS)
         }
         other => Some(hop(other, rest)),
@@ -61,14 +60,12 @@ fn hop(target: &str, rest: &[String]) -> ExitCode {
         eprintln!("combe: expected one path");
         return ExitCode::from(2);
     }
-    let expanded = expand(target);
-    let Ok(resolved) = std::fs::canonicalize(&expanded) else {
+    let Ok(resolved) = std::fs::canonicalize(expand(target)) else {
         if looks_like_path(target) {
             eprintln!("combe: no such path: {target}");
             return ExitCode::FAILURE;
         }
-        eprintln!("combe: unknown command '{target}'");
-        print_usage();
+        eprintln!("combe: '{target}' is not a combe command. See `combe help`.");
         return ExitCode::from(2);
     };
     if !resolved.is_dir() {
@@ -82,13 +79,23 @@ fn hop(target: &str, rest: &[String]) -> ExitCode {
         eprintln!("combe: already inside Combe");
         return ExitCode::SUCCESS;
     }
-    match hop_url(&resolved) {
-        Some(url) if NSWorkspace::sharedWorkspace().openURL(&url) => ExitCode::SUCCESS,
-        _ => {
-            eprintln!("combe: cannot reach Combe.app — install it with `make install`");
-            ExitCode::FAILURE
-        }
+    let Some(url) = hop_url(&resolved) else {
+        eprintln!("combe: cannot build a URL for {}", resolved.display());
+        return ExitCode::FAILURE;
+    };
+    if NSWorkspace::sharedWorkspace().openURL(&url) {
+        return ExitCode::SUCCESS;
     }
+    eprintln!("combe: cannot reach Combe.app — install it with `make install`");
+    ExitCode::FAILURE
+}
+
+fn no_args(command: &str, rest: &[String]) -> Option<ExitCode> {
+    if rest.is_empty() {
+        return None;
+    }
+    eprintln!("combe: {command} takes no arguments");
+    Some(ExitCode::from(2))
 }
 
 fn hop_url(dir: &Path) -> Option<Retained<NSURL>> {
@@ -130,13 +137,6 @@ fn launched_from_bundle() -> bool {
     })
 }
 
-fn print_usage() {
-    print!("{USAGE}");
-    if let Some(path) = state_path() {
-        println!("\nState: {}", path.display());
-    }
-}
-
 fn list() -> ExitCode {
     let Some(state) = read_state() else {
         return ExitCode::FAILURE;
@@ -145,7 +145,7 @@ fn list() -> ExitCode {
         println!("no repos registered — combe add <path>");
         return ExitCode::SUCCESS;
     }
-    let found: Catalog = match catalog(&state) {
+    let found = match catalog(&state) {
         Ok(found) => found,
         Err(err) => {
             eprintln!("combe: {err}");
@@ -198,16 +198,11 @@ fn remove(paths: &[String]) -> ExitCode {
     edit(|state| {
         let mut failed = false;
         for path in paths {
-            match remove_repo(state, Path::new(path)) {
-                Ok(true) => println!("removed {path}"),
-                Ok(false) => {
-                    eprintln!("combe: not registered: {path}");
-                    failed = true;
-                }
-                Err(err) => {
-                    eprintln!("combe: {err}");
-                    failed = true;
-                }
+            if remove_repo(state, Path::new(path)) {
+                println!("removed {path}");
+            } else {
+                eprintln!("combe: not registered: {path}");
+                failed = true;
             }
         }
         !failed
@@ -221,7 +216,7 @@ fn clean() -> ExitCode {
             println!("nothing to clean");
             return true;
         }
-        for path in &cleaned.repos {
+        for path in &cleaned {
             println!("dropped repo {}", path.display());
         }
         true
@@ -248,7 +243,7 @@ fn edit(apply: impl FnOnce(&mut State) -> bool) -> ExitCode {
 }
 
 fn read_state() -> Option<State> {
-    let file: PathBuf = state_path()?;
+    let file = state_path()?;
     match load_state(&file) {
         Ok(state) => Some(state),
         Err(err) => {

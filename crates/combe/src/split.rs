@@ -4,7 +4,7 @@ use objc2::{ClassType, MainThreadOnly, Message, msg_send};
 use objc2_app_kit::{NSAutoresizingMaskOptions, NSSplitView, NSView, NSWindowOrderingMode};
 use objc2_foundation::{MainThreadMarker, NSRect};
 
-use crate::chrome_view::ZoomCorners;
+use crate::pane_overlay::ZoomCorners;
 use crate::surface::SurfaceView;
 
 const FILL: NSAutoresizingMaskOptions = NSAutoresizingMaskOptions(

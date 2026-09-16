@@ -1,3 +1,4 @@
+use crate::geometry::rect;
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::ffi::c_void;
@@ -5,8 +6,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use objc2::rc::Retained;
-use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol};
-use objc2::{ClassType, MainThreadOnly, Message, define_class, msg_send, sel};
+use objc2::runtime::{AnyObject, NSObject};
+use objc2::{MainThreadOnly, Message, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSAccessibility, NSAnimatablePropertyContainer, NSAnimationContext, NSAutoresizingMaskOptions,
     NSBezierPath, NSButton, NSColor, NSEvent, NSEventModifierFlags, NSEventType, NSFont,
@@ -48,7 +49,7 @@ struct State {
     restore_focus: fn(),
     sidebar: Retained<NSScrollView>,
     sidebar_glass: Retained<NSView>,
-    sidebar_material: Retained<chrome_view::GlassView>,
+    sidebar_material: Retained<crate::glass::GlassView>,
     workspace_chip: Retained<ClickView>,
     sidebar_mode: Cell<Mode>,
     sidebar_pointer: Cell<u8>,
@@ -64,6 +65,26 @@ struct State {
     attention: HashSet<String>,
     sidebar_width: Cell<f64>,
     sidebar_height: Cell<f64>,
+}
+
+impl State {
+    fn rows(&self) -> impl Iterator<Item = Retained<ClickView>> {
+        self.sidebar
+            .documentView()
+            .into_iter()
+            .flat_map(|document| document.subviews().into_iter())
+            .filter_map(|view| view.downcast::<ClickView>().ok())
+    }
+
+    fn focus_row(&self, row: &NSView) {
+        self.window.makeFirstResponder(Some(row));
+        row.scrollRectToVisible(row.bounds());
+    }
+}
+
+fn workspace_row(view: &ClickView) -> bool {
+    view.accessibilityIdentifier()
+        .is_some_and(|id| !id.to_string().starts_with("repo:"))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -113,12 +134,11 @@ pub(crate) fn mount(
     let actions: Retained<Actions> = unsafe { msg_send![super(actions), init] };
     let sidebar_view = NSScrollView::initWithFrame(
         NSScrollView::alloc(mtm),
-        NSRect::new(
-            NSPoint::new(0.0, 0.0),
-            NSSize::new(
-                habits::SIDEBAR_WIDTH + 2.0 * INSET,
-                parent.frame().size.height - 60.0,
-            ),
+        rect(
+            0.0,
+            0.0,
+            habits::SIDEBAR_WIDTH + 2.0 * INSET,
+            parent.frame().size.height - 60.0,
         ),
     );
     sidebar_view.setHasVerticalScroller(true);
@@ -131,23 +151,18 @@ pub(crate) fn mount(
         let _: () = unsafe { msg_send![&*layer, setCornerRadius: SIDEBAR_RADIUS] };
     }
     parent.addSubview(&sidebar_glass);
-    let material = chrome_view::glass(mtm, NSRect::default(), SIDEBAR_RADIUS);
+    let material = crate::glass::glass(mtm, NSRect::default(), SIDEBAR_RADIUS);
     material.setAutoresizingMask(FILL);
     sidebar_glass.addSubview(&material);
     material.addSubview(&sidebar_view);
     let workspace_chip = ClickView::new(
         mtm,
-        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(162.0, TAB_HEIGHT)),
+        rect(0.0, 0.0, 162.0, TAB_HEIGHT),
         "Workspaces",
         12.0,
         28.0,
         || {
-            let mode = STATE.with(|state| {
-                state
-                    .borrow()
-                    .as_ref()
-                    .map(|state| state.sidebar_mode.get())
-            });
+            let mode = with_state(|state| state.sidebar_mode.get());
             if mode != Some(Mode::Pinned) {
                 set_sidebar_mode(Mode::Transient);
             }
@@ -158,7 +173,7 @@ pub(crate) fn mount(
         mtm,
         &workspace_chip,
         "chevron.down",
-        NSRect::new(NSPoint::new(140.0, 13.0), NSSize::new(10.0, 10.0)),
+        rect(140.0, 13.0, 10.0, 10.0),
     );
     parent.addSubview(&workspace_chip);
     let toggle = chrome_view::icon_button(
@@ -220,9 +235,7 @@ pub(crate) fn set_sessions(current: Option<String>, opened: HashSet<String>) {
 pub(crate) fn select(path: &str, label: &str) {
     prepare_action();
     activate(path, label);
-    STATE.with(|state| {
-        let state = state.borrow();
-        let Some(state) = state.as_ref() else { return };
+    with_state(|state| {
         if state.sidebar_keyboard.get()
             && let Some(document) = state.sidebar.documentView()
             && let Some(row) = document.subviews().into_iter().find(|row| {
@@ -230,35 +243,38 @@ pub(crate) fn select(path: &str, label: &str) {
                     .is_some_and(|id| id.to_string() == path)
             })
         {
-            state.window.makeFirstResponder(Some(&row));
-            row.scrollRectToVisible(row.bounds());
+            state.focus_row(&row);
         }
     });
 }
 
+fn with_state<T>(read: impl FnOnce(&State) -> T) -> Option<T> {
+    STATE.with(|state| state.borrow().as_ref().map(read))
+}
+
 fn activate(path: &str, label: &str) {
-    let activate = STATE.with(|state| state.borrow().as_ref().map(|state| state.activate));
+    let activate = with_state(|state| state.activate);
     if let Some(activate) = activate {
         activate(path, label);
     }
 }
 
 fn prepare_action() {
-    let prepare = STATE.with(|state| state.borrow().as_ref().map(|state| state.prepare));
+    let prepare = with_state(|state| state.prepare);
     if let Some(prepare) = prepare {
         prepare();
     }
 }
 
 fn request_layout(animated: bool) {
-    let layout = STATE.with(|state| state.borrow().as_ref().map(|state| state.layout));
+    let layout = with_state(|state| state.layout);
     if let Some(layout) = layout {
         layout(animated);
     }
 }
 
 fn restore_focus() {
-    let restore = STATE.with(|state| state.borrow().as_ref().map(|state| state.restore_focus));
+    let restore = with_state(|state| state.restore_focus);
     if let Some(restore) = restore {
         restore();
     }
@@ -278,43 +294,28 @@ fn toggle_repo(path: PathBuf) {
 
 pub(crate) fn after_event(event: &NSEvent) {
     if event.r#type() == NSEventType::KeyDown {
-        let close = STATE.with(|state| {
-            state.borrow().as_ref().is_some_and(|state| {
-                state.sidebar_mode.get() == Mode::Transient
-                    && state.sidebar_keyboard.get()
-                    && !sidebar_has_focus(state)
-            })
+        let close = with_state(|state| {
+            state.sidebar_mode.get() == Mode::Transient
+                && state.sidebar_keyboard.get()
+                && !sidebar_has_focus(state)
         });
-        if close {
+        if close == Some(true) {
             set_sidebar_mode(Mode::Closed);
         }
     }
 }
 
 pub(crate) fn width() -> f64 {
-    STATE.with(|state| {
-        state
-            .borrow()
-            .as_ref()
-            .map_or(habits::SIDEBAR_WIDTH, |state| state.sidebar_width.get())
-    })
+    with_state(|state| state.sidebar_width.get()).unwrap_or(habits::SIDEBAR_WIDTH)
 }
 
 pub(crate) fn pinned() -> bool {
-    STATE.with(|state| {
-        state
-            .borrow()
-            .as_ref()
-            .is_some_and(|state| state.sidebar_mode.get() == Mode::Pinned)
-    })
+    with_state(|state| state.sidebar_mode.get()) == Some(Mode::Pinned)
 }
 
 pub(crate) fn tab_hints_visible() -> bool {
-    STATE.with(|state| {
-        state.borrow().as_ref().is_some_and(|state| {
-            state.command_held.get() && state.sidebar_mode.get() == Mode::Closed
-        })
-    })
+    with_state(|state| state.command_held.get() && state.sidebar_mode.get() == Mode::Closed)
+        .unwrap_or(false)
 }
 
 pub(crate) fn resized(width: Option<f64>) {
@@ -359,9 +360,11 @@ pub(crate) fn layout(size: NSSize, inset: f64, animated: bool) -> f64 {
         let left = if open { INSET } else { inset };
         place(
             &state.sidebar_glass,
-            NSRect::new(
-                NSPoint::new(left, size.height - INSET - glass_height),
-                NSSize::new((edge - left).max(0.0), glass_height.max(TAB_HEIGHT)),
+            rect(
+                left,
+                size.height - INSET - glass_height,
+                (edge - left).max(0.0),
+                glass_height.max(TAB_HEIGHT),
             ),
             animated,
         );
@@ -390,7 +393,7 @@ pub(crate) fn layout(size: NSSize, inset: f64, animated: bool) -> f64 {
             .setHasVerticalScroller(state.sidebar_height.get() > viewport_height);
         place(
             &state.sidebar,
-            NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, viewport_height)),
+            rect(0.0, 0.0, width, viewport_height),
             animated,
         );
         let clip = state.sidebar.contentView().frame().size;
@@ -401,9 +404,11 @@ pub(crate) fn layout(size: NSSize, inset: f64, animated: bool) -> f64 {
             ));
         }
         let header_y = size.height - INSET - TAB_HEIGHT;
-        state.workspace_chip.setFrame(NSRect::new(
-            NSPoint::new(inset, header_y),
-            NSSize::new((edge - inset - 66.0).max(0.0), TAB_HEIGHT),
+        state.workspace_chip.setFrame(rect(
+            inset,
+            header_y,
+            (edge - inset - 66.0).max(0.0),
+            TAB_HEIGHT,
         ));
         state.workspace_chip.setAccessibilityExpanded(open);
         if let Some(view) = state
@@ -424,9 +429,11 @@ pub(crate) fn layout(size: NSSize, inset: f64, animated: bool) -> f64 {
         }
         if let Some(toggle) = &state.toggle {
             toggle.setState(if pinned { 1 } else { 0 });
-            toggle.setFrame(NSRect::new(
-                NSPoint::new(edge - 32.0, header_y + 4.0),
-                NSSize::new(TOGGLE_WIDTH, TOGGLE_HEIGHT),
+            toggle.setFrame(rect(
+                edge - 32.0,
+                header_y + 4.0,
+                TOGGLE_WIDTH,
+                TOGGLE_HEIGHT,
             ));
             toggle.setToolTip(Some(&NSString::from_str(if pinned {
                 "Unpin sidebar (⌘B)"
@@ -440,9 +447,11 @@ pub(crate) fn layout(size: NSSize, inset: f64, animated: bool) -> f64 {
             })));
         }
         if let Some(add) = &state.add_repo {
-            add.setFrame(NSRect::new(
-                NSPoint::new(edge - 64.0, header_y + 4.0),
-                NSSize::new(TOGGLE_WIDTH, TOGGLE_HEIGHT),
+            add.setFrame(rect(
+                edge - 64.0,
+                header_y + 4.0,
+                TOGGLE_WIDTH,
+                TOGGLE_HEIGHT,
             ));
         }
         edge
@@ -487,13 +496,7 @@ fn add_repo() {
 }
 
 pub(crate) fn toggle() {
-    let pinned = STATE.with(|state| {
-        state
-            .borrow()
-            .as_ref()
-            .is_some_and(|state| state.sidebar_mode.get() == Mode::Pinned)
-    });
-    set_sidebar_mode(if pinned { Mode::Closed } else { Mode::Pinned });
+    set_sidebar_mode(if pinned() { Mode::Closed } else { Mode::Pinned });
 }
 
 fn set_sidebar_mode(mode: Mode) {
@@ -527,9 +530,7 @@ fn cancel_sidebar_intent() {
 
 fn schedule_sidebar_intent(action: objc2::runtime::Sel, delay: f64) {
     cancel_sidebar_intent();
-    let Some(target) =
-        STATE.with(|state| state.borrow().as_ref().map(|state| state.actions.clone()))
-    else {
+    let Some(target) = with_state(|state| state.actions.clone()) else {
         return;
     };
     let timer = unsafe {
@@ -541,12 +542,7 @@ fn schedule_sidebar_intent(action: objc2::runtime::Sel, delay: f64) {
 }
 
 fn sidebar_keeps_keyboard_focus() -> bool {
-    STATE.with(|state| {
-        let state = state.borrow();
-        state
-            .as_ref()
-            .is_some_and(|state| state.sidebar_keyboard.get() && sidebar_has_focus(state))
-    })
+    with_state(|state| state.sidebar_keyboard.get() && sidebar_has_focus(state)).unwrap_or(false)
 }
 
 fn sidebar_has_focus(state: &State) -> bool {
@@ -570,21 +566,14 @@ fn sidebar_has_focus(state: &State) -> bool {
 
 pub(crate) fn deactivate() {
     cancel_sidebar_intent();
-    STATE.with(|state| {
-        if let Some(state) = state.borrow().as_ref() {
-            state.command_held.set(false);
-            state.sidebar_keyboard.set(false);
-            state.sidebar_pointer.set(0);
-        }
+    let mode = with_state(|state| {
+        state.command_held.set(false);
+        state.sidebar_keyboard.set(false);
+        state.sidebar_pointer.set(0);
+        state.sidebar_mode.get()
     });
     update_workspace_hints();
-    let transient = STATE.with(|state| {
-        state
-            .borrow()
-            .as_ref()
-            .is_some_and(|state| state.sidebar_mode.get() == Mode::Transient)
-    });
-    if transient {
+    if mode == Some(Mode::Transient) {
         set_sidebar_mode(Mode::Closed);
     }
 }
@@ -664,12 +653,11 @@ pub(crate) fn handle_event(event: &NSEvent) -> bool {
             cancel_sidebar_intent();
         } else if region != previous && mode != Mode::Pinned {
             cancel_sidebar_intent();
-            if region == 1 && mode == Mode::Closed {
-                schedule_sidebar_intent(sel!(openSidebar:), 0.15);
-            } else if region == 1 && entered {
-                schedule_sidebar_intent(sel!(foldSidebar:), 0.15);
-            } else if region == 0 && mode == Mode::Transient {
-                schedule_sidebar_intent(sel!(closeSidebar:), 0.25);
+            match (region, mode, entered) {
+                (1, Mode::Closed, _) => schedule_sidebar_intent(sel!(openSidebar:), 0.15),
+                (1, _, true) => schedule_sidebar_intent(sel!(foldSidebar:), 0.15),
+                (0, Mode::Transient, _) => schedule_sidebar_intent(sel!(closeSidebar:), 0.25),
+                _ => {}
             }
         }
     }
@@ -725,11 +713,7 @@ pub(crate) fn handle_event(event: &NSEvent) -> bool {
     }
     if focus {
         cancel_sidebar_intent();
-        STATE.with(|state| {
-            if let Some(state) = state.borrow().as_ref() {
-                state.sidebar_keyboard.set(true);
-            }
-        });
+        with_state(|state| state.sidebar_keyboard.set(true));
         if event.keyCode() == 125 || event.keyCode() == 126 {
             if mode == Mode::Closed {
                 set_sidebar_mode(Mode::Transient);
@@ -742,40 +726,17 @@ pub(crate) fn handle_event(event: &NSEvent) -> bool {
 }
 
 fn focus_sidebar_row(index: usize) {
-    STATE.with(|state| {
-        let state = state.borrow();
-        let Some(state) = state.as_ref() else { return };
+    with_state(|state| {
         state.sidebar_keyboard.set(true);
-        if let Some(document) = state.sidebar.documentView()
-            && let Some(row) = document
-                .subviews()
-                .into_iter()
-                .filter(|view| {
-                    view.isKindOfClass(ClickView::class())
-                        && view
-                            .accessibilityIdentifier()
-                            .is_some_and(|id| !id.to_string().starts_with("repo:"))
-                })
-                .nth(index)
-        {
-            state.window.makeFirstResponder(Some(&row));
-            row.scrollRectToVisible(row.bounds());
+        if let Some(row) = state.rows().filter(|row| workspace_row(row)).nth(index) {
+            state.focus_row(&row);
         }
     });
 }
 
 fn move_sidebar_focus(forward: bool) {
-    STATE.with(|state| {
-        let state = state.borrow();
-        let Some(state) = state.as_ref() else { return };
-        let Some(document) = state.sidebar.documentView() else {
-            return;
-        };
-        let rows: Vec<_> = document
-            .subviews()
-            .into_iter()
-            .filter(|view| view.isKindOfClass(ClickView::class()))
-            .collect();
+    with_state(|state| {
+        let rows: Vec<_> = state.rows().collect();
         if rows.is_empty() {
             return;
         }
@@ -797,35 +758,15 @@ fn move_sidebar_focus(forward: bool) {
                 }
             })
             .unwrap_or(0);
-        state.window.makeFirstResponder(Some(&rows[index]));
-        rows[index].scrollRectToVisible(rows[index].bounds());
+        state.focus_row(&rows[index]);
     });
 }
 
 fn update_workspace_hints() {
-    STATE.with(|state| {
-        let state = state.borrow();
-        let Some(state) = state.as_ref() else { return };
-        let Some(document) = state.sidebar.documentView() else {
-            return;
-        };
-        let mut index = 0;
-        for view in document.subviews() {
-            if view
-                .accessibilityIdentifier()
-                .is_none_or(|id| id.to_string().starts_with("repo:"))
-            {
-                continue;
-            }
-            index += 1;
-            if let Ok(row) = view.downcast::<ClickView>() {
-                row.set_shortcut(
-                    (state.command_held.get()
-                        && state.sidebar_mode.get() != Mode::Closed
-                        && index <= 9)
-                        .then_some(index),
-                );
-            }
+    with_state(|state| {
+        let visible = state.command_held.get() && state.sidebar_mode.get() != Mode::Closed;
+        for (index, row) in state.rows().filter(|row| workspace_row(row)).enumerate() {
+            row.set_shortcut((visible && index < 9).then_some(index + 1));
         }
     });
     crate::window::set_tab_shortcuts(tab_hints_visible());
@@ -879,13 +820,7 @@ pub(crate) fn set_attention(attention: HashSet<String>) {
         let mut state = state.borrow_mut();
         let Some(state) = state.as_mut() else { return };
         state.attention = attention;
-        let Some(document) = state.sidebar.documentView() else {
-            return;
-        };
-        for view in document.subviews() {
-            let Ok(view) = view.downcast::<ClickView>() else {
-                continue;
-            };
+        for view in state.rows() {
             let Some(id) = view.identifier().map(|id| id.to_string()) else {
                 continue;
             };
@@ -911,10 +846,7 @@ pub(crate) fn set_attention(attention: HashSet<String>) {
 
 pub(crate) fn rebuild() {
     let mtm = MainThreadMarker::new().expect("main thread");
-    STATE.with(|state| {
-        let state = state.borrow();
-        let Some(state) = state.as_ref() else { return };
-
+    with_state(|state| {
         let focused = state
             .window
             .firstResponder()
@@ -922,25 +854,9 @@ pub(crate) fn rebuild() {
             .and_then(|view| view.identifier());
         let clip = state.sidebar.contentView().frame().size;
         let width = state.sidebar_width.get();
-        let mut height = 20.0 + state.repos.len().saturating_sub(1) as f64 * 16.5;
-        for repo in &state.repos {
-            if repo.has_heading {
-                height += HEADER_HEIGHT;
-                if state.expanded_repos.contains(&repo.path) {
-                    height += repo.rows.len() as f64 * ROW_HEIGHT;
-                }
-            } else {
-                height += repo.rows.len() as f64 * ROW_HEIGHT;
-            }
-        }
-        state.sidebar_height.set(height);
-
         let document = SidebarView::alloc(mtm).set_ivars(());
         let document: Retained<SidebarView> = unsafe {
-            msg_send![super(document), initWithFrame: NSRect::new(
-                NSPoint::new(0.0, 0.0),
-                NSSize::new(width, height.max(clip.height)),
-            )]
+            msg_send![super(document), initWithFrame: rect(0.0, 0.0, width, clip.height)]
         };
 
         let mut y = 8.0;
@@ -954,10 +870,7 @@ pub(crate) fn rebuild() {
                 let path = repo.path.clone();
                 let header = ClickView::new(
                     mtm,
-                    NSRect::new(
-                        NSPoint::new(6.0, y),
-                        NSSize::new(width - 12.0, HEADER_HEIGHT),
-                    ),
+                    rect(6.0, y, width - 12.0, HEADER_HEIGHT),
                     &repo.name,
                     34.0,
                     48.0,
@@ -973,12 +886,7 @@ pub(crate) fn rebuild() {
                     habits::CHROME_FONT_SIZE,
                     unsafe { objc2_app_kit::NSFontWeightMedium },
                 ));
-                chrome_view::symbol(
-                    mtm,
-                    &header,
-                    "folder",
-                    NSRect::new(NSPoint::new(12.0, 8.0), NSSize::new(14.0, 14.0)),
-                );
+                chrome_view::symbol(mtm, &header, "folder", rect(12.0, 8.0, 14.0, 14.0));
                 chrome_view::symbol(
                     mtm,
                     &header,
@@ -987,7 +895,7 @@ pub(crate) fn rebuild() {
                     } else {
                         "chevron.down"
                     },
-                    NSRect::new(NSPoint::new(width - 38.0, 10.0), NSSize::new(10.0, 10.0)),
+                    rect(width - 38.0, 10.0, 10.0, 10.0),
                 );
                 if let Some(arrow) = header.subviews().lastObject() {
                     arrow.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
@@ -1010,10 +918,7 @@ pub(crate) fn rebuild() {
 
             for row in &repo.rows {
                 let path = row.path.to_string_lossy().into_owned();
-                let frame = NSRect::new(
-                    NSPoint::new(6.0, y + 2.0),
-                    NSSize::new(width - 12.0, ROW_HEIGHT - 2.0),
-                );
+                let frame = rect(6.0, y + 2.0, width - 12.0, ROW_HEIGHT - 2.0);
                 let opened = state.opened.contains(&path);
                 let target = path.clone();
                 let label = row.label.clone();
@@ -1040,6 +945,9 @@ pub(crate) fn rebuild() {
             }
         }
 
+        let height = y + 12.0;
+        state.sidebar_height.set(height);
+        document.setFrameSize(NSSize::new(width, height.max(clip.height)));
         state.sidebar.setDocumentView(Some(&document));
         if state.sidebar_keyboard.get()
             && let Some(identifier) = focused
@@ -1088,10 +996,7 @@ define_class!(
                 if y <= 8.0 {
                     continue;
                 }
-                NSBezierPath::fillRect(NSRect::new(
-                    NSPoint::new(6.0, y - 8.5),
-                    NSSize::new((self.bounds().size.width - 12.0).max(0.0), 0.5),
-                ));
+                NSBezierPath::fillRect(rect(6.0, y - 8.5, (self.bounds().size.width - 12.0).max(0.0), 0.5));
             }
         }
 

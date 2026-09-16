@@ -1,4 +1,6 @@
-use crate::chrome_view::{ClickView, GlassView, color, glass};
+use crate::chrome_view::ClickView;
+use crate::geometry::rect;
+use crate::glass::{GlassView, color, glass};
 use crate::{ghostty, habits, quota};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
@@ -10,7 +12,7 @@ use objc2_app_kit::{
     NSWindowOrderingMode, NSWorkspace,
 };
 use objc2_foundation::{
-    MainThreadMarker, NSObjectNSDelayedPerforming, NSPoint, NSRange, NSRect, NSSize, NSString,
+    MainThreadMarker, NSObjectNSDelayedPerforming, NSPoint, NSRange, NSRect, NSString,
 };
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
@@ -57,10 +59,8 @@ pub(crate) fn mount(
     restore_focus: fn(),
 ) -> f64 {
     let status = StatusView::alloc(mtm).set_ivars(());
-    let status: Retained<StatusView> = unsafe {
-        msg_send![super(status), initWithFrame: NSRect::new(
-            NSPoint::new(0.0, 0.0), NSSize::new(width, 0.0))]
-    };
+    let status: Retained<StatusView> =
+        unsafe { msg_send![super(status), initWithFrame: rect(0.0, 0.0, width, 0.0)] };
     status.setAutoresizingMask(
         NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewMaxYMargin,
     );
@@ -113,9 +113,11 @@ pub(crate) fn layout(width: f64, content_inset: f64) -> f64 {
             .as_ref()
             .map_or(0.0, |view| view.frame().size.height);
         state.bar.setHidden(!shown);
-        state.bar.setFrame(NSRect::new(
-            NSPoint::new(0.0, 0.0),
-            NSSize::new(width, if shown { STATUS_HEIGHT + height } else { 0.0 }),
+        state.bar.setFrame(rect(
+            0.0,
+            0.0,
+            width,
+            if shown { STATUS_HEIGHT + height } else { 0.0 },
         ));
         if let Some(parent) = unsafe { state.bar.superview() } {
             parent.addSubview_positioned_relativeTo(&state.bar, NSWindowOrderingMode::Above, None);
@@ -404,10 +406,7 @@ fn rebuild_status() {
         measure.sizeToFit();
         let chip = ClickView::new(
             mtm,
-            NSRect::new(
-                NSPoint::new(0.0, 0.0),
-                NSSize::new(measure.frame().size.width + 16.0, CHIP_HEIGHT),
-            ),
+            rect(0.0, 0.0, measure.frame().size.width + 16.0, CHIP_HEIGHT),
             &text,
             8.0,
             8.0,
@@ -509,16 +508,15 @@ fn update_panel(animated: bool) {
             .details
             .as_ref()
             .map_or(0.0, |view| view.frame().size.height);
-        let frame = NSRect::new(
-            NSPoint::new(state.panel.frame().origin.x, 12.0),
-            NSSize::new(
-                if state.open {
-                    DETAILS_WIDTH
-                } else {
-                    chip.frame().size.width
-                },
-                CHIP_HEIGHT + if state.open { details_height } else { 0.0 },
-            ),
+        let frame = rect(
+            state.panel.frame().origin.x,
+            12.0,
+            if state.open {
+                DETAILS_WIDTH
+            } else {
+                chip.frame().size.width
+            },
+            CHIP_HEIGHT + if state.open { details_height } else { 0.0 },
         );
         let mut bar_frame = state.bar.frame();
         bar_frame.size.height = STATUS_HEIGHT + details_height;
@@ -558,10 +556,8 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
             .sum::<f64>()
         + groups.len().saturating_sub(1) as f64 * 16.0;
     let view = DetailsView::alloc(mtm);
-    let view: Retained<DetailsView> = unsafe {
-        msg_send![view, initWithFrame: NSRect::new(
-        NSPoint::new(0.0, CHIP_HEIGHT), NSSize::new(DETAILS_WIDTH, height))]
-    };
+    let view: Retained<DetailsView> =
+        unsafe { msg_send![view, initWithFrame: rect(0.0, CHIP_HEIGHT, DETAILS_WIDTH, height)] };
     view.setAccessibilityElement(true);
     view.setAccessibilityRole(Some(&NSString::from_str("AXGroup")));
     view.setAccessibilityLabel(Some(&NSString::from_str("Quota details")));
@@ -574,7 +570,7 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
             mtm,
             &view,
             quota.provider.name(),
-            NSRect::new(NSPoint::new(16.0, y), NSSize::new(272.0, 18.0)),
+            rect(16.0, y, 272.0, 18.0),
             &heading,
             &color(habits::CHROME_TEXT),
         );
@@ -584,7 +580,7 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
                 mtm,
                 &view,
                 &row.label,
-                NSRect::new(NSPoint::new(16.0, y + 6.0), NSSize::new(50.0, 18.0)),
+                rect(16.0, y + 6.0, 50.0, 18.0),
                 &font,
                 &color(habits::CHROME_MUTED),
             );
@@ -596,7 +592,7 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
                 mtm,
                 &view,
                 &row.percent,
-                NSRect::new(NSPoint::new(74.0, y + 6.0), NSSize::new(132.0, 18.0)),
+                rect(74.0, y + 6.0, 132.0, 18.0),
                 &NSFont::monospacedDigitSystemFontOfSize_weight(13.0, unsafe {
                     objc2_app_kit::NSFontWeightMedium
                 }),
@@ -607,7 +603,7 @@ fn quota_details(mtm: MainThreadMarker, quotas: &[quota::Quota]) -> Retained<Det
                 mtm,
                 &view,
                 &row.reset,
-                NSRect::new(NSPoint::new(214.0, y + 6.0), NSSize::new(74.0, 18.0)),
+                rect(214.0, y + 6.0, 74.0, 18.0),
                 &font,
                 &color(habits::CHROME_MUTED),
             );

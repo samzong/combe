@@ -148,17 +148,17 @@ pub fn chip(quota: &Quota) -> Option<(String, f64)> {
 }
 
 pub fn details(quota: &Quota, now: SystemTime) -> Vec<Detail> {
-    let mut rows = Vec::new();
-    if let Some(window) = &quota.session {
-        rows.push(detail_row(window_label(window.minutes), window, now));
-    }
-    if let Some(window) = &quota.weekly {
-        rows.push(detail_row(window_label(window.minutes), window, now));
-    }
-    if let Some(window) = &quota.fable {
-        rows.push(detail_row("Fable", window, now));
-    }
-    rows
+    [quota.session.as_ref(), quota.weekly.as_ref()]
+        .into_iter()
+        .flatten()
+        .map(|window| detail_row(window_label(window.minutes), window, now))
+        .chain(
+            quota
+                .fable
+                .as_ref()
+                .map(|window| detail_row("Fable", window, now)),
+        )
+        .collect()
 }
 
 pub fn parse_claude_usage(raw: &str) -> Option<Quota> {
@@ -187,10 +187,20 @@ fn parse_codex_event(raw: &[u8]) -> Option<Quota> {
     if limits.limit_id.as_deref().is_some_and(|id| id != "codex") {
         return None;
     }
-    let (session, weekly) = classify_codex(
-        limits.primary.as_ref().and_then(map_codex_window),
-        limits.secondary.as_ref().and_then(map_codex_window),
-    );
+    let mut session = None;
+    let mut weekly = None;
+    for window in [limits.primary, limits.secondary]
+        .iter()
+        .flatten()
+        .filter_map(map_codex_window)
+    {
+        let slot = if window.minutes == SESSION_MINUTES {
+            &mut session
+        } else {
+            &mut weekly
+        };
+        slot.get_or_insert(window);
+    }
     if session.is_none() && weekly.is_none() {
         return None;
     }
@@ -341,25 +351,23 @@ fn map_claude_window(raw: Option<&ClaudeUsageWindow>, minutes: u32) -> Option<Wi
 }
 
 fn fable_window(data: &ClaudeUsage) -> Option<Window> {
-    if let Some(limits) = &data.limits {
-        for limit in limits {
-            let kind = limit.kind.as_deref().unwrap_or_default();
-            let name = limit
-                .scope
-                .as_ref()
-                .and_then(|scope| scope.model.as_ref())
-                .and_then(|model| model.display_name.as_deref())
-                .unwrap_or_default();
-            if kind == "weekly_scoped"
-                && name.eq_ignore_ascii_case("fable")
-                && let Some(used) = limit.percent
-            {
-                return Some(Window {
-                    used: clamp_used(used),
-                    minutes: WEEKLY_MINUTES,
-                    resets_at: limit.resets_at.as_ref().and_then(parse_reset_value),
-                });
-            }
+    for limit in data.limits.iter().flatten() {
+        let kind = limit.kind.as_deref().unwrap_or_default();
+        let name = limit
+            .scope
+            .as_ref()
+            .and_then(|scope| scope.model.as_ref())
+            .and_then(|model| model.display_name.as_deref())
+            .unwrap_or_default();
+        if kind == "weekly_scoped"
+            && name.eq_ignore_ascii_case("fable")
+            && let Some(used) = limit.percent
+        {
+            return Some(Window {
+                used: clamp_used(used),
+                minutes: WEEKLY_MINUTES,
+                resets_at: limit.resets_at.as_ref().and_then(parse_reset_value),
+            });
         }
     }
     map_claude_window(data.fable_weekly.as_ref(), WEEKLY_MINUTES)
@@ -376,40 +384,10 @@ fn map_codex_window(raw: &CodexUsageWindow) -> Option<Window> {
     })
 }
 
-fn classify_codex(
-    primary: Option<Window>,
-    secondary: Option<Window>,
-) -> (Option<Window>, Option<Window>) {
-    let mut session = None;
-    let mut weekly = None;
-    for window in [primary.as_ref(), secondary.as_ref()].into_iter().flatten() {
-        match classify_minutes(window.minutes) {
-            Some(kind) if kind == SESSION_MINUTES && session.is_none() => {
-                session = Some(Window {
-                    minutes: SESSION_MINUTES,
-                    ..window.clone()
-                });
-            }
-            Some(kind) if kind == WEEKLY_MINUTES && weekly.is_none() => {
-                weekly = Some(Window {
-                    minutes: WEEKLY_MINUTES,
-                    ..window.clone()
-                });
-            }
-            _ => {}
-        }
-    }
-    (session, weekly)
-}
-
 fn classify_minutes(minutes: u32) -> Option<u32> {
-    if minutes.abs_diff(SESSION_MINUTES) <= WINDOW_TOLERANCE {
-        Some(SESSION_MINUTES)
-    } else if minutes.abs_diff(WEEKLY_MINUTES) <= WINDOW_TOLERANCE {
-        Some(WEEKLY_MINUTES)
-    } else {
-        None
-    }
+    [SESSION_MINUTES, WEEKLY_MINUTES]
+        .into_iter()
+        .find(|window| minutes.abs_diff(*window) <= WINDOW_TOLERANCE)
 }
 
 fn tightest(quota: &Quota) -> Option<&Window> {
@@ -456,22 +434,15 @@ fn remaining_label(resets_at: Option<SystemTime>, fallback: &str, now: SystemTim
     if minutes < 60 {
         return format!("{minutes}m");
     }
-    let hours = minutes / 60;
-    let rest = minutes % 60;
-    if hours < 24 {
-        if rest == 0 {
-            format!("{hours}h")
-        } else {
-            format!("{hours}h {rest}m")
-        }
+    let (whole, rest, unit, remainder_unit) = if minutes < 24 * 60 {
+        (minutes / 60, minutes % 60, "h", "m")
     } else {
-        let days = hours / 24;
-        let hours = hours % 24;
-        if hours == 0 {
-            format!("{days}d")
-        } else {
-            format!("{days}d {hours}h")
-        }
+        (minutes / 1440, minutes / 60 % 24, "d", "h")
+    };
+    if rest == 0 {
+        format!("{whole}{unit}")
+    } else {
+        format!("{whole}{unit} {rest}{remainder_unit}")
     }
 }
 
@@ -489,9 +460,6 @@ fn parse_reset_value(value: &serde_json::Value) -> Option<SystemTime> {
 
 fn parse_reset_string(text: &str) -> Option<SystemTime> {
     let text = text.trim();
-    if text.is_empty() {
-        return None;
-    }
     if let Ok(number) = text.parse::<f64>() {
         return parse_reset_number(number);
     }
@@ -658,18 +626,20 @@ mod tests {
 
     #[test]
     fn remaining_time_breaks_hours_and_days() {
-        assert_eq!(
-            remaining_label(Some(now() + Duration::from_secs(33 * 60)), "5h", now()),
-            "33m"
-        );
-        assert_eq!(
-            remaining_label(Some(now() + Duration::from_secs(2 * 3600)), "5h", now()),
-            "2h"
-        );
-        assert_eq!(
-            remaining_label(Some(now() - Duration::from_secs(10)), "5h", now()),
-            "0m"
-        );
+        for (seconds, expected) in [
+            (33_i64 * 60, "33m"),
+            (7200, "2h"),
+            (7260, "2h 1m"),
+            (86400, "1d"),
+            (90000, "1d 1h"),
+            (-10, "0m"),
+        ] {
+            let reset = now()
+                .checked_add(Duration::from_secs(seconds.max(0) as u64))
+                .unwrap()
+                - Duration::from_secs((-seconds).max(0) as u64);
+            assert_eq!(remaining_label(Some(reset), "5h", now()), expected);
+        }
         assert_eq!(remaining_label(None, "7d", now()), "7d");
     }
 

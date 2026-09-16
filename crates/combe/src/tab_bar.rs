@@ -1,3 +1,4 @@
+use crate::geometry::rect;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -6,9 +7,9 @@ use objc2::rc::Retained;
 use objc2_app_kit::{
     NSAccessibility, NSAutoresizingMaskOptions, NSScrollElasticity, NSScrollView, NSView,
 };
-use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize};
+use objc2_foundation::{MainThreadMarker, NSRect, NSSize};
 
-use crate::chrome_view::{self, ActionButton, ClickView};
+use crate::chrome_view::{ActionButton, ClickView};
 use crate::habits;
 
 const HEIGHT: f64 = 36.0;
@@ -98,7 +99,7 @@ impl TabBar {
         let y = (TOP_BAR_HEIGHT - HEIGHT) / 2.0;
         let mut x = 0.0;
         for (id, label) in tabs {
-            let frame = NSRect::new(NSPoint::new(x, y), NSSize::new(WIDTH, HEIGHT));
+            let frame = rect(x, y, WIDTH, HEIGHT);
             let view = ClickView::new(mtm, frame, label, 12.0, 48.0, move || (select)(id));
             view.set_corner_radius(RADIUS);
             if Some(id) != active {
@@ -107,7 +108,7 @@ impl TabBar {
             }
             if Some(id) == active {
                 view.set_text_color(habits::CHROME_STRONG);
-                let glass = chrome_view::glass(mtm, frame, RADIUS);
+                let glass = crate::glass::glass(mtm, frame, RADIUS);
                 glass.set_tab();
                 self.document.addSubview(&glass);
             }
@@ -117,10 +118,7 @@ impl TabBar {
 
             let close = ActionButton::new(
                 mtm,
-                NSRect::new(
-                    NSPoint::new(x + WIDTH - 30.0, y + 8.0),
-                    NSSize::new(20.0, 20.0),
-                ),
+                rect(x + WIDTH - 30.0, y + 8.0, 20.0, 20.0),
                 "xmark",
                 "Close tab",
                 move || (close_tab)(id),
@@ -132,7 +130,7 @@ impl TabBar {
 
         let plus = ActionButton::new(
             mtm,
-            NSRect::new(NSPoint::new(x, y), NSSize::new(HEIGHT, HEIGHT)),
+            rect(x, y, HEIGHT, HEIGHT),
             "plus",
             "New tab (⌘T)",
             self.create,

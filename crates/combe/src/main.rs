@@ -1,12 +1,16 @@
+mod app;
 mod chrome_view;
 mod cli;
 mod entry;
 mod find_bar;
+mod geometry;
 mod ghostty;
+mod glass;
 mod habits;
 mod menu;
 mod notification;
 mod overview;
+mod pane_overlay;
 mod quota;
 mod quota_panel;
 mod sidebar;
@@ -45,7 +49,7 @@ fn main() -> ExitCode {
 
     ghostty::init();
 
-    let _delegate = window::install_delegate(mtm, &app);
+    let _delegate = app::install_delegate(mtm, &app);
     notification::init();
     menu::install(mtm, &app);
     window::open(mtm);

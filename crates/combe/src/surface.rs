@@ -1,3 +1,4 @@
+use crate::geometry::rect;
 use std::cell::{Cell, RefCell};
 use std::ffi::{CString, c_void};
 use std::ptr;
@@ -27,7 +28,7 @@ pub struct SurfaceIvars {
     surface: Cell<sys::ghostty_surface_t>,
     notification_id: String,
     attention: Cell<bool>,
-    guide: RefCell<Option<Retained<crate::chrome_view::PaneGuide>>>,
+    guide: RefCell<Option<Retained<crate::pane_overlay::PaneGuide>>>,
     cwd: RefCell<String>,
     input: RefCell<Option<String>>,
     title: RefCell<Option<String>>,
@@ -271,10 +272,7 @@ define_class!(
             let mut height = 0.0f64;
             unsafe { sys::ghostty_surface_ime_point(surface, &mut x, &mut y, &mut width, &mut height) };
 
-            let view_rect = NSRect::new(
-                NSPoint::new(x, frame.size.height - y),
-                NSSize::new(width, height),
-            );
+            let view_rect = rect(x, frame.size.height - y, width, height);
             let window_rect = self.convertRect_toView(view_rect, None);
             match self.window() {
                 Some(window) => window.convertRectToScreen(window_rect),
@@ -361,7 +359,7 @@ impl SurfaceView {
         }
         let mut guide = self.ivars().guide.borrow_mut();
         let guide = guide.get_or_insert_with(|| {
-            let guide = crate::chrome_view::PaneGuide::new(self.mtm(), self.bounds());
+            let guide = crate::pane_overlay::PaneGuide::new(self.mtm(), self.bounds());
             self.addSubview(&guide);
             guide
         });

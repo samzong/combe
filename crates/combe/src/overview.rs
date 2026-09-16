@@ -1,12 +1,14 @@
+use crate::geometry::rect;
 use std::cell::{Cell, RefCell};
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send};
+use objc2::{AnyThread, ClassType, DefinedClass, MainThreadOnly, Message, define_class, msg_send};
 use objc2_app_kit::{
     NSAccessibility, NSAutoresizingMaskOptions, NSBezierPath, NSBitmapImageRep, NSColor,
-    NSCompositingOperation, NSDeviceRGBColorSpace, NSGraphicsContext, NSImage, NSImageScaling,
-    NSImageView, NSLineBreakMode, NSScrollView, NSTextAlignment, NSTextField, NSView, NSWorkspace,
+    NSCompositingOperation, NSDeviceRGBColorSpace, NSEvent, NSEventModifierFlags, NSEventType,
+    NSGraphicsContext, NSImage, NSImageScaling, NSImageView, NSLineBreakMode, NSResponder,
+    NSScrollView, NSTextAlignment, NSTextField, NSView, NSWindow, NSWorkspace,
 };
 use objc2_core_foundation::CFType;
 use objc2_core_image::{CIContext, CIImage};
@@ -22,11 +24,56 @@ const INSET: f64 = 24.0;
 const GAP: f64 = 24.0;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Step {
+enum Step {
     Left,
     Right,
     Up,
     Down,
+}
+
+pub(crate) struct Session {
+    view: Retained<Overview>,
+    window: Retained<NSWindow>,
+    return_responder: Option<Retained<NSResponder>>,
+}
+
+impl Session {
+    pub(crate) fn mount(
+        window: &NSWindow,
+        content: &NSView,
+        tabs: &[&Tab],
+        active: u64,
+        activate: fn(u64),
+    ) -> Self {
+        let view = Overview::new(window.mtm(), content.bounds(), tabs, active, activate);
+        let session = Self {
+            view,
+            window: window.retain(),
+            return_responder: window.firstResponder(),
+        };
+        Overview::transition(content);
+        content.addSubview(&session.view);
+        session
+    }
+
+    pub(crate) fn view(&self) -> Retained<Overview> {
+        self.view.clone()
+    }
+
+    pub(crate) fn dismiss(self, restore: bool, focus_active: fn()) {
+        if let Some(parent) = unsafe { self.view.superview() } {
+            Overview::transition(&parent);
+        }
+        self.view.removeFromSuperview();
+        if restore
+            && !self
+                .return_responder
+                .as_ref()
+                .is_some_and(|responder| self.window.makeFirstResponder(Some(&**responder)))
+        {
+            focus_active();
+        }
+    }
 }
 
 struct Card {
@@ -78,7 +125,7 @@ define_class!(
 );
 
 impl Overview {
-    pub fn transition(parent: &NSView) {
+    fn transition(parent: &NSView) {
         let Some(layer) = parent.layer() else { return };
         let key = NSString::from_str("tabOverview");
         layer.removeAnimationForKey(&key);
@@ -94,7 +141,7 @@ impl Overview {
         layer.addAnimation_forKey(&transition, Some(&key));
     }
 
-    pub fn new(
+    fn new(
         mtm: MainThreadMarker,
         frame: NSRect,
         tabs: &[&Tab],
@@ -178,29 +225,87 @@ impl Overview {
         for (index, card) in self.ivars().cards.iter().enumerate() {
             let x = INSET + (index % columns) as f64 * (width + GAP);
             let y = content_height - INSET - height - (index / columns) as f64 * (height + GAP);
-            card.button
-                .setFrame(NSRect::new(NSPoint::new(x, y), NSSize::new(width, height)));
-            card.image.setFrame(NSRect::new(
-                NSPoint::new(8.0, 8.0),
-                NSSize::new((width - 16.0).max(0.0), (height - 44.0).max(0.0)),
+            card.button.setFrame(rect(x, y, width, height));
+            card.image.setFrame(rect(
+                8.0,
+                8.0,
+                (width - 16.0).max(0.0),
+                (height - 44.0).max(0.0),
             ));
-            card.title.setFrame(NSRect::new(
-                NSPoint::new(8.0, height - 28.0),
-                NSSize::new((width - 16.0).max(0.0), 20.0),
-            ));
+            card.title
+                .setFrame(rect(8.0, height - 28.0, (width - 16.0).max(0.0), 20.0));
         }
     }
 }
 
 impl Overview {
-    pub fn focus_active(&self) {
+    pub(crate) fn focus(&self) {
+        if let Some(window) = self.window() {
+            window.makeFirstResponder(Some(self));
+            self.focus_active();
+        }
+    }
+
+    pub(crate) fn handle_event(
+        &self,
+        event: &NSEvent,
+        dismiss: fn(bool),
+        activate: fn(u64),
+    ) -> bool {
+        if event.r#type() != NSEventType::KeyDown {
+            return false;
+        }
+        let flags = event.modifierFlags();
+        if flags.contains(NSEventModifierFlags::Command) {
+            let toggle = flags.contains(NSEventModifierFlags::Shift)
+                && !flags
+                    .intersects(NSEventModifierFlags::Option.union(NSEventModifierFlags::Control))
+                && event
+                    .charactersIgnoringModifiers()
+                    .is_some_and(|key| matches!(key.to_string().as_str(), "\\" | "|"));
+            if !toggle {
+                dismiss(true);
+            }
+            return false;
+        }
+        match event.keyCode() {
+            53 => dismiss(true),
+            123..=126 => self.move_focus(match event.keyCode() {
+                123 => Step::Left,
+                124 => Step::Right,
+                125 => Step::Down,
+                _ => Step::Up,
+            }),
+            36 | 76 | 49 => {
+                let card = self
+                    .window()
+                    .and_then(|window| window.firstResponder())
+                    .filter(|responder| {
+                        let object: &AnyObject = responder.as_ref();
+                        let is_card: bool =
+                            unsafe { msg_send![object, isKindOfClass: ClickView::class()] };
+                        is_card && unsafe { msg_send![object, isDescendantOf: self] }
+                    });
+                if let Some(card) = card {
+                    let _: bool = unsafe { msg_send![&*card, accessibilityPerformPress] };
+                } else {
+                    activate(self.ivars().active);
+                }
+            }
+            48 => return false,
+            _ => {}
+        }
+        true
+    }
+
+    fn focus_active(&self) {
         let active = self.ivars().active;
         if let Some(index) = self.ivars().cards.iter().position(|card| card.id == active) {
             self.focus_index(index);
         }
     }
 
-    pub fn move_focus(&self, step: Step) {
+    fn move_focus(&self, step: Step) {
         let Some(index) = self.focused_index() else {
             self.focus_active();
             return;
@@ -301,9 +406,11 @@ fn snapshot(tab: &Tab, context: &CIContext) -> Option<Retained<NSImage>> {
             .filter(|zoom| std::ptr::eq(&*zoom.surface, &*surface))
             .map(|zoom| zoom.pane_rect(&tab.root))
             .unwrap_or_else(|| surface.convertRect_toView(surface.bounds(), Some(&tab.root)));
-        let frame = NSRect::new(
-            NSPoint::new(frame.origin.x * scale, frame.origin.y * scale),
-            NSSize::new(frame.size.width * scale, frame.size.height * scale),
+        let frame = rect(
+            frame.origin.x * scale,
+            frame.origin.y * scale,
+            frame.size.width * scale,
+            frame.size.height * scale,
         );
         pane.drawInRect_fromRect_operation_fraction(
             frame,

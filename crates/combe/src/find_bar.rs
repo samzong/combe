@@ -1,3 +1,4 @@
+use crate::geometry::rect;
 use std::cell::{Cell, RefCell};
 
 use objc2::rc::{Retained, Weak};
@@ -8,11 +9,9 @@ use objc2_app_kit::{
     NSEventModifierFlags, NSFont, NSSearchField, NSSearchFieldDelegate, NSTextAlignment,
     NSTextField, NSTextFieldDelegate, NSTextView, NSView,
 };
-use objc2_foundation::{
-    MainThreadMarker, NSNotification, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
-};
+use objc2_foundation::{MainThreadMarker, NSNotification, NSObjectProtocol, NSSize, NSString};
 
-use crate::chrome_view::{self, ActionButton};
+use crate::chrome_view::ActionButton;
 use crate::habits;
 use crate::surface::SurfaceView;
 
@@ -102,19 +101,18 @@ impl FindBar {
         };
         let this = Self::alloc(mtm).set_ivars(ivars);
         let width = WIDTH.min(container.width - 2.0 * INSET).max(0.0);
-        let frame = NSRect::new(
-            NSPoint::new(
-                container.width - width - INSET,
-                container.height - HEIGHT - INSET,
-            ),
-            NSSize::new(width, HEIGHT),
+        let frame = rect(
+            container.width - width - INSET,
+            container.height - HEIGHT - INSET,
+            width,
+            HEIGHT,
         );
         let this: Retained<Self> = unsafe { msg_send![super(this), initWithFrame: frame] };
         this.setAutoresizingMask(
             NSAutoresizingMaskOptions::ViewMinXMargin | NSAutoresizingMaskOptions::ViewMinYMargin,
         );
 
-        let material = chrome_view::glass(mtm, this.bounds(), 12.0);
+        let material = crate::glass::glass(mtm, this.bounds(), 12.0);
         material.setAutoresizingMask(
             NSAutoresizingMaskOptions::ViewWidthSizable
                 | NSAutoresizingMaskOptions::ViewHeightSizable,
@@ -127,10 +125,7 @@ impl FindBar {
 
         let field = NSSearchField::initWithFrame(
             NSSearchField::alloc(mtm),
-            NSRect::new(
-                NSPoint::new(INSET, y),
-                NSSize::new(field_width, field_height),
-            ),
+            rect(INSET, y, field_width, field_height),
         );
         field.setPlaceholderString(Some(&NSString::from_str("Find")));
         field.setFont(Some(&NSFont::systemFontOfSize(habits::CHROME_FONT_SIZE)));
@@ -139,16 +134,15 @@ impl FindBar {
         this.addSubview(&field);
 
         let count = NSTextField::labelWithString(&NSString::from_str(""), mtm);
-        count.setFrame(NSRect::new(
-            NSPoint::new(
-                INSET + field_width,
-                (HEIGHT - habits::CHROME_LINE_HEIGHT) / 2.0,
-            ),
-            NSSize::new(COUNT_WIDTH, habits::CHROME_LINE_HEIGHT),
+        count.setFrame(rect(
+            INSET + field_width,
+            (HEIGHT - habits::CHROME_LINE_HEIGHT) / 2.0,
+            COUNT_WIDTH,
+            habits::CHROME_LINE_HEIGHT,
         ));
         count.setFont(Some(&NSFont::systemFontOfSize(habits::CHROME_FONT_SIZE)));
         count.setAlignment(NSTextAlignment::Center);
-        count.setTextColor(Some(&chrome_view::color(habits::CHROME_MUTED)));
+        count.setTextColor(Some(&crate::glass::color(habits::CHROME_MUTED)));
         this.addSubview(&count);
 
         let weak = Weak::from_retained(&this);
@@ -162,7 +156,7 @@ impl FindBar {
             let weak = weak.clone();
             let button = ActionButton::new(
                 mtm,
-                NSRect::new(NSPoint::new(x, 0.0), NSSize::new(BUTTON_WIDTH, HEIGHT)),
+                rect(x, 0.0, BUTTON_WIDTH, HEIGHT),
                 symbol,
                 label,
                 move || {

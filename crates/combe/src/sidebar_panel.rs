@@ -226,6 +226,23 @@ pub(crate) fn mount(
 pub(crate) fn set_sessions(current: Option<String>, opened: HashSet<String>) {
     STATE.with(|state| {
         if let Some(state) = state.borrow_mut().as_mut() {
+            let vacated: Vec<PathBuf> = state
+                .repos
+                .iter()
+                .filter(|repo| repo.has_heading)
+                .filter(|repo| {
+                    let live = |sessions: &HashSet<String>| {
+                        repo.rows
+                            .iter()
+                            .any(|row| sessions.contains(row.path.to_string_lossy().as_ref()))
+                    };
+                    live(&state.opened) && !live(&opened)
+                })
+                .map(|repo| repo.path.clone())
+                .collect();
+            for path in vacated {
+                state.expanded_repos.remove(&path);
+            }
             state.current = current;
             state.opened = opened;
         }

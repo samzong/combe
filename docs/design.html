@@ -548,7 +548,7 @@
     }
 
     function renderTabs() {
-      const { row } = rowOf(selected);
+      const { repo, row } = rowOf(selected);
       const session = sessions.get(selected);
       const activeItem = session.items.find(item => item.id === session.active);
       activeItem.attention = false;
@@ -580,6 +580,10 @@
           if (!session.items.length) {
             sessions.delete(selected);
             row.live = false;
+            if (repo.heading !== false && !repo.rows.some(item => item.live)) {
+              repo.open = false;
+              renderList();
+            }
             const fallback = sessions.keys().next().value;
             if (fallback) select(fallback);
             else {

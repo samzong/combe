@@ -106,7 +106,7 @@ Startup shows the workspace chip. Hover for 150 ms to expand the catalog; click 
 
 Workspace selection keeps the catalog open and restores that workspace's tabs and focused pane. After entering the list, hovering the chip for 150 ms folds it; a quick crossing does not. Pointer exit closes the transient panel after 250 ms unless re-entry or keyboard focus inside protects it. Escape, outside click, or keyboard focus leaving dismisses it. Pinned panels survive these dismissals and reserve terminal space; unpinning returns to the chip. Cmd-B toggles pinned and chip states.
 
-Repo groups start collapsed on every app launch, including newly added repos. Clicking a repo heading toggles its rows without changing selection or closing terminals. Collapse state and session marks last for the app run. Green means a workspace owns a tab; dim means it does not. The chip has no session dot; Home has no collapsible heading.
+Repo groups start collapsed on every app launch, including newly added repos. Clicking a repo heading toggles its rows without changing selection or closing terminals. A repo group collapses again when its last tab closes, whether the user closed it or the shell exited; the selection moves to another live workspace and that group keeps its state. Collapse state and session marks otherwise last for the app run. Green means a workspace owns a tab; dim means it does not. The chip has no session dot; Home has no collapsible heading.
 
 Hovered and selected rows share the neutral fill and appearance-adaptive text; hover does not select. Keep tracking areas alive during AppKit visible-rectangle updates to preserve paired enter/exit events across geometry changes.
 
@@ -321,7 +321,7 @@ Preserve these capabilities when changing chrome. Prototype states demonstrate a
 | Capability | Required verification |
 | --- | --- |
 | Workspace sessions | Switch away and back; tab, split, focused pane, title, shell PID and output survive; repo collapse does not close sessions |
-| Tabs | Create, select, close and navigate by key; keep workspace ownership; closing the last workspace tab selects another live workspace, or closes the window when none remain; the tab strip does not move vertically |
+| Tabs | Create, select, close and navigate by key; keep workspace ownership; closing the last workspace tab selects another live workspace and collapses a repo group left without tabs, or closes the window when none remain; the tab strip does not move vertically |
 | Splits and zoom | Split right and down, nest and resize, move focus, zoom and restore, close a leaf and promote its sibling; a new sibling inherits the focused pane's reported working directory; preserve PTYs and focus |
 | Catalog | Add multiple repos with the native directory picker; include folder workspaces; Home is a single `home` row without adding a repo; adding `$HOME` as a repo replaces the built-in row; refresh on activation without blocking input |
 | Hover panels | Check entry, return-to-chip and exit delays; fast pointer sweeps, drag, outside click, Escape, blur, keyboard focus, pinning and resizing |

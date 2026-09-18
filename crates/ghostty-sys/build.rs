@@ -1,4 +1,6 @@
 use std::env;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -44,6 +46,10 @@ fn main() {
         "cargo:rerun-if-changed={}",
         ghostty.join("build.zig.zon").display()
     );
+    println!(
+        "cargo:rerun-if-changed={}",
+        manifest.join("xcodebuild.sh").display()
+    );
     println!("cargo:rerun-if-env-changed=ZIG");
 
     let zig = env::var("ZIG").unwrap_or_else(|_| "zig".into());
@@ -56,14 +62,18 @@ fn main() {
         .and_then(Path::parent)
         .expect("workspace root")
         .join(".local/zig-cache");
-    build_ghostty(&zig, &ghostty, &prefix, &cache);
+    build_ghostty(&zig, &ghostty, &prefix, &out, &cache);
 
-    let lib_dir = ghostty.join("macos/GhosttyKit.xcframework/macos-arm64");
+    let built = ghostty.join("macos/GhosttyKit.xcframework/macos-arm64/libghostty-internal.a");
     assert!(
-        lib_dir.join("libghostty-internal.a").is_file(),
+        built.is_file(),
         "expected libghostty-internal.a in {}",
-        lib_dir.display()
+        built.display()
     );
+    let lib_dir = prefix.join("lib");
+    fs::create_dir_all(&lib_dir).expect("lib dir");
+    fs::copy(&built, lib_dir.join("libghostty-internal.a")).expect("copy libghostty-internal.a");
+    let _ = fs::remove_dir_all(ghostty.join("macos/GhosttyKit.xcframework"));
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=static=ghostty-internal");
     println!("cargo:rustc-link-lib=c++");
@@ -93,8 +103,7 @@ fn main() {
 }
 
 fn required_zig_version(ghostty: &Path) -> String {
-    let manifest =
-        std::fs::read_to_string(ghostty.join("build.zig.zon")).expect("read build.zig.zon");
+    let manifest = fs::read_to_string(ghostty.join("build.zig.zon")).expect("read build.zig.zon");
     manifest
         .lines()
         .find_map(|line| {
@@ -120,13 +129,22 @@ fn require_zig(zig: &str, want: &str) {
     );
 }
 
-fn build_ghostty(zig: &str, ghostty: &Path, prefix: &Path, cache: &Path) {
+fn build_ghostty(zig: &str, ghostty: &Path, prefix: &Path, out: &Path, cache: &Path) {
     let optimize = match env::var("PROFILE").as_deref() {
         Ok("release") => "ReleaseFast",
         _ => "Debug",
     };
+    let shim_dir = out.join("bin");
+    fs::create_dir_all(&shim_dir).expect("shim dir");
+    let shim = shim_dir.join("xcodebuild");
+    fs::write(&shim, include_str!("xcodebuild.sh")).expect("write xcodebuild shim");
+    fs::set_permissions(&shim, fs::Permissions::from_mode(0o755)).expect("chmod xcodebuild shim");
+    let mut path = shim_dir.into_os_string();
+    path.push(":");
+    path.push(env::var_os("PATH").unwrap_or_default());
     let status = Command::new(zig)
         .current_dir(ghostty)
+        .env("PATH", path)
         .arg("build")
         .arg("-Dapp-runtime=none")
         .arg("-Dxcframework-target=native")

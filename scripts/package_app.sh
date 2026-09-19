@@ -26,7 +26,7 @@ if [[ ! -f "${BIN_PATH}" ]]; then
 fi
 
 SHARE_DIR=$(ls -td target/release/build/ghostty-sys-*/out/ghostty/share 2>/dev/null | head -1)
-if [[ -z "${SHARE_DIR}" || ! -d "${SHARE_DIR}/ghostty" || ! -d "${SHARE_DIR}/terminfo" ]]; then
+if [[ -z "${SHARE_DIR}" || ! -d "${SHARE_DIR}/ghostty/shell-integration" || ! -d "${SHARE_DIR}/terminfo" ]]; then
   echo "error: ghostty resources not found under target/release/build" >&2
   exit 1
 fi
@@ -44,12 +44,23 @@ cp packaging/Info.plist "${APP_DIR}/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "${APP_DIR}/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" "${APP_DIR}/Contents/Info.plist"
 cp "${ICON_PATH}" "${APP_DIR}/Contents/Resources/app-icon.icns"
-cp -R "${SHARE_DIR}/ghostty" "${APP_DIR}/Contents/Resources/ghostty"
+mkdir -p "${APP_DIR}/Contents/Resources/ghostty"
+cp -R "${SHARE_DIR}/ghostty/shell-integration" "${APP_DIR}/Contents/Resources/ghostty/shell-integration"
 cp -R "${SHARE_DIR}/terminfo" "${APP_DIR}/Contents/Resources/terminfo"
 if [[ ! -f "${APP_DIR}/Contents/Resources/terminfo/78/xterm-ghostty" ]]; then
   echo "error: xterm-ghostty terminfo missing from ${APP_DIR}" >&2
   exit 1
 fi
+if [[ ! -f "${APP_DIR}/Contents/Resources/ghostty/shell-integration/zsh/ghostty-integration" ]]; then
+  echo "error: zsh shell integration missing from ${APP_DIR}" >&2
+  exit 1
+fi
+for unused in themes doc; do
+  if [[ -e "${APP_DIR}/Contents/Resources/ghostty/${unused}" ]]; then
+    echo "error: unused ghostty ${unused} payload copied into ${APP_DIR}" >&2
+    exit 1
+  fi
+done
 
 IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
     | awk -F '"' '/Apple Development: / { print $2; exit }')

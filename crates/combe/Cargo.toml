@@ -34,3 +34,6 @@ objc2-foundation = "0.3"
 objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CAAnimation", "CAMediaTiming", "CAMediaTimingFunction", "objc2-core-foundation"] }
 serde.workspace = true
 serde_json.workspace = true
+
+[lints]
+workspace = true

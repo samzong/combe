@@ -368,8 +368,8 @@ impl ClickView {
                         objc2_app_kit::NSForegroundColorAttributeName,
                         warning,
                         *range,
-                    )
-                };
+                    );
+                }
             }
             label.setAttributedStringValue(&text);
         }

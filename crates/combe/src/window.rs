@@ -251,7 +251,7 @@ pub fn open(mtm: MainThreadMarker) {
             tab_bar,
             content: content.clone(),
             tabs: Tabs::default(),
-        })
+        });
     });
 
     sync_appearance();

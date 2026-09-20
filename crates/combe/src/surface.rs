@@ -666,7 +666,7 @@ impl SurfaceView {
             && let Some(window) = self.window()
         {
             let focused = window.firstResponder().is_some_and(|responder| {
-                std::ptr::eq(
+                ptr::eq(
                     &*responder as *const _ as *const (),
                     self as *const Self as *const (),
                 )

@@ -940,7 +940,7 @@ pub(crate) fn rebuild() {
                 let target = path.clone();
                 let label = row.label.clone();
                 let view = ClickView::new(mtm, frame, &row.label, 48.0, 34.0, move || {
-                    select(&target, &label)
+                    select(&target, &label);
                 });
                 view.set_font(&NSFont::systemFontOfSize(13.0));
                 view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);

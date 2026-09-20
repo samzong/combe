@@ -13,7 +13,7 @@ pub struct Tab {
     pub label: String,
     pub root: Retained<NSView>,
     pub focused: Option<Retained<SurfaceView>>,
-    pub zoom: Option<crate::split::Zoom>,
+    pub zoom: Option<split::Zoom>,
 }
 
 impl Tab {

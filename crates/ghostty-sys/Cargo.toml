@@ -11,3 +11,6 @@ release = false
 
 [build-dependencies]
 bindgen = "0.72"
+
+[lints]
+workspace = true

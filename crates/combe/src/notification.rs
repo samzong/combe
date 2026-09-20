@@ -216,7 +216,7 @@ pub fn receive(view: &SurfaceView, notice: Notice) {
             .pending
             .entry(view.notification_id().to_owned())
             .or_default()
-            .receive(notice, Instant::now())
+            .receive(notice, Instant::now());
     });
     schedule();
 }

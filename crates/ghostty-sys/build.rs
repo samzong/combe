@@ -51,18 +51,14 @@ fn main() {
         manifest.join("xcodebuild.sh").display()
     );
     println!("cargo:rerun-if-env-changed=ZIG");
+    println!("cargo:rerun-if-env-changed=COMBE_ZIG_CACHE");
 
     let zig = env::var("ZIG").unwrap_or_else(|_| "zig".into());
     require_zig(&zig, &required_zig_version(&ghostty));
 
     let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     let prefix = out.join("ghostty");
-    let cache = ghostty
-        .parent()
-        .and_then(Path::parent)
-        .expect("workspace root")
-        .join(".local/zig-cache");
-    build_ghostty(&zig, &ghostty, &prefix, &out, &cache);
+    build_ghostty(&zig, &ghostty, &prefix, &out, &zig_cache());
 
     let built = ghostty.join("macos/GhosttyKit.xcframework/macos-arm64/libghostty-internal.a");
     assert!(
@@ -100,6 +96,14 @@ fn main() {
         .expect("bindgen")
         .write_to_file(out.join("bindings.rs"))
         .expect("write bindings");
+}
+
+fn zig_cache() -> PathBuf {
+    if let Some(path) = env::var_os("COMBE_ZIG_CACHE") {
+        return PathBuf::from(path);
+    }
+    let home = env::var_os("HOME").expect("HOME");
+    PathBuf::from(home).join("Library/Caches/combe/zig")
 }
 
 fn required_zig_version(ghostty: &Path) -> String {

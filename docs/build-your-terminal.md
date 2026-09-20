@@ -14,6 +14,8 @@ The first `make` that needs `vendor/ghostty/build.zig` runs `git submodule updat
 
 `make build` is a debug binary. `make install` copies `build/Combe.app` to `/Applications` and links `combe` onto `PATH`. About reads the version from the running bundle; `make app` stamps it from `Cargo.toml`.
 
+Zig caches its build artifacts in `~/Library/Caches/combe/zig` and grows to several gigabytes. Set `COMBE_ZIG_CACHE` to put it elsewhere. Deleting it costs one slow rebuild, nothing else.
+
 ## Habits
 
 Preferences are constants in `habits.rs`. Rebuild after edits. No config file.

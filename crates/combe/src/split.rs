@@ -210,21 +210,27 @@ pub fn target(
     let index = leaves
         .iter()
         .position(|leaf| std::ptr::eq(&**leaf, focused))?;
-    match direction {
-        Target::Previous => Some(leaves[(index + leaves.len() - 1) % leaves.len()].clone()),
-        Target::Next => Some(leaves[(index + 1) % leaves.len()].clone()),
-        _ => neighbor(root, focused, &leaves, direction),
+    let rects: Vec<NSRect> = leaves
+        .iter()
+        .map(|leaf| root.convertRect_fromView(leaf.bounds(), Some(leaf)))
+        .collect();
+    pick(&rects, index, direction).map(|found| leaves[found].clone())
+}
+
+fn pick(rects: &[NSRect], focused: usize, target: Target) -> Option<usize> {
+    let count = rects.len();
+    if focused >= count {
+        return None;
+    }
+    match target {
+        Target::Previous => Some((focused + count - 1) % count),
+        Target::Next => Some((focused + 1) % count),
+        _ => adjacent(rects, focused, target),
     }
 }
 
-fn neighbor(
-    root: &NSView,
-    view: &SurfaceView,
-    leaves: &[Retained<SurfaceView>],
-    target: Target,
-) -> Option<Retained<SurfaceView>> {
-    let edges = |leaf: &SurfaceView| {
-        let rect = root.convertRect_fromView(leaf.bounds(), Some(leaf));
+fn adjacent(rects: &[NSRect], focused: usize, target: Target) -> Option<usize> {
+    let edges = |rect: &NSRect| {
         (
             rect.origin.x,
             rect.origin.x + rect.size.width,
@@ -233,12 +239,13 @@ fn neighbor(
         )
     };
     let overlap = |a0: f64, a1: f64, b0: f64, b1: f64| a1.min(b1) - a0.max(b0);
-    let (fx0, fx1, fy0, fy1) = edges(view);
-    leaves
+    let (fx0, fx1, fy0, fy1) = edges(&rects[focused]);
+    rects
         .iter()
-        .filter(|leaf| !std::ptr::eq(&***leaf, view))
-        .filter_map(|leaf| {
-            let (x0, x1, y0, y1) = edges(leaf);
+        .enumerate()
+        .filter(|(index, _)| *index != focused)
+        .filter_map(|(index, rect)| {
+            let (x0, x1, y0, y1) = edges(rect);
             let (distance, shared) = match target {
                 Target::Left => (fx0 - x1, overlap(y0, y1, fy0, fy1)),
                 Target::Right => (x0 - fx1, overlap(y0, y1, fy0, fy1)),
@@ -246,8 +253,91 @@ fn neighbor(
                 Target::Down => (fy0 - y1, overlap(x0, x1, fx0, fx1)),
                 Target::Previous | Target::Next => return None,
             };
-            (distance >= 0.0 && shared > 0.0).then_some((distance, shared, leaf.clone()))
+            (distance >= 0.0 && shared > 0.0).then_some((distance, shared, index))
         })
         .min_by(|a, b| a.0.total_cmp(&b.0).then(b.1.total_cmp(&a.1)))
-        .map(|(_, _, leaf)| leaf)
+        .map(|(_, _, index)| index)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Target, pick};
+    use crate::geometry::rect;
+    use objc2_foundation::NSRect;
+
+    fn grid() -> Vec<NSRect> {
+        vec![
+            rect(0.0, 0.0, 200.0, 200.0),
+            rect(200.0, 0.0, 200.0, 200.0),
+            rect(0.0, 200.0, 200.0, 200.0),
+            rect(200.0, 200.0, 200.0, 200.0),
+        ]
+    }
+
+    #[test]
+    fn right_and_left_pick_the_row_neighbor() {
+        let grid = grid();
+        assert_eq!(pick(&grid, 0, Target::Right), Some(1));
+        assert_eq!(pick(&grid, 1, Target::Left), Some(0));
+        assert_eq!(pick(&grid, 2, Target::Right), Some(3));
+        assert_eq!(pick(&grid, 3, Target::Left), Some(2));
+    }
+
+    #[test]
+    fn up_and_down_pick_the_column_neighbor() {
+        let grid = grid();
+        assert_eq!(pick(&grid, 0, Target::Up), Some(2));
+        assert_eq!(pick(&grid, 2, Target::Down), Some(0));
+        assert_eq!(pick(&grid, 1, Target::Up), Some(3));
+        assert_eq!(pick(&grid, 3, Target::Down), Some(1));
+    }
+
+    #[test]
+    fn the_grid_edge_has_no_neighbor() {
+        let grid = grid();
+        assert_eq!(pick(&grid, 0, Target::Left), None);
+        assert_eq!(pick(&grid, 0, Target::Down), None);
+        assert_eq!(pick(&grid, 3, Target::Right), None);
+        assert_eq!(pick(&grid, 3, Target::Up), None);
+    }
+
+    #[test]
+    fn a_pane_off_the_projection_is_not_a_neighbor() {
+        let rects = vec![
+            rect(0.0, 0.0, 100.0, 100.0),
+            rect(200.0, 200.0, 100.0, 100.0),
+        ];
+        assert_eq!(pick(&rects, 0, Target::Right), None);
+        assert_eq!(pick(&rects, 0, Target::Up), None);
+    }
+
+    #[test]
+    fn equal_distance_prefers_the_wider_shared_edge() {
+        let focused = rect(0.0, 0.0, 100.0, 200.0);
+        let narrow = rect(100.0, 0.0, 100.0, 50.0);
+        let wide = rect(100.0, 50.0, 100.0, 150.0);
+        assert_eq!(pick(&[focused, narrow, wide], 0, Target::Right), Some(2));
+        assert_eq!(pick(&[focused, wide, narrow], 0, Target::Right), Some(1));
+    }
+
+    #[test]
+    fn previous_and_next_wrap_around() {
+        let rects = vec![
+            rect(0.0, 0.0, 10.0, 10.0),
+            rect(10.0, 0.0, 10.0, 10.0),
+            rect(20.0, 0.0, 10.0, 10.0),
+        ];
+        assert_eq!(pick(&rects, 0, Target::Previous), Some(2));
+        assert_eq!(pick(&rects, 2, Target::Next), Some(0));
+        assert_eq!(pick(&rects, 1, Target::Previous), Some(0));
+        assert_eq!(pick(&rects, 1, Target::Next), Some(2));
+    }
+
+    #[test]
+    fn a_focus_outside_the_set_has_no_target() {
+        let grid = grid();
+        assert_eq!(pick(&grid, 4, Target::Right), None);
+        assert_eq!(pick(&grid, 4, Target::Next), None);
+        assert_eq!(pick(&[], 0, Target::Next), None);
+    }
 }

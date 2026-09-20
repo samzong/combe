@@ -16,7 +16,7 @@ define_class!(
     #[thread_kind = MainThreadOnly]
     #[name = "CombeAppDelegate"]
     #[ivars = ()]
-    pub struct AppDelegate;
+    pub(crate) struct AppDelegate;
 
     unsafe impl NSObjectProtocol for AppDelegate {}
 
@@ -84,7 +84,10 @@ impl AppDelegate {
     }
 }
 
-pub fn install_delegate(mtm: MainThreadMarker, app: &NSApplication) -> Retained<AppDelegate> {
+pub(crate) fn install_delegate(
+    mtm: MainThreadMarker,
+    app: &NSApplication,
+) -> Retained<AppDelegate> {
     let delegate = AppDelegate::new(mtm);
     app.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
     unsafe { app.setServicesProvider(Some(delegate.as_ref())) };

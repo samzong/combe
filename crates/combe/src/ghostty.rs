@@ -20,11 +20,11 @@ thread_local! {
     static DARK: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
-pub fn app() -> sys::ghostty_app_t {
+pub(crate) fn app() -> sys::ghostty_app_t {
     APP.with(Cell::get)
 }
 
-pub fn init() {
+pub(crate) fn init() {
     unsafe {
         assert_eq!(
             sys::ghostty_init(0, ptr::null_mut()),
@@ -52,26 +52,26 @@ pub fn init() {
     }
 }
 
-pub fn tick() {
+pub(crate) fn tick() {
     let handle = app();
     if !handle.is_null() {
         unsafe { sys::ghostty_app_tick(handle) };
     }
 }
 
-pub fn set_focus(focused: bool) {
+pub(crate) fn set_focus(focused: bool) {
     let handle = app();
     if !handle.is_null() {
         unsafe { sys::ghostty_app_set_focus(handle, focused) };
     }
 }
 
-pub fn needs_confirm_quit() -> bool {
+pub(crate) fn needs_confirm_quit() -> bool {
     let handle = app();
     !handle.is_null() && unsafe { sys::ghostty_app_needs_confirm_quit(handle) }
 }
 
-pub fn color_scheme() -> sys::ghostty_color_scheme_e {
+pub(crate) fn color_scheme() -> sys::ghostty_color_scheme_e {
     if DARK.with(Cell::get).unwrap_or(true) {
         sys::GHOSTTY_COLOR_SCHEME_DARK
     } else {
@@ -79,7 +79,7 @@ pub fn color_scheme() -> sys::ghostty_color_scheme_e {
     }
 }
 
-pub fn set_appearance(dark: bool) {
+pub(crate) fn set_appearance(dark: bool) {
     if DARK.with(|state| state.replace(Some(dark))) == Some(dark) {
         return;
     }
@@ -132,7 +132,7 @@ unsafe extern "C" {
     );
 }
 
-pub fn on_main(work: unsafe extern "C" fn(*mut c_void)) {
+pub(crate) fn on_main(work: unsafe extern "C" fn(*mut c_void)) {
     unsafe {
         dispatch_async_f(
             &raw const _dispatch_main_q as *mut c_void,

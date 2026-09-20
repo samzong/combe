@@ -6,19 +6,19 @@ use combe_catalog::{
     save_state, should_inject_home, state_path,
 };
 
-pub struct Row {
+pub(crate) struct Row {
     pub label: String,
     pub path: PathBuf,
 }
 
-pub struct Repo {
+pub(crate) struct Repo {
     pub path: PathBuf,
     pub name: String,
     pub rows: Vec<Row>,
     pub has_heading: bool,
 }
 
-pub fn repos() -> Vec<Repo> {
+pub(crate) fn repos() -> Vec<Repo> {
     let Some(state) = read_state() else {
         return home_catalog();
     };
@@ -57,7 +57,7 @@ pub fn repos() -> Vec<Repo> {
     with_home(repos, &found.rows)
 }
 
-pub fn rows() -> Vec<Workspace> {
+pub(crate) fn rows() -> Vec<Workspace> {
     let Some(state) = read_state() else {
         return Vec::new();
     };
@@ -99,7 +99,7 @@ fn synthetic_home(home: PathBuf) -> Repo {
     }
 }
 
-pub fn add(paths: &[PathBuf]) {
+pub(crate) fn add(paths: &[PathBuf]) {
     let Some(file) = state_path() else {
         note!("cannot resolve the application support directory");
         return;

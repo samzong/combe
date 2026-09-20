@@ -62,7 +62,7 @@ struct State {
     tabs: Tabs,
 }
 
-pub enum TabTarget {
+pub(crate) enum TabTarget {
     Previous,
     Next,
     Last,
@@ -114,7 +114,7 @@ define_class!(
     }
 );
 
-pub fn open(mtm: MainThreadMarker) {
+pub(crate) fn open(mtm: MainThreadMarker) {
     let frame = rect(0.0, 0.0, habits::WINDOW_WIDTH, habits::WINDOW_HEIGHT);
     let style = NSWindowStyleMask::Titled
         | NSWindowStyleMask::Closable
@@ -581,7 +581,7 @@ pub(crate) fn move_pane_to_new_tab() {
     focus_active();
 }
 
-pub fn goto_tab(target: TabTarget) -> bool {
+pub(crate) fn goto_tab(target: TabTarget) -> bool {
     let next = STATE.with(|state| {
         let state = state.borrow();
         let tabs = &state.as_ref()?.tabs;
@@ -626,7 +626,7 @@ pub(crate) fn focus_split(target: split::Target) {
     }
 }
 
-pub fn goto_split(view: &SurfaceView, target: split::Target) -> bool {
+pub(crate) fn goto_split(view: &SurfaceView, target: split::Target) -> bool {
     restore_zoom(view);
     let found = STATE.with(|state| {
         let state = state.borrow();
@@ -780,7 +780,7 @@ unsafe extern "C" fn attention_on_main(_: *mut c_void) {
     }
 }
 
-pub fn refresh_labels() {
+pub(crate) fn refresh_labels() {
     STATE.with(|state| {
         let Ok(mut state) = state.try_borrow_mut() else {
             return;
@@ -1251,7 +1251,7 @@ thread_local! {
     static PENDING: RefCell<Vec<Retained<SurfaceView>>> = const { RefCell::new(Vec::new()) };
 }
 
-pub fn queue_close(view: Retained<SurfaceView>) {
+pub(crate) fn queue_close(view: Retained<SurfaceView>) {
     PENDING.with(|pending| pending.borrow_mut().push(view));
     ghostty::on_main(drain_pending);
 }

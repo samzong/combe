@@ -25,7 +25,7 @@ const NX_DEVICE_RCTRL: usize = 0x00002000;
 const NX_DEVICE_RALT: usize = 0x00000040;
 const NX_DEVICE_RCMD: usize = 0x00000010;
 
-pub struct SurfaceIvars {
+pub(crate) struct SurfaceIvars {
     surface: Cell<sys::ghostty_surface_t>,
     notification_id: String,
     attention: Cell<bool>,
@@ -44,7 +44,7 @@ define_class!(
     #[thread_kind = MainThreadOnly]
     #[name = "CombeSurfaceView"]
     #[ivars = SurfaceIvars]
-    pub struct SurfaceView;
+    pub(crate) struct SurfaceView;
 
     impl SurfaceView {
         #[unsafe(method(acceptsFirstResponder))]
@@ -301,7 +301,7 @@ define_class!(
 );
 
 impl SurfaceView {
-    pub fn new(
+    pub(crate) fn new(
         mtm: MainThreadMarker,
         frame: NSRect,
         cwd: &str,
@@ -324,7 +324,7 @@ impl SurfaceView {
         unsafe { msg_send![super(this), initWithFrame: frame] }
     }
 
-    pub fn close(&self) {
+    pub(crate) fn close(&self) {
         self.ivars().attention.set(false);
         crate::notification::forget(self.notification_id());
         crate::window::refresh_attention();
@@ -334,27 +334,27 @@ impl SurfaceView {
         }
     }
 
-    pub fn sync_appearance(&self) {
+    pub(crate) fn sync_appearance(&self) {
         if let Some(surface) = self.handle() {
             unsafe { sys::ghostty_surface_set_color_scheme(surface, ghostty::color_scheme()) };
         }
     }
 
-    pub fn notification_id(&self) -> &str {
+    pub(crate) fn notification_id(&self) -> &str {
         &self.ivars().notification_id
     }
 
-    pub fn needs_attention(&self) -> bool {
+    pub(crate) fn needs_attention(&self) -> bool {
         self.ivars().attention.get()
     }
 
-    pub fn set_attention(&self, attention: bool) {
+    pub(crate) fn set_attention(&self, attention: bool) {
         if self.ivars().attention.replace(attention) != attention {
             crate::window::refresh_attention();
         }
     }
 
-    pub fn guide_attention(&self) {
+    pub(crate) fn guide_attention(&self) {
         if self.isHiddenOrHasHiddenAncestor() || !self.needs_attention() {
             return;
         }
@@ -367,17 +367,17 @@ impl SurfaceView {
         guide.show();
     }
 
-    pub fn set_occluded(&self, occluded: bool) {
+    pub(crate) fn set_occluded(&self, occluded: bool) {
         if let Some(surface) = self.handle() {
             unsafe { sys::ghostty_surface_set_occlusion(surface, !occluded) };
         }
     }
 
-    pub fn cwd(&self) -> String {
+    pub(crate) fn cwd(&self) -> String {
         self.ivars().cwd.borrow().clone()
     }
 
-    pub fn set_cwd(&self, cwd: &str) {
+    pub(crate) fn set_cwd(&self, cwd: &str) {
         let cwd = cwd.trim();
         if cwd.is_empty() || cwd.contains('\0') {
             return;
@@ -385,11 +385,11 @@ impl SurfaceView {
         *self.ivars().cwd.borrow_mut() = cwd.to_owned();
     }
 
-    pub fn title(&self) -> Option<String> {
+    pub(crate) fn title(&self) -> Option<String> {
         self.ivars().title.borrow().clone()
     }
 
-    pub fn set_title(&self, title: &str) {
+    pub(crate) fn set_title(&self, title: &str) {
         let title = title.trim();
         if title.is_empty() {
             return;
@@ -397,12 +397,12 @@ impl SurfaceView {
         *self.ivars().title.borrow_mut() = Some(title.to_owned());
     }
 
-    pub fn needs_confirm_quit(&self) -> bool {
+    pub(crate) fn needs_confirm_quit(&self) -> bool {
         self.handle()
             .is_some_and(|surface| unsafe { sys::ghostty_surface_needs_confirm_quit(surface) })
     }
 
-    pub fn start_search(&self, needle: &str) {
+    pub(crate) fn start_search(&self, needle: &str) {
         let bar = self.ivars().find.borrow().clone();
         let bar = match bar {
             Some(bar) => bar,
@@ -417,7 +417,7 @@ impl SurfaceView {
         bar.focus(needle);
     }
 
-    pub fn end_search(&self) {
+    pub(crate) fn end_search(&self) {
         let Some(bar) = self.ivars().find.borrow_mut().take() else {
             return;
         };
@@ -427,19 +427,19 @@ impl SurfaceView {
         }
     }
 
-    pub fn set_search_total(&self, total: Option<usize>) {
+    pub(crate) fn set_search_total(&self, total: Option<usize>) {
         if let Some(bar) = self.ivars().find.borrow().as_ref() {
             bar.set_total(total);
         }
     }
 
-    pub fn set_search_selected(&self, selected: Option<usize>) {
+    pub(crate) fn set_search_selected(&self, selected: Option<usize>) {
         if let Some(bar) = self.ivars().find.borrow().as_ref() {
             bar.set_selected(selected);
         }
     }
 
-    pub fn binding_action(&self, action: &str) {
+    pub(crate) fn binding_action(&self, action: &str) {
         let Some(surface) = self.handle() else { return };
         let ok = unsafe {
             sys::ghostty_surface_binding_action(surface, action.as_ptr().cast(), action.len())
@@ -711,7 +711,7 @@ impl SurfaceView {
     }
 }
 
-pub fn view_from_userdata(userdata: *mut c_void) -> Option<Retained<SurfaceView>> {
+pub(crate) fn view_from_userdata(userdata: *mut c_void) -> Option<Retained<SurfaceView>> {
     if userdata.is_null() {
         return None;
     }
@@ -719,7 +719,7 @@ pub fn view_from_userdata(userdata: *mut c_void) -> Option<Retained<SurfaceView>
     Some(view.retain())
 }
 
-pub fn handle_from_userdata(userdata: *mut c_void) -> Option<sys::ghostty_surface_t> {
+pub(crate) fn handle_from_userdata(userdata: *mut c_void) -> Option<sys::ghostty_surface_t> {
     if userdata.is_null() {
         return None;
     }

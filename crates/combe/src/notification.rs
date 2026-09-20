@@ -17,14 +17,14 @@ unsafe extern "C" {
     static UNNotificationDefaultActionIdentifier: &'static NSString;
 }
 
-pub struct Notice {
+pub(crate) struct Notice {
     title: String,
     body: String,
     priority: u8,
 }
 
 impl Notice {
-    pub fn desktop(title: String, body: String) -> Self {
+    pub(crate) fn desktop(title: String, body: String) -> Self {
         let title = clean(&title, 128);
         Self {
             title: if title.is_empty() {
@@ -37,7 +37,7 @@ impl Notice {
         }
     }
 
-    pub fn bell() -> Self {
+    pub(crate) fn bell() -> Self {
         Self {
             title: "Terminal needs attention".into(),
             body: String::new(),
@@ -45,7 +45,7 @@ impl Notice {
         }
     }
 
-    pub fn command(exit: i16, nanos: u64) -> Option<Self> {
+    pub(crate) fn command(exit: i16, nanos: u64) -> Option<Self> {
         let duration = Duration::from_nanos(nanos);
         if duration < habits::COMMAND_NOTIFY_AFTER {
             return None;
@@ -198,7 +198,7 @@ fn center() -> Retained<AnyObject> {
     unsafe { msg_send![class!(UNUserNotificationCenter), currentNotificationCenter] }
 }
 
-pub fn init() {
+pub(crate) fn init() {
     let delegate: Retained<Delegate> = unsafe { msg_send![Delegate::alloc(), init] };
     unsafe {
         let _: () = msg_send![&center(), setDelegate: &*delegate];
@@ -206,7 +206,7 @@ pub fn init() {
     STATE.with(|state| state.borrow_mut().delegate = Some(delegate));
 }
 
-pub fn receive(view: &SurfaceView, notice: Notice) {
+pub(crate) fn receive(view: &SurfaceView, notice: Notice) {
     if window::is_observed(view) {
         return;
     }
@@ -341,7 +341,7 @@ fn remove_delivered(id: &str) {
     }
 }
 
-pub fn acknowledge(id: &str) {
+pub(crate) fn acknowledge(id: &str) {
     STATE.with(|state| {
         if let Some(pending) = state.borrow_mut().pending.get_mut(id) {
             pending.cancel();
@@ -351,7 +351,7 @@ pub fn acknowledge(id: &str) {
     schedule();
 }
 
-pub fn forget(id: &str) {
+pub(crate) fn forget(id: &str) {
     STATE.with(|state| {
         state.borrow_mut().pending.remove(id);
     });

@@ -28,6 +28,7 @@ thiserror = "2"
 [workspace.lints.rust]
 warnings = "deny"
 unsafe_op_in_unsafe_fn = "deny"
+unreachable_pub = "warn"
 unused_qualifications = "warn"
 elided_lifetimes_in_paths = "warn"
 

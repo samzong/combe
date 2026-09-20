@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 
 use combe_catalog::{HOME_LABEL, Workspace};
 
-pub const HOP_SCHEME: &str = "combe";
+pub(crate) const HOP_SCHEME: &str = "combe";
 
-pub enum Entry {
+pub(crate) enum Entry {
     Workspace(PathBuf),
     Hop(PathBuf),
     Run {
@@ -14,13 +14,13 @@ pub enum Entry {
     },
 }
 
-pub struct Hop {
+pub(crate) struct Hop {
     pub workspace: PathBuf,
     pub cwd: PathBuf,
     pub name: String,
 }
 
-pub fn file(path: &Path) -> Option<Entry> {
+pub(crate) fn file(path: &Path) -> Option<Entry> {
     let resolved = path.canonicalize().ok()?;
     if resolved.is_dir() {
         return Some(Entry::Workspace(resolved));
@@ -36,12 +36,12 @@ pub fn file(path: &Path) -> Option<Entry> {
     })
 }
 
-pub fn directory(path: &Path) -> Option<Entry> {
+pub(crate) fn directory(path: &Path) -> Option<Entry> {
     let resolved = path.canonicalize().ok()?;
     resolved.is_dir().then_some(Entry::Hop(resolved))
 }
 
-pub fn hop(dir: &Path, rows: &[Workspace], home: Option<&Path>) -> Hop {
+pub(crate) fn hop(dir: &Path, rows: &[Workspace], home: Option<&Path>) -> Hop {
     if let Some(row) = rows
         .iter()
         .filter(|row| dir.starts_with(&row.path))
@@ -65,7 +65,7 @@ pub fn hop(dir: &Path, rows: &[Workspace], home: Option<&Path>) -> Hop {
     }
 }
 
-pub fn ssh(user: Option<&str>, host: &str, port: Option<u16>) -> Option<Entry> {
+pub(crate) fn ssh(user: Option<&str>, host: &str, port: Option<u16>) -> Option<Entry> {
     if !is_host(host) {
         return None;
     }
@@ -87,7 +87,7 @@ pub fn ssh(user: Option<&str>, host: &str, port: Option<u16>) -> Option<Entry> {
     })
 }
 
-pub fn man(section: Option<&str>, page: &str) -> Option<Entry> {
+pub(crate) fn man(section: Option<&str>, page: &str) -> Option<Entry> {
     if !is_page(page) {
         return None;
     }
@@ -106,7 +106,7 @@ pub fn man(section: Option<&str>, page: &str) -> Option<Entry> {
     })
 }
 
-pub fn name_of(path: &Path) -> String {
+pub(crate) fn name_of(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("combe")

@@ -6,7 +6,7 @@ use objc2_app_kit::NSView;
 use crate::split;
 use crate::surface::SurfaceView;
 
-pub struct Tab {
+pub(crate) struct Tab {
     pub id: u64,
     pub workspace: String,
     pub name: String,
@@ -17,13 +17,13 @@ pub struct Tab {
 }
 
 impl Tab {
-    pub fn contains(&self, view: &SurfaceView) -> bool {
+    pub(crate) fn contains(&self, view: &SurfaceView) -> bool {
         split::surfaces(&self.root)
             .iter()
             .any(|leaf| std::ptr::eq(&**leaf, view))
     }
 
-    pub fn focused_surface(&self) -> Option<Retained<SurfaceView>> {
+    pub(crate) fn focused_surface(&self) -> Option<Retained<SurfaceView>> {
         let leaves = split::surfaces(&self.root);
         self.zoom
             .as_ref()
@@ -39,7 +39,7 @@ impl Tab {
 }
 
 #[derive(Default)]
-pub struct Tabs {
+pub(crate) struct Tabs {
     items: Vec<Tab>,
     active: HashMap<String, u64>,
     current: Option<String>,
@@ -47,46 +47,46 @@ pub struct Tabs {
 }
 
 impl Tabs {
-    pub fn items(&self) -> &[Tab] {
+    pub(crate) fn items(&self) -> &[Tab] {
         &self.items
     }
 
-    pub fn current(&self) -> Option<&str> {
+    pub(crate) fn current(&self) -> Option<&str> {
         self.current.as_deref()
     }
 
-    pub fn visible(&self) -> impl Iterator<Item = &Tab> {
+    pub(crate) fn visible(&self) -> impl Iterator<Item = &Tab> {
         let current = self.current.as_deref();
         self.items
             .iter()
             .filter(move |tab| Some(tab.workspace.as_str()) == current)
     }
 
-    pub fn active_id(&self) -> Option<u64> {
+    pub(crate) fn active_id(&self) -> Option<u64> {
         self.active.get(self.current.as_deref()?).copied()
     }
 
-    pub fn active(&self) -> Option<&Tab> {
+    pub(crate) fn active(&self) -> Option<&Tab> {
         self.get(self.active_id()?)
     }
 
-    pub fn active_mut(&mut self) -> Option<&mut Tab> {
+    pub(crate) fn active_mut(&mut self) -> Option<&mut Tab> {
         self.get_mut(self.active_id()?)
     }
 
-    pub fn owner(&self, view: &SurfaceView) -> Option<&Tab> {
+    pub(crate) fn owner(&self, view: &SurfaceView) -> Option<&Tab> {
         self.items.iter().find(|tab| tab.contains(view))
     }
 
-    pub fn get(&self, id: u64) -> Option<&Tab> {
+    pub(crate) fn get(&self, id: u64) -> Option<&Tab> {
         self.items.iter().find(|tab| tab.id == id)
     }
 
-    pub fn get_mut(&mut self, id: u64) -> Option<&mut Tab> {
+    pub(crate) fn get_mut(&mut self, id: u64) -> Option<&mut Tab> {
         self.items.iter_mut().find(|tab| tab.id == id)
     }
 
-    pub fn siblings(&self, id: u64) -> usize {
+    pub(crate) fn siblings(&self, id: u64) -> usize {
         let Some(tab) = self.get(id) else { return 0 };
         self.items
             .iter()
@@ -94,7 +94,7 @@ impl Tabs {
             .count()
     }
 
-    pub fn other(&self, workspace: &str) -> Option<u64> {
+    pub(crate) fn other(&self, workspace: &str) -> Option<u64> {
         let next = self.items.iter().find(|tab| tab.workspace != workspace)?;
         self.active
             .get(&next.workspace)
@@ -103,7 +103,7 @@ impl Tabs {
             .or(Some(next.id))
     }
 
-    pub fn enter(&mut self, workspace: &str) -> Option<u64> {
+    pub(crate) fn enter(&mut self, workspace: &str) -> Option<u64> {
         self.current = Some(workspace.to_owned());
         let remembered = self
             .active
@@ -126,7 +126,7 @@ impl Tabs {
         Some(id)
     }
 
-    pub fn push(&mut self, workspace: String, name: String, root: Retained<NSView>) -> u64 {
+    pub(crate) fn push(&mut self, workspace: String, name: String, root: Retained<NSView>) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
         self.active.insert(workspace.clone(), id);
@@ -143,14 +143,14 @@ impl Tabs {
         id
     }
 
-    pub fn set_active(&mut self, id: u64) {
+    pub(crate) fn set_active(&mut self, id: u64) {
         let Some(tab) = self.get(id) else { return };
         let workspace = tab.workspace.clone();
         self.active.insert(workspace.clone(), id);
         self.current = Some(workspace);
     }
 
-    pub fn remove(&mut self, id: u64) -> Option<Tab> {
+    pub(crate) fn remove(&mut self, id: u64) -> Option<Tab> {
         let index = self.items.iter().position(|tab| tab.id == id)?;
         let tab = self.items.remove(index);
         if self.active.get(&tab.workspace) != Some(&id) {
@@ -177,7 +177,7 @@ impl Tabs {
         Some(tab)
     }
 
-    pub fn step(&self, delta: isize) -> Option<u64> {
+    pub(crate) fn step(&self, delta: isize) -> Option<u64> {
         let ids: Vec<u64> = self.visible().map(|tab| tab.id).collect();
         if ids.is_empty() {
             return None;

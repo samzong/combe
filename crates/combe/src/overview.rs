@@ -83,7 +83,7 @@ struct Card {
     title: Retained<NSTextField>,
 }
 
-pub struct OverviewIvars {
+pub(crate) struct OverviewIvars {
     scroll: RefCell<Option<Retained<NSScrollView>>>,
     document: Retained<NSView>,
     cards: Vec<Card>,
@@ -96,7 +96,7 @@ define_class!(
     #[thread_kind = MainThreadOnly]
     #[name = "CombeTabOverview"]
     #[ivars = OverviewIvars]
-    pub struct Overview;
+    pub(crate) struct Overview;
 
     impl Overview {
         #[unsafe(method(acceptsFirstResponder))]

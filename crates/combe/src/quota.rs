@@ -12,27 +12,27 @@ const WEEKLY_MINUTES: u32 = 10_080;
 const WINDOW_TOLERANCE: u32 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Provider {
+pub(crate) enum Provider {
     Claude,
     Codex,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Warn {
+pub(crate) enum Warn {
     None,
     Orange,
     Red,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Window {
+pub(crate) struct Window {
     pub used: f64,
     pub minutes: u32,
     pub resets_at: Option<SystemTime>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Quota {
+pub(crate) struct Quota {
     pub provider: Provider,
     pub updated_at: Option<SystemTime>,
     pub session: Option<Window>,
@@ -41,7 +41,7 @@ pub struct Quota {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Detail {
+pub(crate) struct Detail {
     pub label: String,
     pub percent: String,
     pub used: f64,
@@ -49,7 +49,7 @@ pub struct Detail {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Refresh {
+pub(crate) struct Refresh {
     pub claude: Option<Quota>,
     pub codex: Option<Quota>,
 }
@@ -119,9 +119,9 @@ struct CodexUsageWindow {
 }
 
 impl Provider {
-    pub const ALL: [Self; 2] = [Self::Claude, Self::Codex];
+    pub(crate) const ALL: [Self; 2] = [Self::Claude, Self::Codex];
 
-    pub fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Claude => "Claude",
             Self::Codex => "Codex",
@@ -129,7 +129,7 @@ impl Provider {
     }
 }
 
-pub fn warn(used: f64) -> Warn {
+pub(crate) fn warn(used: f64) -> Warn {
     if used >= 80.0 {
         Warn::Red
     } else if used >= 60.0 {
@@ -139,7 +139,7 @@ pub fn warn(used: f64) -> Warn {
     }
 }
 
-pub fn chip(quota: &Quota) -> Option<(String, f64)> {
+pub(crate) fn chip(quota: &Quota) -> Option<(String, f64)> {
     let window = tightest(quota)?;
     Some((
         format!("{}  {}", quota.provider.name(), percent_label(window.used)),
@@ -147,7 +147,7 @@ pub fn chip(quota: &Quota) -> Option<(String, f64)> {
     ))
 }
 
-pub fn details(quota: &Quota, now: SystemTime) -> Vec<Detail> {
+pub(crate) fn details(quota: &Quota, now: SystemTime) -> Vec<Detail> {
     [quota.session.as_ref(), quota.weekly.as_ref()]
         .into_iter()
         .flatten()
@@ -161,7 +161,7 @@ pub fn details(quota: &Quota, now: SystemTime) -> Vec<Detail> {
         .collect()
 }
 
-pub fn parse_claude_usage(raw: &str) -> Option<Quota> {
+pub(crate) fn parse_claude_usage(raw: &str) -> Option<Quota> {
     let data: ClaudeUsage = serde_json::from_str(raw).ok()?;
     let session = map_claude_window(data.five_hour.as_ref(), SESSION_MINUTES);
     let weekly = map_claude_window(data.seven_day.as_ref(), WEEKLY_MINUTES);
@@ -220,12 +220,12 @@ const CLAUDE_CACHE_BYTES: u64 = 64 * 1024;
 type FileStamp = (u64, u64, SystemTime);
 
 #[derive(Default)]
-pub struct Reader {
+pub(crate) struct Reader {
     files: BTreeMap<PathBuf, (FileStamp, Option<Quota>)>,
 }
 
 impl Reader {
-    pub fn refresh(&mut self) -> Refresh {
+    pub(crate) fn refresh(&mut self) -> Refresh {
         self.refresh_in(&claude_home(), &codex_home())
     }
 

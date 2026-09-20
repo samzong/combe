@@ -15,15 +15,15 @@ use crate::chrome_view::ActionButton;
 use crate::habits;
 use crate::surface::SurfaceView;
 
-pub const WIDTH: f64 = 340.0;
-pub const HEIGHT: f64 = 38.0;
+pub(crate) const WIDTH: f64 = 340.0;
+pub(crate) const HEIGHT: f64 = 38.0;
 const INSET: f64 = 6.0;
 const COUNT_WIDTH: f64 = 64.0;
 const BUTTON_WIDTH: f64 = 22.0;
 
 type Action = fn(&FindBar);
 
-pub struct FindBarIvars {
+pub(crate) struct FindBarIvars {
     field: RefCell<Option<Retained<NSSearchField>>>,
     count: RefCell<Option<Retained<NSTextField>>>,
     total: Cell<Option<usize>>,
@@ -35,7 +35,7 @@ define_class!(
     #[thread_kind = MainThreadOnly]
     #[name = "CombeFindBar"]
     #[ivars = FindBarIvars]
-    pub struct FindBar;
+    pub(crate) struct FindBar;
 
     unsafe impl NSObjectProtocol for FindBar {}
 
@@ -92,7 +92,7 @@ define_class!(
 );
 
 impl FindBar {
-    pub fn new(mtm: MainThreadMarker, container: NSSize) -> Retained<Self> {
+    pub(crate) fn new(mtm: MainThreadMarker, container: NSSize) -> Retained<Self> {
         let ivars = FindBarIvars {
             field: RefCell::new(None),
             count: RefCell::new(None),
@@ -175,7 +175,7 @@ impl FindBar {
         this
     }
 
-    pub fn focus(&self, needle: &str) {
+    pub(crate) fn focus(&self, needle: &str) {
         let Some(field) = self.ivars().field.borrow().clone() else {
             return;
         };
@@ -191,12 +191,12 @@ impl FindBar {
         }
     }
 
-    pub fn set_total(&self, total: Option<usize>) {
+    pub(crate) fn set_total(&self, total: Option<usize>) {
         self.ivars().total.set(total);
         self.update_count();
     }
 
-    pub fn set_selected(&self, selected: Option<usize>) {
+    pub(crate) fn set_selected(&self, selected: Option<usize>) {
         self.ivars().selected.set(selected);
         self.update_count();
     }

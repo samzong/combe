@@ -26,7 +26,7 @@ Usage:
   combe help                Show this help
 ";
 
-pub fn run() -> Option<ExitCode> {
+pub(crate) fn run() -> Option<ExitCode> {
     let mut args: Vec<String> = Vec::new();
     for arg in std::env::args_os().skip(1) {
         let Ok(arg) = arg.into_string() else {

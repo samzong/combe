@@ -12,7 +12,7 @@ const FILL: NSAutoresizingMaskOptions = NSAutoresizingMaskOptions(
 );
 
 #[derive(Clone, Copy)]
-pub enum Target {
+pub(crate) enum Target {
     Previous,
     Next,
     Up,
@@ -21,7 +21,7 @@ pub enum Target {
     Right,
 }
 
-pub struct Zoom {
+pub(crate) struct Zoom {
     pub surface: Retained<SurfaceView>,
     tree: Retained<NSView>,
     placeholder: Retained<NSView>,
@@ -29,7 +29,7 @@ pub struct Zoom {
 }
 
 impl Zoom {
-    pub fn new(root: &NSView, surface: &SurfaceView) -> Option<Self> {
+    pub(crate) fn new(root: &NSView, surface: &SurfaceView) -> Option<Self> {
         let parent = unsafe { surface.superview() }?;
         if !is_pane(&parent) {
             return None;
@@ -52,7 +52,7 @@ impl Zoom {
         })
     }
 
-    pub fn restore(self) {
+    pub(crate) fn restore(self) {
         self.corners.removeFromSuperview();
         if let Some(parent) = unsafe { self.placeholder.superview() } {
             self.surface.removeFromSuperview();
@@ -62,13 +62,13 @@ impl Zoom {
         self.tree.setHidden(false);
     }
 
-    pub fn pane_rect(&self, root: &NSView) -> NSRect {
+    pub(crate) fn pane_rect(&self, root: &NSView) -> NSRect {
         self.placeholder
             .convertRect_toView(self.placeholder.bounds(), Some(root))
     }
 }
 
-pub fn leaf(
+pub(crate) fn leaf(
     mtm: MainThreadMarker,
     frame: NSRect,
     cwd: &str,
@@ -85,7 +85,7 @@ fn container(mtm: MainThreadMarker, frame: NSRect) -> Retained<NSView> {
     view
 }
 
-pub fn root(
+pub(crate) fn root(
     mtm: MainThreadMarker,
     frame: NSRect,
     cwd: &str,
@@ -97,7 +97,7 @@ pub fn root(
     container
 }
 
-pub fn adopt(mtm: MainThreadMarker, frame: NSRect, view: &SurfaceView) -> Retained<NSView> {
+pub(crate) fn adopt(mtm: MainThreadMarker, frame: NSRect, view: &SurfaceView) -> Retained<NSView> {
     let container = container(mtm, frame);
     detach(view);
     view.setFrame(container.bounds());
@@ -106,7 +106,7 @@ pub fn adopt(mtm: MainThreadMarker, frame: NSRect, view: &SurfaceView) -> Retain
     container
 }
 
-pub fn divide(
+pub(crate) fn divide(
     mtm: MainThreadMarker,
     focused: &SurfaceView,
     vertical: bool,
@@ -133,7 +133,7 @@ pub fn divide(
     Some(fresh)
 }
 
-pub fn close(view: &SurfaceView) {
+pub(crate) fn close(view: &SurfaceView) {
     if unsafe { view.superview() }.is_none() {
         return;
     }
@@ -141,7 +141,7 @@ pub fn close(view: &SurfaceView) {
     detach(view);
 }
 
-pub fn detach(view: &SurfaceView) {
+pub(crate) fn detach(view: &SurfaceView) {
     let Some(parent) = (unsafe { view.superview() }) else {
         return;
     };
@@ -173,7 +173,7 @@ pub fn detach(view: &SurfaceView) {
     }
 }
 
-pub fn surfaces(root: &NSView) -> Vec<Retained<SurfaceView>> {
+pub(crate) fn surfaces(root: &NSView) -> Vec<Retained<SurfaceView>> {
     let mut found = Vec::new();
     collect(root, &mut found);
     found
@@ -201,7 +201,7 @@ fn is_surface(view: &NSView) -> bool {
     unsafe { msg_send![object, isKindOfClass: SurfaceView::class()] }
 }
 
-pub fn target(
+pub(crate) fn target(
     root: &NSView,
     focused: &SurfaceView,
     direction: Target,

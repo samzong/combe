@@ -9,6 +9,7 @@ use objc2::runtime::{AnyObject, Bool, NSObject, NSObjectProtocol};
 use objc2::{AnyThread, class, define_class, extern_protocol, msg_send};
 use objc2_foundation::{NSArray, NSError, NSOperationQueue, NSString, NSTimer};
 
+use crate::log::note;
 use crate::{habits, surface::SurfaceView, window};
 
 #[link(name = "UserNotifications", kind = "framework")]
@@ -259,7 +260,7 @@ fn request_authorization() {
     });
     let block = RcBlock::new(|granted: Bool, error: *mut NSError| {
         if let Some(error) = unsafe { error.as_ref() } {
-            eprintln!("combe: notification authorization: {error}");
+            note!("notification authorization: {error}");
         }
         let granted = granted.as_bool();
         on_main(move || flush(granted));
@@ -315,7 +316,7 @@ fn deliver(id: &str, workspace: &str, notice: Notice) {
         let id = id.to_owned();
         let block = RcBlock::new(move |error: *mut NSError| {
             if let Some(error) = error.as_ref() {
-                eprintln!("combe: notification delivery: {error}");
+                note!("notification delivery: {error}");
             }
             let id = id.clone();
             on_main(move || {

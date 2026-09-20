@@ -18,6 +18,7 @@ use objc2_foundation::{
 
 use crate::find_bar::FindBar;
 use crate::ghostty;
+use crate::log::note;
 
 const NX_DEVICE_RSHIFT: usize = 0x00000004;
 const NX_DEVICE_RCTRL: usize = 0x00002000;
@@ -444,7 +445,7 @@ impl SurfaceView {
             sys::ghostty_surface_binding_action(surface, action.as_ptr().cast(), action.len())
         };
         if !ok {
-            eprintln!("combe: binding action failed: {action}");
+            note!("binding action failed: {action}");
         }
     }
 

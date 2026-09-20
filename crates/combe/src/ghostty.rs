@@ -9,6 +9,7 @@ use objc2_app_kit::{NSBeep, NSPasteboard, NSPasteboardTypeString, NSWorkspace};
 use objc2_foundation::{MainThreadMarker, NSString, NSURL};
 
 use crate::habits;
+use crate::log::note;
 use crate::split::Target as SplitTarget;
 use crate::surface::SurfaceView;
 use crate::window::TabTarget;
@@ -118,7 +119,7 @@ unsafe fn report_diagnostics(config: sys::ghostty_config_t) {
             continue;
         }
         let message = unsafe { CStr::from_ptr(diagnostic.message) };
-        eprintln!("combe: config: {}", message.to_string_lossy());
+        note!("config: {}", message.to_string_lossy());
     }
 }
 

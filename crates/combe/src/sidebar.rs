@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use crate::log::note;
 use combe_catalog::{
     HOME_LABEL, State, Workspace, add_repo, catalog, home_dir, is_home_path, load_state,
     save_state, should_inject_home, state_path,
@@ -24,12 +25,12 @@ pub fn repos() -> Vec<Repo> {
     let found = match catalog(&state) {
         Ok(found) => found,
         Err(err) => {
-            eprintln!("combe: {err}");
+            note!("{err}");
             return home_catalog();
         }
     };
     for err in &found.errors {
-        eprintln!("combe: {err}");
+        note!("{err}");
     }
 
     let mut repos: Vec<Repo> = Vec::new();
@@ -63,7 +64,7 @@ pub fn rows() -> Vec<Workspace> {
     match catalog(&state) {
         Ok(found) => found.rows,
         Err(err) => {
-            eprintln!("combe: {err}");
+            note!("{err}");
             Vec::new()
         }
     }
@@ -100,7 +101,7 @@ fn synthetic_home(home: PathBuf) -> Repo {
 
 pub fn add(paths: &[PathBuf]) {
     let Some(file) = state_path() else {
-        eprintln!("combe: cannot resolve the application support directory");
+        note!("cannot resolve the application support directory");
         return;
     };
     let Some(mut state) = read_state() else {
@@ -108,24 +109,24 @@ pub fn add(paths: &[PathBuf]) {
     };
     for path in paths {
         if let Err(err) = add_repo(&mut state, path) {
-            eprintln!("combe: {err}");
+            note!("{err}");
             return;
         }
     }
     if let Err(err) = save_state(&file, &state) {
-        eprintln!("combe: {err}");
+        note!("{err}");
     }
 }
 
 fn read_state() -> Option<State> {
     let Some(file) = state_path() else {
-        eprintln!("combe: cannot resolve the application support directory");
+        note!("cannot resolve the application support directory");
         return None;
     };
     match load_state(&file) {
         Ok(state) => Some(state),
         Err(err) => {
-            eprintln!("combe: {err}");
+            note!("{err}");
             None
         }
     }

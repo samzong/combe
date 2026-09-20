@@ -7,6 +7,7 @@ mod geometry;
 mod ghostty;
 mod glass;
 mod habits;
+mod log;
 mod menu;
 mod notification;
 mod overview;

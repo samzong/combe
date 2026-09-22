@@ -107,6 +107,10 @@ pub(crate) const ZOOM_CORNER_LENGTH: f64 = 12.0;
 pub(crate) const ZOOM_CORNER_INSET: f64 = 4.0;
 pub(crate) const PANE_GUIDE_DURATION: f64 = 1.2;
 
+pub(crate) const TELEMETRY_IDLE_AFTER: Duration = Duration::from_secs(120);
+pub(crate) const TELEMETRY_FLUSH: Duration = Duration::from_secs(2);
+pub(crate) const TELEMETRY_QUEUE: usize = 512;
+
 pub(crate) const ALLOW_OSC52_READ: bool = false;
 
 pub(crate) const NEST_ENV: &str = "COMBE";

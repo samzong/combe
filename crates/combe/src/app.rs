@@ -1,4 +1,5 @@
 use crate::entry::{self, Entry};
+use crate::telemetry::{self, Outcome, Source};
 use crate::{ghostty, quota_panel, sidebar, sidebar_panel, window};
 use combe_catalog::home_dir;
 use objc2::rc::Retained;
@@ -28,8 +29,12 @@ define_class!(
 
         #[unsafe(method(applicationShouldTerminate:))]
         fn should_terminate(&self, _app: &NSApplication) -> NSApplicationTerminateReply {
-            let open = window::is_open();
-            if !open || window::confirm_quit() {
+            let quit = !window::is_open() || window::confirm_quit();
+            window::study("app.quit", Source::App)
+                .outcome(if quit { Outcome::Ok } else { Outcome::Cancel })
+                .emit();
+            telemetry::flush();
+            if quit {
                 NSApplicationTerminateReply::TerminateNow
             } else {
                 NSApplicationTerminateReply::TerminateCancel
@@ -50,6 +55,8 @@ define_class!(
         #[unsafe(method(applicationDidBecomeActive:))]
         fn did_become_active(&self, _notification: &AnyObject) {
             ghostty::set_focus(true);
+            telemetry::reload();
+            window::study("app.activate", Source::App).emit();
             window::refresh_attention();
             sidebar_panel::refresh();
             quota_panel::refresh();
@@ -58,6 +65,7 @@ define_class!(
         #[unsafe(method(applicationDidResignActive:))]
         fn did_resign_active(&self, _notification: &AnyObject) {
             ghostty::set_focus(false);
+            window::study("app.deactivate", Source::App).emit();
             window::deactivate_chrome();
         }
     }
@@ -153,7 +161,7 @@ fn accept(entry: Entry) {
                 .map(|row| row.label.clone())
                 .unwrap_or_else(|| entry::name_of(&path));
             sidebar_panel::set_repos(repos);
-            sidebar_panel::select(&path.to_string_lossy(), &label);
+            sidebar_panel::select(&path.to_string_lossy(), &label, Source::Url);
         }
         Entry::Hop(dir) => {
             let hop = entry::hop(&dir, &sidebar::rows(), home_dir().as_deref());
@@ -162,6 +170,7 @@ fn accept(entry: Entry) {
                 &hop.cwd.to_string_lossy(),
                 &hop.name,
                 None,
+                Source::Url,
             );
         }
         Entry::Run { cwd, name, input } => {
@@ -172,7 +181,7 @@ fn accept(entry: Entry) {
                 .map(|cwd| cwd.to_string_lossy().into_owned())
                 .or_else(window::current_workspace)
                 .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| "/".to_owned()));
-            window::new_tab(&cwd, &cwd, &name, Some(&input));
+            window::new_tab(&cwd, &cwd, &name, Some(&input), Source::Url);
         }
     }
     window::reveal_window();

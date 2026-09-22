@@ -20,6 +20,7 @@ mod split;
 mod surface;
 mod tab_bar;
 mod tabs;
+mod telemetry;
 mod window;
 
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
@@ -51,6 +52,7 @@ fn main() -> ExitCode {
     ghostty::init();
 
     let _delegate = app::install_delegate(mtm, &app);
+    telemetry::start();
     notification::init();
     menu::install(mtm, &app);
     window::open(mtm);

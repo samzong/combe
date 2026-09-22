@@ -13,6 +13,7 @@ use objc2_foundation::{NSString, NSURL, NSURLComponents};
 
 use crate::entry::HOP_SCHEME;
 use crate::habits;
+use crate::telemetry;
 
 const USAGE: &str = "\
 combe — a worktree-aware terminal
@@ -24,6 +25,24 @@ Usage:
   combe remove <path>...    Unregister repos
   combe cleanup             Drop registered paths missing from disk
   combe help                Show this help
+";
+
+const TELEMETRY_USAGE: &str = "\
+combe telemetry — local behavior study log, off by default
+
+Usage:
+  combe telemetry on        Start recording into the study log
+  combe telemetry off       Stop recording; recorded data stays untouched
+  combe telemetry status    Show the stored switch and the log file
+
+Records anonymous per-session ids, counts, and outcomes. Never terminal text,
+commands, search terms, paths, or window titles. Nothing leaves this machine,
+nothing is ever deleted for you.
+
+`on` and `off` write the stored switch. A running Combe re-reads it the next
+time it becomes the active app; records already queued when it stops may still
+be written. `status` reports the stored switch, not a live confirmation from a
+running app.
 ";
 
 pub(crate) fn run() -> Option<ExitCode> {
@@ -48,12 +67,67 @@ pub(crate) fn run() -> Option<ExitCode> {
         "add" => Some(add(rest)),
         "remove" => Some(remove(rest)),
         "cleanup" => Some(no_args("cleanup", rest).unwrap_or_else(clean)),
+        "telemetry" => Some(telemetry(rest)),
         "help" | "-h" | "--help" => {
             print!("{USAGE}");
             Some(ExitCode::SUCCESS)
         }
         other => Some(hop(other, rest)),
     }
+}
+
+fn telemetry(rest: &[String]) -> ExitCode {
+    let tail = rest.get(1..).unwrap_or_default();
+    match rest.first().map(String::as_str) {
+        Some("on") => no_args("telemetry on", tail).unwrap_or_else(|| switch(true)),
+        Some("off") => no_args("telemetry off", tail).unwrap_or_else(|| switch(false)),
+        Some("status") => no_args("telemetry status", tail).unwrap_or_else(telemetry_status),
+        None | Some("help" | "-h" | "--help") => {
+            print!("{TELEMETRY_USAGE}");
+            ExitCode::SUCCESS
+        }
+        Some(other) => {
+            eprintln!("combe: '{other}' is not a telemetry command. See `combe telemetry --help`.");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn switch(enabled: bool) -> ExitCode {
+    if let Err(err) = telemetry::write_switch(enabled) {
+        eprintln!("combe: {err}");
+        return ExitCode::FAILURE;
+    }
+    if enabled {
+        println!("telemetry on — switch saved; a running Combe records once it is active again");
+    } else {
+        println!("telemetry off — switch saved; a running Combe stops once it is active again");
+        println!("records already queued may still be written; recorded data is kept");
+    }
+    ExitCode::SUCCESS
+}
+
+fn telemetry_status() -> ExitCode {
+    match telemetry::read_switch() {
+        Err(err) => {
+            eprintln!("combe: telemetry switch unreadable: {err}");
+            eprintln!("combe: Combe treats an unreadable switch as off");
+            return ExitCode::FAILURE;
+        }
+        Ok(None) => println!("switch   off (never set)"),
+        Ok(Some(state)) => println!(
+            "switch   {} since {}",
+            if state.enabled { "on" } else { "off" },
+            telemetry::stamp(state.changed_at_unix_ms)
+        ),
+    }
+    if let Some(path) = telemetry::events_path() {
+        match std::fs::metadata(&path) {
+            Ok(meta) => println!("log      {} ({} bytes)", path.display(), meta.len()),
+            Err(_) => println!("log      {} (not written yet)", path.display()),
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 fn hop(target: &str, rest: &[String]) -> ExitCode {

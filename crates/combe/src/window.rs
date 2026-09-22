@@ -30,6 +30,7 @@ use crate::split;
 use crate::surface::SurfaceView;
 use crate::tab_bar::TabBar;
 use crate::tabs::Tabs;
+use crate::telemetry::{self, Outcome, Source};
 use crate::{sidebar, sidebar_panel};
 
 const TOP_BAR_HEIGHT: f64 = 60.0;
@@ -79,6 +80,7 @@ define_class!(
     impl Window {
         #[unsafe(method(sendEvent:))]
         fn send_event(&self, event: &NSEvent) {
+            telemetry::touch();
             if handle_overview_event(event) { return; }
             let quota = quota_panel::handle_event(event);
             let sidebar = sidebar_panel::handle_event(event);
@@ -168,9 +170,9 @@ pub(crate) fn open(mtm: MainThreadMarker) {
             right_frame.size.width,
             TOP_BAR_HEIGHT,
         ),
-        activate_tab,
-        request_close_tab,
-        new_current_tab,
+        |id| activate_tab(id, Source::TabBar),
+        |id| request_close_tab(id, Source::TabBar),
+        || new_current_tab(Source::Button),
     );
 
     let status_h = quota_panel::mount(
@@ -256,7 +258,7 @@ pub(crate) fn open(mtm: MainThreadMarker) {
 
     sync_appearance();
     if !habits::SIDEBAR_VISIBLE {
-        sidebar_panel::toggle();
+        sidebar_panel::close();
     }
 
     window.center();
@@ -265,7 +267,7 @@ pub(crate) fn open(mtm: MainThreadMarker) {
     sidebar_panel::set_repos(sidebar::repos());
     quota_panel::start();
     if let Some(first) = sidebar_panel::first_row() {
-        sidebar_panel::select(&first.0, &first.1);
+        sidebar_panel::select(&first.0, &first.1, Source::Startup);
     }
 }
 
@@ -279,7 +281,7 @@ fn hex(value: &str) -> Retained<NSColor> {
     )
 }
 
-pub(crate) fn new_current_tab() {
+pub(crate) fn new_current_tab(source: Source) {
     dismiss_overview(false);
     let target = STATE
         .with(|state| {
@@ -296,7 +298,7 @@ pub(crate) fn new_current_tab() {
         })
         .or_else(sidebar_panel::first_row);
     if let Some((path, name)) = target {
-        new_tab(&path, &path, &name, None);
+        new_tab(&path, &path, &name, None, source);
     }
 }
 
@@ -308,19 +310,20 @@ fn leaf_name(path: &str) -> String {
         .to_string()
 }
 
-fn open_worktree(path: &str, name: &str) {
+fn open_worktree(path: &str, name: &str, source: Source) {
     let existing = STATE.with(|state| {
         let mut state = state.borrow_mut();
         let state = state.as_mut()?;
         state.tabs.enter(path)
     });
     match existing {
-        Some(id) => activate_tab(id),
-        None => new_tab(path, path, name, None),
+        Some(id) => activate_tab(id, source),
+        None => new_tab(path, path, name, None, source),
     }
+    study("workspace.enter", source).emit();
 }
 
-pub(crate) fn new_tab(workspace: &str, cwd: &str, name: &str, input: Option<&str>) {
+pub(crate) fn new_tab(workspace: &str, cwd: &str, name: &str, input: Option<&str>, source: Source) {
     let mtm = MainThreadMarker::new().expect("main thread");
     with_mut_state(|state| {
         let root = split::root(mtm, state.content.bounds(), cwd, input);
@@ -330,9 +333,10 @@ pub(crate) fn new_tab(workspace: &str, cwd: &str, name: &str, input: Option<&str
     sync_tabs();
     sidebar_panel::refresh();
     focus_active();
+    study("tab.new", source).emit();
 }
 
-fn activate_tab(id: u64) {
+fn activate_tab(id: u64, source: Source) {
     dismiss_overview(false);
     with_mut_state(|state| {
         state.tabs.set_active(id);
@@ -364,9 +368,10 @@ fn activate_tab(id: u64) {
         }
     }
     focus_active();
+    study_tab("tab.activate", source, Some(id)).emit();
 }
 
-fn request_close_tab(id: u64) {
+fn request_close_tab(id: u64, source: Source) {
     dismiss_overview(false);
     let plan = STATE.with(|state| {
         let state = state.borrow();
@@ -385,17 +390,33 @@ fn request_close_tab(id: u64) {
         return;
     };
     if last && current && other.is_none() {
+        let closing = study_tab("tab.close", source, Some(id));
         close_window();
+        closing
+            .outcome(if is_open() {
+                Outcome::Cancel
+            } else {
+                Outcome::Ok
+            })
+            .emit();
         return;
     }
     if !confirm_close_tab(id) {
+        study_tab("tab.close", source, Some(id))
+            .outcome(Outcome::Cancel)
+            .emit();
         return;
     }
+    let closed = study_tab("tab.close", source, Some(id)).outcome(Outcome::Ok);
+    let previous = active_id();
     close_tab(id);
+    closed.emit();
     if let Some(other) = other {
-        activate_tab(other);
+        activate_tab(other, Source::Auto);
     } else if last {
         sidebar_panel::rebuild();
+    } else if active_id() != previous {
+        study("tab.activate", Source::Auto).emit();
     }
 }
 
@@ -481,10 +502,11 @@ fn close_tab(id: u64) {
     focus_active();
 }
 
-pub(crate) fn toggle_split_zoom() {
+pub(crate) fn toggle_split_zoom(source: Source) {
     let Some(view) = focused_surface() else {
         return;
     };
+    let mut zoomed = false;
     with_mut_state(|state| {
         let Some(tab) = state.tabs.active_mut() else {
             return;
@@ -494,8 +516,12 @@ pub(crate) fn toggle_split_zoom() {
         } else {
             tab.zoom = split::Zoom::new(&tab.root, &view);
         }
+        zoomed = tab.zoom.is_some();
     });
     sync_tabs();
+    study("pane.zoom", source)
+        .detail(if zoomed { "on" } else { "off" })
+        .emit();
     if let Some(window) = view.window() {
         window.makeFirstResponder(Some(&*view));
     }
@@ -513,7 +539,7 @@ fn restore_zoom(view: &SurfaceView) {
     sync_tabs();
 }
 
-pub(crate) fn close_focused() {
+pub(crate) fn close_focused(source: Source) {
     let Some(view) = focused_surface() else {
         return;
     };
@@ -525,7 +551,7 @@ pub(crate) fn close_focused() {
     });
     let Some((id, leaves)) = active else { return };
     if leaves <= 1 {
-        request_close_tab(id);
+        request_close_tab(id, source);
         return;
     }
     if view.needs_confirm_quit()
@@ -535,14 +561,17 @@ pub(crate) fn close_focused() {
             "Close",
         )
     {
+        study("pane.close", source).outcome(Outcome::Cancel).emit();
         return;
     }
+    let closed = study("pane.close", source).outcome(Outcome::Ok);
     restore_zoom(&view);
     split::close(&view);
     focus_active();
+    closed.emit();
 }
 
-pub(crate) fn divide(vertical: bool) {
+pub(crate) fn divide(vertical: bool, source: Source) {
     let mtm = MainThreadMarker::new().expect("main thread");
     let Some(view) = focused_surface() else {
         return;
@@ -555,20 +584,23 @@ pub(crate) fn divide(vertical: bool) {
     if let Some(window) = fresh.window() {
         window.makeFirstResponder(Some(&*fresh));
     }
+    study("pane.split", source)
+        .detail(if vertical { "right" } else { "down" })
+        .emit();
 }
 
-pub(crate) fn move_pane_to_new_tab() {
+pub(crate) fn move_pane_to_new_tab(source: Source) {
     let mtm = MainThreadMarker::new().expect("main thread");
     let Some(view) = focused_surface() else {
         return;
     };
-    let source = STATE.with(|state| {
+    let origin = STATE.with(|state| {
         let state = state.borrow();
         let state = state.as_ref()?;
         let tab = state.tabs.active()?;
         (split::surfaces(&tab.root).len() > 1).then(|| (tab.workspace.clone(), tab.name.clone()))
     });
-    let Some((workspace, name)) = source else {
+    let Some((workspace, name)) = origin else {
         return;
     };
     restore_zoom(&view);
@@ -579,9 +611,10 @@ pub(crate) fn move_pane_to_new_tab() {
     });
     sync_tabs();
     focus_active();
+    study("pane.to_tab", source).emit();
 }
 
-pub(crate) fn goto_tab(target: TabTarget) -> bool {
+pub(crate) fn goto_tab(target: TabTarget, source: Source) -> bool {
     let next = STATE.with(|state| {
         let state = state.borrow();
         let tabs = &state.as_ref()?.tabs;
@@ -593,7 +626,7 @@ pub(crate) fn goto_tab(target: TabTarget) -> bool {
         }
     });
     let Some(id) = next else { return false };
-    activate_tab(id);
+    activate_tab(id, source);
     true
 }
 
@@ -620,14 +653,15 @@ pub(crate) fn clipboard_action(action: &str, native: objc2::runtime::Sel) {
     surface_action(action);
 }
 
-pub(crate) fn focus_split(target: split::Target) {
+pub(crate) fn focus_split(target: split::Target, source: Source) {
     if let Some(view) = focused_surface() {
-        goto_split(&view, target);
+        goto_split(&view, target, source);
     }
 }
 
-pub(crate) fn goto_split(view: &SurfaceView, target: split::Target) -> bool {
+pub(crate) fn goto_split(view: &SurfaceView, target: split::Target, source: Source) -> bool {
     restore_zoom(view);
+    let heading = direction(&target);
     let found = STATE.with(|state| {
         let state = state.borrow();
         let state = state.as_ref()?;
@@ -636,12 +670,28 @@ pub(crate) fn goto_split(view: &SurfaceView, target: split::Target) -> bool {
         Some(next)
     });
     let Some(next) = found else { return false };
-    if let Some(next) = next
-        && let Some(window) = next.window()
-    {
-        window.makeFirstResponder(Some(&*next));
+    let moved = study("pane.focus", source).detail(heading);
+    match next {
+        Some(next) => {
+            if let Some(window) = next.window() {
+                window.makeFirstResponder(Some(&*next));
+            }
+            moved.outcome(Outcome::Ok).emit();
+        }
+        None => moved.outcome(Outcome::Noop).emit(),
     }
     true
+}
+
+fn direction(target: &split::Target) -> &'static str {
+    match target {
+        split::Target::Previous => "previous",
+        split::Target::Next => "next",
+        split::Target::Up => "up",
+        split::Target::Left => "left",
+        split::Target::Down => "down",
+        split::Target::Right => "right",
+    }
 }
 
 fn responder_surface(state: &State) -> Option<Retained<SurfaceView>> {
@@ -715,7 +765,7 @@ pub(crate) fn focus_notification(id: &str) {
         Some(tab_id)
     });
     if let Some(tab) = target {
-        activate_tab(tab);
+        activate_tab(tab, Source::Notification);
         reveal_window();
         NSApplication::sharedApplication(MainThreadMarker::new().expect("main thread")).activate();
         refresh_attention();
@@ -817,7 +867,7 @@ pub(crate) fn refresh_labels() {
     });
 }
 
-pub(crate) fn toggle_overview() {
+pub(crate) fn toggle_overview(source: Source) {
     let open = STATE.with(|state| {
         state
             .borrow()
@@ -825,7 +875,7 @@ pub(crate) fn toggle_overview() {
             .is_some_and(|state| state.overview.is_some())
     });
     if open {
-        dismiss_overview(true);
+        dismiss_overview_from(true, source);
         return;
     }
     let mounted = STATE.with(|state| {
@@ -833,7 +883,9 @@ pub(crate) fn toggle_overview() {
         let state = state.as_mut()?;
         let active = state.tabs.active_id()?;
         let tabs: Vec<_> = state.tabs.visible().collect();
-        let session = Session::mount(&state.window, &state.content, &tabs, active, activate_tab);
+        let session = Session::mount(&state.window, &state.content, &tabs, active, |id| {
+            activate_tab(id, Source::Overview);
+        });
         let view = session.view();
         state.overview = Some(session);
         if let Some(button) = state.overview_button.as_ref() {
@@ -843,10 +895,15 @@ pub(crate) fn toggle_overview() {
     });
     if let Some(view) = mounted {
         view.focus();
+        study("overview.open", source).emit();
     }
 }
 
 pub(crate) fn dismiss_overview(restore: bool) {
+    dismiss_overview_from(restore, Source::Auto);
+}
+
+fn dismiss_overview_from(restore: bool, source: Source) {
     let removed = STATE.with(|state| {
         let mut state = state.borrow_mut();
         let state = state.as_mut()?;
@@ -857,6 +914,9 @@ pub(crate) fn dismiss_overview(restore: bool) {
         Some(session)
     });
     if let Some(session) = removed {
+        if source != Source::Auto {
+            study("overview.close", source).emit();
+        }
         session.dismiss(restore, focus_active);
     }
 }
@@ -870,7 +930,13 @@ fn handle_overview_event(event: &NSEvent) -> bool {
             .as_ref()
             .map(Session::view)
     });
-    view.is_some_and(|view| view.handle_event(event, dismiss_overview, activate_tab))
+    view.is_some_and(|view| {
+        view.handle_event(
+            event,
+            |restore| dismiss_overview_from(restore, Source::Overview),
+            |id| activate_tab(id, Source::Overview),
+        )
+    })
 }
 
 fn focus_active() {
@@ -1277,11 +1343,13 @@ fn close_leaf(view: &SurfaceView) {
     });
     let Some((id, leaves)) = owner else { return };
     if leaves <= 1 {
-        request_close_tab(id);
+        request_close_tab(id, Source::Process);
         return;
     }
+    let exited = study_tab("pane.exit", Source::Process, Some(id)).pane(view.notification_id());
     split::close(view);
     focus_active();
+    exited.emit();
 }
 
 fn quota_window_live() -> bool {
@@ -1309,6 +1377,40 @@ pub(crate) fn is_open() -> bool {
 
 pub(crate) fn current_workspace() -> Option<String> {
     STATE.with(|state| state.borrow().as_ref()?.tabs.current().map(str::to_owned))
+}
+
+fn active_id() -> Option<u64> {
+    STATE.with(|state| state.borrow().as_ref()?.tabs.active_id())
+}
+
+pub(crate) fn study(event: &'static str, source: Source) -> telemetry::Entry {
+    study_tab(event, source, None)
+}
+
+fn study_tab(event: &'static str, source: Source, id: Option<u64>) -> telemetry::Entry {
+    let entry = telemetry::record(event, source);
+    if !telemetry::enabled() {
+        return entry;
+    }
+    STATE.with(|state| {
+        let state = state.borrow();
+        let Some(state) = state.as_ref() else {
+            return entry;
+        };
+        let tab = match id {
+            Some(id) => state.tabs.get(id),
+            None => state.tabs.active(),
+        };
+        let Some(tab) = tab else { return entry };
+        let entry = entry.workspace(&tab.workspace).tab(tab.id).counts(
+            state.tabs.siblings(tab.id),
+            split::surfaces(&tab.root).len(),
+        );
+        match tab.focused_surface() {
+            Some(view) => entry.pane(view.notification_id()),
+            None => entry,
+        }
+    })
 }
 
 fn with_state(f: impl FnOnce(&State)) {

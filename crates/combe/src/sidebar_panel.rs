@@ -17,6 +17,7 @@ use objc2_app_kit::{
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString, NSTimer};
 
 use crate::chrome_view::{self, ClickView};
+use crate::telemetry::Source;
 use crate::{ghostty, habits, sidebar};
 
 const ROW_HEIGHT: f64 = 36.0;
@@ -43,7 +44,7 @@ static SIDEBAR_INCOMING: Mutex<Option<Vec<sidebar::Repo>>> = Mutex::new(None);
 struct State {
     window: Retained<NSWindow>,
     actions: Retained<Actions>,
-    activate: fn(&str, &str),
+    activate: fn(&str, &str, Source),
     prepare: fn(),
     layout: fn(bool),
     restore_focus: fn(),
@@ -114,7 +115,7 @@ define_class!(
         fn fold_sidebar(&self, _sender: Option<&AnyObject>) { set_sidebar_mode(Mode::Closed); }
 
         #[unsafe(method(toggleSidebar:))]
-        fn toggle_sidebar(&self, _sender: Option<&AnyObject>) { toggle(); }
+        fn toggle_sidebar(&self, _sender: Option<&AnyObject>) { toggle(Source::Button); }
 
         #[unsafe(method(addRepo:))]
         fn add_repo(&self, _sender: Option<&AnyObject>) { add_repo(); }
@@ -125,7 +126,7 @@ pub(crate) fn mount(
     mtm: MainThreadMarker,
     window: &NSWindow,
     parent: &NSView,
-    activate: fn(&str, &str),
+    activate: fn(&str, &str, Source),
     prepare: fn(),
     layout: fn(bool),
     restore_focus: fn(),
@@ -249,9 +250,9 @@ pub(crate) fn set_sessions(current: Option<String>, opened: HashSet<String>) {
     });
 }
 
-pub(crate) fn select(path: &str, label: &str) {
+pub(crate) fn select(path: &str, label: &str, source: Source) {
     prepare_action();
-    activate(path, label);
+    activate(path, label, source);
     with_state(|state| {
         if state.sidebar_keyboard.get()
             && let Some(document) = state.sidebar.documentView()
@@ -269,10 +270,10 @@ fn with_state<T>(read: impl FnOnce(&State) -> T) -> Option<T> {
     STATE.with(|state| state.borrow().as_ref().map(read))
 }
 
-fn activate(path: &str, label: &str) {
+fn activate(path: &str, label: &str, source: Source) {
     let activate = with_state(|state| state.activate);
     if let Some(activate) = activate {
-        activate(path, label);
+        activate(path, label, source);
     }
 }
 
@@ -512,8 +513,16 @@ fn add_repo() {
     refresh();
 }
 
-pub(crate) fn toggle() {
-    set_sidebar_mode(if pinned() { Mode::Closed } else { Mode::Pinned });
+pub(crate) fn toggle(source: Source) {
+    let shown = !pinned();
+    set_sidebar_mode(if shown { Mode::Pinned } else { Mode::Closed });
+    crate::window::study("sidebar.toggle", source)
+        .detail(if shown { "shown" } else { "hidden" })
+        .emit();
+}
+
+pub(crate) fn close() {
+    set_sidebar_mode(Mode::Closed);
 }
 
 fn set_sidebar_mode(mode: Mode) {
@@ -723,7 +732,7 @@ pub(crate) fn handle_event(event: &NSEvent) -> bool {
                 .map(|row| (row.path.to_string_lossy().into_owned(), row.label.clone()))
         });
         if let Some((path, label)) = target {
-            activate(&path, &label);
+            activate(&path, &label, Source::Key);
             focus_sidebar_row(index - 1);
         }
         return true;
@@ -940,7 +949,7 @@ pub(crate) fn rebuild() {
                 let target = path.clone();
                 let label = row.label.clone();
                 let view = ClickView::new(mtm, frame, &row.label, 48.0, 34.0, move || {
-                    select(&target, &label);
+                    select(&target, &label, Source::Sidebar);
                 });
                 view.set_font(&NSFont::systemFontOfSize(13.0));
                 view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);

@@ -41,6 +41,7 @@ The built-in Home workspace is one `home` row without a repo heading or disclosu
 - In-app editor, browser, diffs, PR/issue chrome
 - An SSH client, WSL, remote hosts, a PTY daemon that survives app updates
 - A settings GUI, a theme market, cloud sync, user configuration files
+- A telemetry backend, network reporting, or a usage dashboard
 - A third quota provider, quota settings, or usage fetched from the network
 - Creating or deleting worktrees (that stays with `git` / `gmc`)
 - A hand-written VT parser, glyph atlas, or renderer
@@ -234,6 +235,8 @@ The application menu's first item is **About Combe**. It opens the system About 
 
 `list`, `add`, `remove`, and `cleanup` operate on `state.json` without AppKit. `cleanup` removes registered paths whose directories no longer exist.
 
+`telemetry on`, `telemetry off`, and `telemetry status` own the study log switch described under [Telemetry](#telemetry). `combe help` does not list them, because the study log is an owner instrument rather than a product feature; `combe telemetry --help` is its own help and states what is recorded and what never is.
+
 GUI and CLI stop state edits on read failure. Saves replace the file atomically, preserving old contents on write failure.
 
 ### Hop
@@ -280,6 +283,39 @@ Startup loads the catalog synchronously. Later refreshes run Git in the backgrou
 
 `crates/combe-catalog` has no AppKit dependency. `cargo test -p combe-catalog` is the fast loop.
 
+## Telemetry
+
+A local study log so the owner can read his own real usage. Off by default, switched only from the CLI, invisible in the GUI, and never sent anywhere. Recorded data is never expired, cleaned, or deleted for the user; `off` only stops writing.
+
+`~/Library/Application Support/combe/telemetry/` holds `switch.json` (the persisted boolean and when it changed) and `events.jsonl` (one JSON object per line, appended unbuffered). Both are separate from `state.json`: a catalog read never sees them and a study log write never risks the catalog. `COMBE_TELEMETRY_DIR` relocates both for tests and for an isolated second instance.
+
+The switch reaches a running app without a restart, but not instantly: `applicationDidBecomeActive:` re-reads `switch.json`, so flipping it in the CLI takes effect the next time Combe is the active app. That is the whole mechanism — there is no notification channel and no live handshake. Records already queued when recording stops are still written, so `off` is not a live acknowledgement and neither is anything the CLI prints. `combe telemetry status` reports the persisted switch, never a live acknowledgement, and distinguishes off from an unreadable switch. An unreadable switch is off; `on` and `off` exit nonzero when the write fails.
+
+Each line carries `v`, `app`, `session`, `seq`, `unix_ms`, `mono_ms`, `event`, and `source`, plus whichever of `workspace`, `tab`, `pane`, `tabs`, `panes`, `detail`, `outcome`, `idle_ms`, and `dropped` the event proves. Absent fields are omitted, not nulled. `session` is a fresh UUID per app run and `v` is the schema version, so runs and versions can be compared.
+
+Identities are numbers, never text. `workspace` is a hash of the worktree path, so the same worktree carries the same number in every run and a year of logs can answer which repos are actually lived in. `tab` and `pane` are per-session: a tab id from the running window, a pane number assigned in order of first use from a map that lives only in memory. No path, branch, title, or terminal byte is ever serialized.
+
+| Event | Notes |
+| --- | --- |
+| `app.start`, `app.quit` | `app.quit` is written once per termination request, carrying `ok` or `cancel` from the quit confirmation, then flushes |
+| `app.activate`, `app.deactivate` | foreground and background transitions |
+| `telemetry.on`, `telemetry.off` | `off` is written before recording stops |
+| `workspace.enter` | emitted after the tab exists, so it carries the resulting workspace and tab |
+| `tab.new`, `tab.activate`, `tab.close` | `tab.close` carries `ok` or `cancel`, including the last tab, whose close ends the window |
+| `pane.split`, `pane.close`, `pane.zoom`, `pane.to_tab`, `pane.focus` | `detail` names the direction or zoom state; `pane.focus` is `noop` when no neighbor exists |
+| `pane.exit` | the process ended on its own; `source` is `process`, never a user source |
+| `sidebar.toggle`, `overview.open`, `overview.close` | `detail` on the toggle is `shown` or `hidden` |
+| `search.open`, `search.close`, `search.navigate` | the needle is never recorded; `source` on open and close is `terminal`, the surface that reports them, not the key or button that asked |
+| `idle.resume` | with `idle_ms`, the length of the gap that just ended |
+
+`source` is recorded only where it is provable, never guessed: `key`, `menu`, `button`, `tab_bar`, `sidebar`, `overview`, `notification`, `terminal`, `url`, `app`, `startup`, `system`, `process`, `auto`. A menu item separates `key` from `menu` by whether `currentEvent` is a key down. `process` and `auto` mark what the app did on its own, so an automatic exit never reads as a user action. Creation events carry the counts after the change and close events the counts before it; `tabs` counts the tabs of the record's own workspace and `panes` the panes of its tab, so a record always describes the tab it names.
+
+Idle means interaction idle and nothing more. The window's existing `sendEvent:` stamps a monotonic instant, and when the next interaction arrives more than 120 s after the previous one, that gap is written as a single `idle.resume` carrying `idle_ms`. There is no timer and no `idle.enter`: a closed span is one record, and its start is the timestamp of the record before it. The wake-up is stamped before the interaction that ended the span, so `idle.resume` always carries a lower `seq` and an earlier timestamp than the event that woke it. A span still open when the app quits is bounded by `app.deactivate` or `app.quit` instead. No key, no keystroke count, and no per-event line is written. A reader staring at a finished build is idle by this definition, and so is a sleeping machine.
+
+Friction is not its own event; three combinations already in the log stand for something not working, and are read as derived signals rather than recorded ones: a `tab.close` followed shortly by a `tab.new` on the same workspace, an `overview.open`/`overview.close` pair with no `tab.activate` between them, and a `search.open`/`search.close` pair with no `search.navigate` between them. `outcome` carries the direct cases: `cancel` where a confirmation was refused, `noop` where `pane.focus` found no neighbour.
+
+Recording must not reach the terminal. The main thread only fills a `Copy` record and does a bounded `try_send` on a 512-slot channel; a background thread does all serialization and file I/O. A full queue drops the event and increments a counter that rides out as `dropped` on the next written line, and drops and write failures also go to `~/Library/Logs/Combe/combe.log`, so a dropped or failed write is never counted as success.
+
 ## Layout
 
 ```text
@@ -287,7 +323,7 @@ crates/ghostty-sys     zig build + bindgen over vendor/ghostty
 crates/combe-catalog   state.json, git porcelain, folder fallback, Home workspace
 crates/combe
   main.rs              CLI or GUI, GHOSTTY_RESOURCES_DIR, NSApplication
-  cli.rs               list, add, remove, cleanup, hop
+  cli.rs               list, add, remove, cleanup, telemetry, hop
   entry.rs             external file, URL, and service requests, hop resolution
   ghostty.rs           ghostty_init, app lifecycle, runtime callbacks
   notification.rs      terminal attention, bounded delivery, and native notification callbacks
@@ -307,6 +343,7 @@ crates/combe
   sidebar_panel.rs     catalog refresh, sidebar controls, interaction state, and geometry
   quota.rs             Claude and Codex subscription windows
   quota_panel.rs       quota cache, refresh scheduling, chip, and expanding details
+  telemetry.rs         study log switch, event records, and the writer thread
   habits.rs            every preference, compiled in
 ```
 
@@ -351,4 +388,5 @@ Inspect both appearances and the component selector, including Typography. User-
 - Git porcelain over libgit2.
 - Preferences as Rust constants over a config file.
 - `initial_input` plus a confirmation alert over `config.command`: libghostty always runs `command` through `/bin/sh -c`, and an external URL must never reach a shell without the user seeing the line.
+- Persisting the telemetry switch is a deliberate exception to preferences-as-constants. It is one boolean the owner flips from the CLI to study his own usage, so it cannot be compiled in, and a study log that forgot itself on every restart would be useless. The exception is exactly that boolean in its own file: it never grows a second field, a config format, a GUI entry, or a menu item, and everything about how the log behaves stays in `habits.rs`. The GUI is unchanged, so `docs/design.html` has nothing to show.
 - Quota is a compiled instrument, not a surface. Local snapshots of tools the owner already runs may show remaining percent. Claude and Codex are the closed provider list. It may not grow another panel, another provider, a setting, or a network.

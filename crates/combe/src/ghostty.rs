@@ -230,7 +230,7 @@ unsafe extern "C" fn action(
                 index if index > 0 => TabTarget::Index(index as usize),
                 _ => return false,
             };
-            crate::window::goto_tab(tab)
+            crate::window::goto_tab(tab, crate::telemetry::Source::Key)
         }
         sys::GHOSTTY_ACTION_GOTO_SPLIT => {
             let Some(view) = surface_view(target) else {
@@ -245,7 +245,7 @@ unsafe extern "C" fn action(
                 sys::GHOSTTY_GOTO_SPLIT_RIGHT => SplitTarget::Right,
                 _ => return false,
             };
-            crate::window::goto_split(&view, split)
+            crate::window::goto_split(&view, split, crate::telemetry::Source::Key)
         }
         sys::GHOSTTY_ACTION_START_SEARCH => {
             let Some(view) = surface_view(target) else {
@@ -260,6 +260,7 @@ unsafe extern "C" fn action(
                     .into_owned()
             };
             view.start_search(&needle);
+            crate::window::study("search.open", crate::telemetry::Source::Terminal).emit();
             true
         }
         sys::GHOSTTY_ACTION_END_SEARCH => {
@@ -267,6 +268,7 @@ unsafe extern "C" fn action(
                 return false;
             };
             view.end_search();
+            crate::window::study("search.close", crate::telemetry::Source::Terminal).emit();
             true
         }
         sys::GHOSTTY_ACTION_SEARCH_TOTAL => {

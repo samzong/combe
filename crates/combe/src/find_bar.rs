@@ -14,6 +14,7 @@ use objc2_foundation::{MainThreadMarker, NSNotification, NSObjectProtocol, NSSiz
 use crate::chrome_view::ActionButton;
 use crate::habits;
 use crate::surface::SurfaceView;
+use crate::telemetry::Source;
 
 pub(crate) const WIDTH: f64 = 340.0;
 pub(crate) const HEIGHT: f64 = 38.0;
@@ -61,10 +62,10 @@ define_class!(
                             .modifierFlags()
                             .contains(NSEventModifierFlags::Shift)
                     });
-                self.navigate(!shift);
+                self.navigate(!shift, Source::Key);
                 true
             } else if selector == sel!(insertLineBreak:) {
-                self.navigate(false);
+                self.navigate(false, Source::Key);
                 true
             } else if selector == sel!(cancelOperation:) {
                 self.act("end_search");
@@ -148,8 +149,12 @@ impl FindBar {
         let weak = Weak::from_retained(&this);
         let mut x = INSET + field_width + COUNT_WIDTH;
         let actions: [(&str, &str, Action); 3] = [
-            ("chevron.left", "Previous match", |bar| bar.navigate(false)),
-            ("chevron.right", "Next match", |bar| bar.navigate(true)),
+            ("chevron.left", "Previous match", |bar| {
+                bar.navigate(false, Source::Button);
+            }),
+            ("chevron.right", "Next match", |bar| {
+                bar.navigate(true, Source::Button);
+            }),
             ("xmark", "Close find bar", |bar| bar.act("end_search")),
         ];
         for (symbol, label, action) in actions {
@@ -214,7 +219,7 @@ impl FindBar {
         self.act(&format!("search:{}", self.needle()));
     }
 
-    fn navigate(&self, forward: bool) {
+    fn navigate(&self, forward: bool, source: Source) {
         if self.needle().is_empty() {
             return;
         }
@@ -223,6 +228,9 @@ impl FindBar {
         } else {
             "navigate_search:previous"
         });
+        crate::window::study("search.navigate", source)
+            .detail(if forward { "next" } else { "previous" })
+            .emit();
     }
 
     fn act(&self, action: &str) {

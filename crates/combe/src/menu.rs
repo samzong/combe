@@ -5,12 +5,13 @@ use objc2::runtime::{AnyObject, NSObject};
 use objc2::{MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication,
-    NSEventModifierFlags, NSMenu, NSMenuItem, NSMenuWillSendActionNotification,
+    NSEventModifierFlags, NSEventType, NSMenu, NSMenuItem, NSMenuWillSendActionNotification,
 };
 use objc2_foundation::{
     MainThreadMarker, NSInteger, NSNotification, NSNotificationCenter, NSString,
 };
 
+use crate::telemetry::Source;
 use crate::{sidebar_panel, split, window};
 
 define_class!(
@@ -33,45 +34,45 @@ define_class!(
 
         #[unsafe(method(newTab:))]
         fn new_tab(&self, _sender: Option<&AnyObject>) {
-            window::new_current_tab();
+            window::new_current_tab(source());
         }
 
         #[unsafe(method(toggleTabOverview:))]
-        fn toggle_tab_overview(&self, _sender: Option<&AnyObject>) { window::toggle_overview(); }
+        fn toggle_tab_overview(&self, _sender: Option<&AnyObject>) { window::toggle_overview(source()); }
 
         #[unsafe(method(closeFocused:))]
         fn close_focused(&self, _sender: Option<&AnyObject>) {
-            window::close_focused();
+            window::close_focused(source());
         }
 
         #[unsafe(method(splitRight:))]
         fn split_right(&self, _sender: Option<&AnyObject>) {
-            window::divide(true);
+            window::divide(true, source());
         }
 
         #[unsafe(method(splitDown:))]
         fn split_down(&self, _sender: Option<&AnyObject>) {
-            window::divide(false);
+            window::divide(false, source());
         }
 
         #[unsafe(method(toggleSplitZoom:))]
         fn toggle_split_zoom(&self, _sender: Option<&AnyObject>) {
-            window::toggle_split_zoom();
+            window::toggle_split_zoom(source());
         }
 
         #[unsafe(method(movePaneToNewTab:))]
         fn move_pane_to_new_tab(&self, _sender: Option<&AnyObject>) {
-            window::move_pane_to_new_tab();
+            window::move_pane_to_new_tab(source());
         }
 
         #[unsafe(method(previousTab:))]
         fn previous_tab(&self, _sender: Option<&AnyObject>) {
-            window::goto_tab(window::TabTarget::Previous);
+            window::goto_tab(window::TabTarget::Previous, source());
         }
 
         #[unsafe(method(nextTab:))]
         fn next_tab(&self, _sender: Option<&AnyObject>) {
-            window::goto_tab(window::TabTarget::Next);
+            window::goto_tab(window::TabTarget::Next, source());
         }
 
         #[unsafe(method(find:))]
@@ -82,36 +83,42 @@ define_class!(
         #[unsafe(method(findNext:))]
         fn find_next(&self, _sender: Option<&AnyObject>) {
             window::surface_action("navigate_search:next");
+            window::study("search.navigate", source())
+                .detail("next")
+                .emit();
         }
 
         #[unsafe(method(findPrevious:))]
         fn find_previous(&self, _sender: Option<&AnyObject>) {
             window::surface_action("navigate_search:previous");
+            window::study("search.navigate", source())
+                .detail("previous")
+                .emit();
         }
 
         #[unsafe(method(focusSplitLeft:))]
         fn focus_split_left(&self, _sender: Option<&AnyObject>) {
-            window::focus_split(split::Target::Left);
+            window::focus_split(split::Target::Left, source());
         }
 
         #[unsafe(method(focusSplitRight:))]
         fn focus_split_right(&self, _sender: Option<&AnyObject>) {
-            window::focus_split(split::Target::Right);
+            window::focus_split(split::Target::Right, source());
         }
 
         #[unsafe(method(focusSplitUp:))]
         fn focus_split_up(&self, _sender: Option<&AnyObject>) {
-            window::focus_split(split::Target::Up);
+            window::focus_split(split::Target::Up, source());
         }
 
         #[unsafe(method(focusSplitDown:))]
         fn focus_split_down(&self, _sender: Option<&AnyObject>) {
-            window::focus_split(split::Target::Down);
+            window::focus_split(split::Target::Down, source());
         }
 
         #[unsafe(method(toggleSidebar:))]
         fn toggle_sidebar(&self, _sender: Option<&AnyObject>) {
-            sidebar_panel::toggle();
+            sidebar_panel::toggle(source());
         }
 
         #[unsafe(method(copyText:))]
@@ -147,6 +154,16 @@ define_class!(
         }
     }
 );
+
+pub(crate) fn source() -> Source {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return Source::Menu;
+    };
+    match NSApplication::sharedApplication(mtm).currentEvent() {
+        Some(event) if event.r#type() == NSEventType::KeyDown => Source::Key,
+        _ => Source::Menu,
+    }
+}
 
 thread_local! {
     static COMMANDS: RefCell<Option<Retained<Commands>>> = const { RefCell::new(None) };

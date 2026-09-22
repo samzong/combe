@@ -25,5 +25,6 @@ Use these words in code, commits, and docs. If a new domain word sticks, add it 
 | Habits | Compiled-in preferences in `crates/combe/src/habits.rs`. There is no config file. |
 | Occlusion | A hidden tab's surfaces are told to stop drawing via `ghostty_surface_set_occlusion`. |
 | State file | `~/Library/Application Support/combe/state.json` |
+| Telemetry | Opt-in local study log, off unless `combe telemetry on` wrote the switch. Anonymous per-session workspace, tab, and pane ids plus counts, entry source, and outcome. Never terminal text, commands, search terms, paths, or titles. Never leaves the machine, never deleted for the user, never shown in the GUI. |
 
 Out of vocabulary: agent session, workbench, desk, execution host, orcad, theme, setting, preference pane.

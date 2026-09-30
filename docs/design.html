@@ -547,7 +547,7 @@
       renderTabs();
     }
 
-    function renderTabs() {
+    function renderTabs(preserveTerminal = false) {
       const { repo, row } = rowOf(selected);
       const session = sessions.get(selected);
       const activeItem = session.items.find(item => item.id === session.active);
@@ -573,8 +573,10 @@
         close.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg>';
         close.title = "Close tab";
         close.setAttribute("aria-label", `Close ${item.label}`);
+        close.addEventListener("mousedown", event => event.preventDefault());
         close.addEventListener("click", event => {
           event.stopPropagation();
+          const wasActive = item.id === session.active;
           const index = session.items.indexOf(item);
           session.items.splice(index, 1);
           if (!session.items.length) {
@@ -595,8 +597,8 @@
             }
             return;
           }
-          if (item.id === session.active) session.active = session.items[Math.min(index, session.items.length - 1)].id;
-          renderTabs();
+          if (wasActive) session.active = session.items[Math.min(index, session.items.length - 1)].id;
+          renderTabs(!wasActive);
         });
         tab.append(shortcut, label, close);
         tab.addEventListener("click", () => { session.active = item.id; renderTabs(); });
@@ -617,6 +619,7 @@
         renderTabs();
       });
       tabs.append(plus);
+      if (preserveTerminal) return;
       const content = `Last login: Tue Sep 8 00:12:27 on ttys002\n\n<span data-prompt>${row.path}  ${row.label}</span>\n❯ <span class="caret"></span>`;
       left.innerHTML = content;
       right.innerHTML = content.replace("ttys002", "ttys013");

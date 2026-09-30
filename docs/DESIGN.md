@@ -201,6 +201,8 @@ Command-modified keys belong to the app and never reach the PTY; Control sequenc
 
 libghostty owns search. `GHOSTTY_ACTION_START_SEARCH` adds the surface's top-right find bar; edits send `search:<needle>` through `ghostty_surface_binding_action`. `SEARCH_TOTAL` / `SEARCH_SELECTED` feed the counter; `END_SEARCH` removes the bar and restores surface focus.
 
+Closing a background tab or an unfocused pane preserves input focus in surviving terminal panes, including their find fields, even when closing a pane restores a zoomed layout. Transfer focus to a surviving terminal when the focused terminal or its find field is removed. The prototype preserves the active terminal and find field when another tab is closed.
+
 ### Shortcuts
 
 | Key | Action |
@@ -305,7 +307,7 @@ Identities are numbers, never text. `workspace` is a hash of the worktree path, 
 | `pane.split`, `pane.close`, `pane.zoom`, `pane.to_tab`, `pane.focus` | `detail` names the direction or zoom state; `pane.focus` is `noop` when no neighbor exists |
 | `pane.exit` | the process ended on its own; `source` is `process`, never a user source |
 | `sidebar.toggle`, `overview.open`, `overview.close` | `detail` on the toggle is `shown` or `hidden` |
-| `search.open`, `search.close`, `search.navigate` | the needle is never recorded; `source` on open and close is `terminal`, the surface that reports them, not the key or button that asked |
+| `search.open`, `search.close`, `search.navigate` | the needle is never recorded; `source` on open and close is `terminal`, the surface that reports them, not the key or button that asked; `search.open` is written when a find bar is created and `search.close` when one is removed, so Cmd-F on an open bar and `END_SEARCH` with no bar open, such as Escape in a terminal, write nothing |
 | `idle.resume` | with `idle_ms`, the length of the gap that just ended |
 
 `source` is recorded only where it is provable, never guessed: `key`, `menu`, `button`, `tab_bar`, `sidebar`, `overview`, `notification`, `terminal`, `url`, `app`, `startup`, `system`, `process`, `auto`. A menu item separates `key` from `menu` by whether `currentEvent` is a key down. `process` and `auto` mark what the app did on its own, so an automatic exit never reads as a user action. Creation events carry the counts after the change and close events the counts before it; `tabs` counts the tabs of the record's own workspace and `panes` the panes of its tab, so a record always describes the tab it names.
@@ -315,6 +317,8 @@ Idle means interaction idle and nothing more. The window's existing `sendEvent:`
 Friction is not its own event; three combinations already in the log stand for something not working, and are read as derived signals rather than recorded ones: a `tab.close` followed shortly by a `tab.new` on the same workspace, an `overview.open`/`overview.close` pair with no `tab.activate` between them, and a `search.open`/`search.close` pair with no `search.navigate` between them. `outcome` carries the direct cases: `cancel` where a confirmation was refused, `noop` where `pane.focus` found no neighbour.
 
 Recording must not reach the terminal. The main thread only fills a `Copy` record and does a bounded `try_send` on a 512-slot channel; a background thread does all serialization and file I/O. A full queue drops the event and increments a counter that rides out as `dropped` on the next written line, and drops and write failures also go to `~/Library/Logs/Combe/combe.log`, so a dropped or failed write is never counted as success.
+
+`ghostty_surface_binding_action` returns `false` both when an action has nothing to act on, such as a copy with no selection, and when libghostty fails to parse or perform it, so that result is not evidence of an error and is not written to `combe.log`; libghostty logs its own parse and perform failures to the unified log.
 
 ## Layout
 

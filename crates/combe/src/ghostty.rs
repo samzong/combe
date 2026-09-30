@@ -259,16 +259,18 @@ unsafe extern "C" fn action(
                     .to_string_lossy()
                     .into_owned()
             };
-            view.start_search(&needle);
-            crate::window::study("search.open", crate::telemetry::Source::Terminal).emit();
+            if view.start_search(&needle) {
+                crate::window::study("search.open", crate::telemetry::Source::Terminal).emit();
+            }
             true
         }
         sys::GHOSTTY_ACTION_END_SEARCH => {
             let Some(view) = surface_view(target) else {
                 return false;
             };
-            view.end_search();
-            crate::window::study("search.close", crate::telemetry::Source::Terminal).emit();
+            if view.end_search() {
+                crate::window::study("search.close", crate::telemetry::Source::Terminal).emit();
+            }
             true
         }
         sys::GHOSTTY_ACTION_SEARCH_TOTAL => {

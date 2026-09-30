@@ -18,7 +18,6 @@ use objc2_foundation::{
 
 use crate::find_bar::FindBar;
 use crate::ghostty;
-use crate::log::note;
 
 const NX_DEVICE_RSHIFT: usize = 0x00000004;
 const NX_DEVICE_RCTRL: usize = 0x00002000;
@@ -402,29 +401,31 @@ impl SurfaceView {
             .is_some_and(|surface| unsafe { sys::ghostty_surface_needs_confirm_quit(surface) })
     }
 
-    pub(crate) fn start_search(&self, needle: &str) {
+    pub(crate) fn start_search(&self, needle: &str) -> bool {
         let bar = self.ivars().find.borrow().clone();
-        let bar = match bar {
-            Some(bar) => bar,
+        let (bar, created) = match bar {
+            Some(bar) => (bar, false),
             None => {
                 let mtm = MainThreadMarker::from(self);
                 let bar = FindBar::new(mtm, self.bounds().size);
                 self.addSubview(&bar);
                 *self.ivars().find.borrow_mut() = Some(bar.clone());
-                bar
+                (bar, true)
             }
         };
         bar.focus(needle);
+        created
     }
 
-    pub(crate) fn end_search(&self) {
+    pub(crate) fn end_search(&self) -> bool {
         let Some(bar) = self.ivars().find.borrow_mut().take() else {
-            return;
+            return false;
         };
         bar.removeFromSuperview();
         if let Some(window) = self.window() {
             window.makeFirstResponder(Some(self));
         }
+        true
     }
 
     pub(crate) fn set_search_total(&self, total: Option<usize>) {
@@ -441,12 +442,9 @@ impl SurfaceView {
 
     pub(crate) fn binding_action(&self, action: &str) {
         let Some(surface) = self.handle() else { return };
-        let ok = unsafe {
+        unsafe {
             sys::ghostty_surface_binding_action(surface, action.as_ptr().cast(), action.len())
         };
-        if !ok {
-            note!("binding action failed: {action}");
-        }
     }
 
     fn handle(&self) -> Option<sys::ghostty_surface_t> {

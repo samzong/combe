@@ -489,6 +489,13 @@ pub(crate) fn close_all_windows() {
 }
 
 fn close_tab(id: u64) {
+    let refocus = STATE.with(|state| {
+        state
+            .borrow()
+            .as_ref()
+            .and_then(|state| state.tabs.get(id))
+            .is_some_and(|tab| contains_focus(&tab.root))
+    });
     with_mut_state(|state| {
         let Some(tab) = state.tabs.remove(id) else {
             return;
@@ -499,7 +506,9 @@ fn close_tab(id: u64) {
         tab.root.removeFromSuperview();
     });
     sync_tabs();
-    focus_active();
+    if refocus {
+        focus_active();
+    }
 }
 
 pub(crate) fn toggle_split_zoom(source: Source) {
@@ -696,6 +705,13 @@ fn direction(target: &split::Target) -> &'static str {
 
 fn responder_surface(state: &State) -> Option<Retained<SurfaceView>> {
     state.window.firstResponder()?.downcast().ok()
+}
+
+fn contains_focus(view: &NSView) -> bool {
+    view.window()
+        .and_then(|window| window.firstResponder())
+        .and_then(|responder| responder.downcast::<NSView>().ok())
+        .is_some_and(|responder| responder.isDescendantOf(view))
 }
 
 fn focused_surface() -> Option<Retained<SurfaceView>> {
@@ -1331,6 +1347,7 @@ unsafe extern "C" fn drain_pending(_: *mut c_void) {
 }
 
 fn close_leaf(view: &SurfaceView) {
+    let refocus = contains_focus(view);
     dismiss_overview(false);
     restore_zoom(view);
     let owner = STATE.with(|state| {
@@ -1348,7 +1365,9 @@ fn close_leaf(view: &SurfaceView) {
     }
     let exited = study_tab("pane.exit", Source::Process, Some(id)).pane(view.notification_id());
     split::close(view);
-    focus_active();
+    if refocus {
+        focus_active();
+    }
     exited.emit();
 }
 

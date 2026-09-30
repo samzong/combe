@@ -55,7 +55,6 @@ impl Zoom {
     pub(crate) fn restore(self) {
         self.corners.removeFromSuperview();
         if let Some(parent) = unsafe { self.placeholder.superview() } {
-            self.surface.removeFromSuperview();
             self.surface.setFrame(self.placeholder.frame());
             parent.replaceSubview_with(&self.placeholder, &self.surface);
         }

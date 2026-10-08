@@ -6,7 +6,7 @@ Status: draft for design review. This document proposes an independent Rust comp
 
 Build a narrow PTY/session component, reuse `iroh` for authenticated transport, and keep Combe responsible for its existing workspace, tab, split, and terminal UI. Ship a user service, a raw-stdio bridge for each pane, a control SDK, and prebuilt relay deployment assets. Do not implement another terminal parser or renderer.
 
-Two feasibility gates precede implementation: correct terminal recovery through real Ghostty surfaces, and an automated user-owned relay deployment within a cost boundary still to be agreed. Neither gate has passed. Keeping a remote process alive is straightforward; restoring its terminal without losing state or repeating effects is the decisive difficulty.
+Two feasibility gates precede the complete adapter: correct terminal recovery through real Ghostty surfaces, and automated user-owned relay deployment within the approved USD 10/month operating boundary. The [G1 prototype](#g1-prototype-results) provides credible feasibility evidence for tested states in both recovery paths, with limits; it does not close the full G1 gate. Relay deployment and cost remain unverified. Keeping a remote process alive is straightforward; restoring its terminal without losing state or repeating effects remains the decisive difficulty.
 
 The strongest simpler session alternative is `shpool` plus a relay agent. Its default restoration loses parser continuation and inactive-screen state in a reproducible synthetic probe. Keeping its original attachment alive avoids that restoration during an ordinary network outage, so the alternative remains credible for that narrower case. A new surface, agent restart, or exhausted output window still requires a complete recovery mechanism.
 
@@ -16,8 +16,8 @@ The strongest simpler session alternative is `shpool` plus a relay agent. Its de
 - Selecting a host establishes the target for the existing worktree list, new tabs, and splits. Everyday terminal actions retain their existing meaning and shortcuts.
 - Each new pane creates its own remote PTY and shell. A split inherits the remote host and current directory.
 - Network disconnects preserve the original remote process. Reconnection attaches to that process; it must not rerun the original command as a substitute.
-- The component is reusable by other terminal applications and may live in a separate Rust open-source project.
-- Provide native service installation and prebuilt user-owned relay deployment. Cloudflare is a deployment candidate, not a mandatory platform.
+- The component is reusable by other terminal applications. Owner decision (2026-10-08): start in a separate private Rust repository with a working name; decide the public name and license later.
+- Provide native service installation and prebuilt user-owned relay deployment. Owner decision (2026-10-08): use Cloudflare Workers Paid with a USD 10/month operating boundary; evaluate Containers first and use Worker + DO if the Containers candidate exceeds that boundary.
 
 Pairing replaces manual SSH authentication with device authentication; it does not remove authentication. Initial installation must be authorized locally on each machine. Without an existing authorized entrypoint, the component cannot install itself on an inaccessible host.
 
@@ -107,7 +107,7 @@ Ghostty's command string contains only a correctly quoted trusted bridge executa
 | Remote host reboot or PTY-owner crash | Report the session lost/exited | Service restart cannot resurrect its original PID |
 | Daemon update | Delay replacing a PTY owner while sessions are alive | Transparent live upgrades are outside the first version |
 
-Normal Quit ending sessions is the proposal's interpretation of unchanged Combe semantics. Keeping processes after normal Quit would be a separate product change, not an implicit consequence of network persistence.
+Owner decision (2026-10-08): normal Quit ends the sessions owned by that app run. Network persistence does not change normal Quit into detach; offline termination remains pending until acknowledged.
 
 Allocate a create request ID before sending; retain its result so a lost reply cannot create two shells. Output carries session generation and byte offset. Input uses writer epoch and sequence; accepted input is deduplicated within a defined ledger window. Once that window expires, return `UnknownOutcome`/`Expired`, rather than executing again. Exactly-once execution across a daemon crash is not promised.
 
@@ -130,13 +130,74 @@ Investigate `libghostty-vt` as a state mirror, not a second handwritten parser. 
 
 The current binary snapshot API belongs to an independent VT object; full surfaces have no public snapshot import. Snapshot v1 also omits Kitty image/placement state and resets presentation state such as selection, viewport and search. The public formatter emits the active screen; cell hyperlinks are represented in HTML, not a complete raw-VT reconstruction. It cannot be called a full surface snapshot. See [snapshot API](https://github.com/ghostty-org/ghostty/blob/82232ecde55405559dec29c5466cb9e39938cb41/include/ghostty/vt/snapshot.h), [continuation API](https://github.com/ghostty-org/ghostty/blob/82232ecde55405559dec29c5466cb9e39938cb41/include/ghostty/vt/terminal.h), [snapshot omissions](https://github.com/ghostty-org/ghostty/blob/82232ecde55405559dec29c5466cb9e39938cb41/src/terminal/snapshot/terminal.zig#L230), and [formatter](https://github.com/ghostty-org/ghostty/blob/82232ecde55405559dec29c5466cb9e39938cb41/src/terminal/formatter.zig#L486).
 
-First test public formatter + continuation + necessary metadata against the real surface. If a demonstrated difference cannot be repaired through public APIs, propose the smallest upstream recovery interface. Do not assume a fork is necessary, invent bindings, or promise recovery because the daemon can save a snapshot.
+The [G1 prototype](#g1-prototype-results) tested public formatter + continuation + necessary metadata against real full surfaces. Basic formatter + continuation fails; the enhanced recipe fixes the observed positive-case failures through public APIs. If a future demonstrated difference cannot be repaired through public APIs, propose the smallest upstream recovery interface. Do not assume a fork is necessary, invent bindings, or promise recovery because the daemon can save a snapshot.
 
 Terminal query replies and effects need an explicit recovery policy. Simply switching between mirror and surface replies does not prevent a daemon-answered query from being answered again during replay. Bridge stdin cannot reliably distinguish user input from terminal-generated replies. Already delivered OSC 52 clipboard writes, notifications, bells and queries must not repeat. Newly produced effects during disconnection may arrive late; that is a separate issue. Questions that cannot be answered while detached must remain available for the next authorized attachment.
 
 Unlimited raw output, finite resources and complete recovery cannot all be guaranteed. Use checkpoints plus a bounded suffix, targeting Combe's existing 10,000-line history. Eviction may remove history under that contract; it must not corrupt the current terminal or end the process. An exhausted suffix without a valid checkpoint is a visible recovery failure, not success. Validate lengths, integrity and versions before applying state; CRC is not authentication.
 
 Same-surface reconnection must preserve its existing presentation state. A fresh app does not acquire new promises to persist selection or layout, but it still needs a correct terminal state for the original process. G1 must distinguish those contracts.
+
+## G1 prototype results
+
+Executed on 2026-10-08 with pinned Ghostty `82232ecde55405559dec29c5466cb9e39938cb41`, macOS Apple Silicon, Rust 1.96.0 and Zig 0.16.0. The host created real full `libghostty` surfaces in AppKit, each running a bridge child through a real PTY. G1a paused a surviving surface and then delivered its ordered suffix. G1b checkpointed a `libghostty-vt` mirror, decoded the binary snapshot into VT clones, and wrote public formatter output plus reconstruction metadata, canonical continuation and the ordered suffix through the bridge's stdout into a fresh full surface. The full surface did not import a VT snapshot; it consumed reconstruction bytes through its normal child-output path. No Ghostty fork or undeclared binding was needed for the tested states.
+
+One clean `reproduce.sh` run used the final host and complete matrix, rather than merging earlier runs: **76 cases, 1,292 cuts and 2,687 comparison records**. The original 44 cases were retained. Automated observables included public surface text/selection, terminal queries, encoded key/mouse/paste input captured at bridge stdin, hyperlink hover, runtime callbacks and selected pixel captures.
+
+| Area | G1a passes/cuts | Enhanced G1b passes/cuts | Basic formatter + continuation passes/cuts |
+| --- | ---: | ---: | ---: |
+| Original 44 cases | 919/919 | 919/919 | 56/73 |
+| Cell styles and pixels | 27/27 | 27/27 | 20/24 |
+| Larger recorded traces | 343/343 | 343/343 | 2/5 |
+| Deliberately broken reconstruction controls | 3/3 | 0/3, expected FAIL | Not run |
+| Positive totals | 1,289/1,289 | 1,289/1,289 | 78/102 |
+
+Including surviving-surface controls, **G1a passed 1,292/1,292**. Enhanced G1b passed **1,289/1,289 positive cuts**; all three broken reconstruction controls failed as required. Basic formatter + continuation remains inadequate at **78/102**, including failures when leaving alternate screens and using saved cursors. Raw prefix replay also failed because it repeated delivered effects and query replies. Those counterexamples remain part of the evidence, rather than being replaced by the enhanced result.
+
+The larger local recordings totalled 142,255 bytes: coloured `git log --color=always -n 300 --stat` (the checkout contained 62 commits), forced-colour `ls -la -G`, syntax-highlighted Vim editing a 1,449-line source copy with scrolling/splits/visual mode, `less -R` over coloured output, and htop. Each trace combined stage boundaries with at least 50 distinct random byte offsets using fixed seed `20261008`. The original zsh trace remained in the matrix. Recordings exercised actual output streams; they were not live two-host sessions.
+
+### Pixel comparison and negative controls
+
+Both full surfaces used the same size, Monaco 12, surface scale and AppKit backing scale. Public `ghostty_surface_draw` and AppKit `NSView` bitmap caching exported lossless PNGs at 1120 × 768 (860,160 pixels). Decoded RGB pixels were compared exactly, with no tolerance or masked region. Focus was disabled identically, mouse pointers were moved outside, cursor blink was disabled, and style fixtures hid the cursor. Both history viewports were scrolled identically before capture.
+
+All 54 style comparisons had **0/860,160 differing pixels**, covering 16/256/truecolour foreground/background, bold, italic, underline variants, strikethrough, inverse, faint, CJK/emoji/wide-cell wrapping, combined primary/alternate screens and history. Four Vim/less captures also had **0/860,160** differing pixels, including the larger recordings in light appearance. The single run produced 64 captures, including six captures for the three broken controls.
+
+| Negative control | Different pixels | Result |
+| --- | ---: | --- |
+| Wrong colour, same text | 992 | FAIL |
+| Old Vim scroll-region recipe | 37,842 | FAIL |
+| Old htop empty-cell recipe | 0 | FAIL: public text differs despite identical pixels |
+| Bold removed, added by independent reviewer | 3,523 | FAIL |
+| Curly underline removed, added by independent reviewer | 1,537 | FAIL |
+
+The independent review also confirmed the 992-pixel wrong-colour negative. Its additional bold/underline negatives are separate checks, not additions to the 76-case single-run totals. Pixel equality complements text, modes and input checks; it cannot prove hidden state or replace them.
+
+### Passing reconstruction recipe
+
+1. Track the mirror from the first byte with continuation enabled; checkpoint terminal size, source version and output offset with the binary snapshot and bounded history/suffix. Create the fresh surface at checkpoint size with input disabled.
+2. Decode public snapshots into clones. Ground a clone with CAN and compare formatter content; for partial UTF-8 where CAN changes content, use a second mirror committed only at ground boundaries. Preserve canonical continuation exactly; it need not equal the raw trailing source bytes.
+3. Rebuild both primary and alternate screens, bounded history, saved/current cursors and saved styles/charsets. Use DECRC on clones to expose saved state, DECSC to reconstruct it, and `unwrap=true` to retain soft wrapping. Reset character sets, origin mode and the full scroll region before each repaint.
+4. Restore public metadata: actual 47/1047/1049 mode bits, scroll region, tabs, palette, current SGR, input modes, the eight-slot kitty keyboard stack, visible/history hyperlink URIs and the open OSC 8 URI. Preserve pending single shifts through public clone behaviour probes. Use public cell tags/background colours plus ECH for background-only empty cells; do not materialize them as spaces or erase wide-cell spacers.
+5. Write ground reconstruction bytes and consume a swallowed terminal marker reply, then canonical continuation and the ordered suffix. Apply ordered resize boundaries and wait for the matching terminal-reported size before sending the suffix; public surface size alone is not a terminal-consumption acknowledgement. Do not insert query markers inside incomplete CSI/OSC/UTF-8 input.
+6. Keep input disabled during restoration, swallow **all bridge stdin** during that phase, and suppress already delivered effects. Restore normal input/reply forwarding only at the agreed suffix boundary.
+
+### Observed failures and public-API fixes
+
+| Failure | Cause | Fix exercised by the probe |
+| --- | --- | --- |
+| Alternate-screen exit; per-screen saved cursor/style | Active-only formatter loses inactive screen and saved state | Public snapshot clones, both-screen painting and DECRC/DECSC reconstruction |
+| Charsets, pending wrap, history boundaries | Repainting under old charset; hardening soft wraps; missing final blank rows | Reset charset, `unwrap=true`, public row count/row formatter and pending-wrap reconstruction |
+| Kitty keyboard pop; OSC 8 history/open URI; pending single shift | Current flags/text omit stack, cell URI or pending shift | Clone stack pops, public grid/URI metadata, unmutated active clone and behaviour probes |
+| Vim cut 9,574 | An inherited scroll region constrained the second repaint and lost a status row | Reset scroll region/origin before repaint, then restore metadata; old recipe retained as a failing control |
+| htop empty cells | Formatter replaced background-only null cells with spaces | Public cell tag/background data, ECH and public current-SGR metadata; old recipe retained as a text-failing control |
+| Resize with soft wrapping | Host inserted an intermediate size and treated UI size as consumed terminal size | Remove intermediate resize; wait for matching `CSI 18t` / `CSI 8;rows;cols t` response at a ground boundary |
+| Repeated effects and replies during raw replay | Historical output emits clipboard/notification/bell/title actions and replies again | State reconstruction instead of raw replay, callback delivery gate and restoration-phase stdin drain |
+
+Every observed positive-case failure was repaired using current public APIs and reconstruction bytes; these failures did not require a new upstream interface. This does not establish that public APIs cover every untested terminal state.
+
+The effects fixture observed continuous callbacks of one clipboard write, notification, bell and title. Enhanced checkpoint restoration emitted no clipboard/notification/bell callback; its one raw title callback was suppressed by the delivery gate. Raw replay repeated all four callbacks and produced 54 bytes of historical query replies. Restoration also produced size/focus reports, including in-band `CSI 48` and `ESC [ I`, and probe-generated consumption/size replies. The bridge must swallow all restoration-phase stdin, including these reports, because byte syntax cannot reliably distinguish replies from user input. Callback counting and a simulated delivery gate did not deliver real system effects or implement a production effect ledger; new suffix effects/replies were compared against the continuous baseline at the same boundary.
+
+Independent review verdict: **“credible with limits” for both G1a and G1b**. This is feasibility evidence for tested states, **not closure of the full G1 gate**. Unverified: real sleep/disconnect; production stdin gating and effect ledger; timing under load; images/Kitty graphics; protected cells/selective erase; explicit hyperlink IDs; mode combinations; non-ground resize; corrupt or cross-version checkpoints. Live two-host application interaction, resource-exhaustion behaviour and comprehensive presentation state also remain outside this evidence. Fresh-surface recovery does not acquire a new promise to persist selection, viewport or search.
 
 ## Ghostty build and link feasibility
 
@@ -172,7 +233,7 @@ A static Rust probe passed an explicit archive path with `-C link-arg=/path/to/l
 
 The proposed daemon already owns the VT mirror in a separate process, so Combe does not need to link VT for that ownership. Use the standalone VT build for the first parser/checkpoint probe. The passing default Rust co-link is a credible alternative if a later adapter needs VT inside Combe; the duplicate runtime symbols are a link-configuration constraint, not proof that process separation is mandatory. Verify the actual Rust adapter, packaging and the real surface before accepting that alternative. See [full-library runtime bundling](https://github.com/ghostty-org/ghostty/blob/82232ecde55405559dec29c5466cb9e39938cb41/src/build/GhosttyLib.zig#L41) and [VT runtime bundling](https://github.com/ghostty-org/ghostty/blob/82232ecde55405559dec29c5466cb9e39938cb41/src/build/GhosttyLibVt.zig#L239).
 
-`make check` passed against the unchanged Combe implementation with temporary build caches and a target directory: dependency audit, format, clippy with `-D warnings`, and all 52 workspace tests. The selected Command Line Tools required adding the installed Metal toolchain's `usr/bin` directory to `PATH` for full builds. Real surfaces, PTY/bridge behavior, resize, query/effect handling and G1 remain unverified.
+`make check` passed against the unchanged Combe implementation with temporary build caches and a target directory: dependency audit, format, clippy with `-D warnings`, and all 52 workspace tests. The selected Command Line Tools required adding the installed Metal toolchain's `usr/bin` directory to `PATH` for full builds. That build/link check did not exercise real surfaces. The subsequent [G1 prototype](#g1-prototype-results) exercised full surfaces, PTY/bridge reconstruction, specified resize boundaries and query/effect observations; production integration and the full G1 gate remain unverified.
 
 ## Transport and deployment
 
@@ -192,7 +253,7 @@ This is not a Worker-only deployment. Containers require Workers Paid, with a $5
 
 ### Strongest transport alternative: Worker + DO WSS relay
 
-A prebuilt Worker/DO relay avoids the Container/Paid prerequisite, but the project owns more routing, authentication composition and backpressure code. Use endpoint-terminated `rustls` TLS 1.3 inside WSS, mutual device authentication and public-key pinning; disable 0-RTT execution. Custom certificate verification must still validate handshake signatures. Outer TLS to Cloudflare alone is not end-to-end device trust. [Rustls](https://github.com/rustls/rustls) supplies the TLS implementation.
+A prebuilt Worker/DO relay avoids the Container prerequisite, but the project owns more routing, authentication composition and backpressure code. Owner decision (2026-10-08): the initial deployment still uses Workers Paid and the same USD 10/month operating boundary. Use endpoint-terminated `rustls` TLS 1.3 inside WSS, mutual device authentication and public-key pinning; disable 0-RTT execution. Custom certificate verification must still validate handshake signatures. Outer TLS to Cloudflare alone is not end-to-end device trust. [Rustls](https://github.com/rustls/rustls) supplies the TLS implementation.
 
 Native CLI Authorization Code + PKCE can upload prebuilt Worker assets through Cloudflare APIs. Third-party OAuth supports public native clients without an embedded client secret; third-party device flow is not equivalent to Wrangler's login flow. The publisher must register a public OAuth client and verify its domain. Loopback redirect behavior, exact scopes and the full account/upload flow remain untested. See [OAuth client configuration](https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/) and [Worker upload](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/methods/update/).
 
@@ -200,7 +261,7 @@ Prefer declarative DO class exports for a new deployment; do not mix them with m
 
 Incoming WebSockets can use DO hibernation, but deployments and platform events can close them. Reconstruct ephemeral routing after wake; socket attachments are not durable device trust. Bound queues and frame sizes, separate control/data budgets, and schedule panes fairly. A free plan has finite limits; it is not a promise of free unlimited terminal use. See [WebSocket guidance](https://developers.cloudflare.com/durable-objects/best-practices/websockets/) and [DO pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/).
 
-**Deciding fact:** can the official relay be deployed automatically within the required setup effort and an operating cost acceptable to users? The cost boundary is not yet set. Prefer iroh if yes; choose the Worker-only alternative if that boundary requires it. Validate first, then ship one backend. Do not build both or quietly replace the target with manual VPS setup.
+**Deciding fact:** can the official relay be deployed automatically within the required setup effort and the owner-approved USD 10/month total operating boundary on Cloudflare Workers Paid? Owner decision (2026-10-08): Containers is the first candidate; use Worker + DO if it exceeds the boundary. Validate actual billing and automation first, then ship one backend. Do not build both or quietly replace the target with manual VPS setup.
 
 ## Proposed enable and bind flow
 
@@ -226,7 +287,7 @@ Remote registration is part of a usable first version: a candidate `combe add --
 
 The relay can observe connection metadata, timing and volume, or deny service; it must not read terminal content, alter authenticated commands or impersonate a bound device. A compromised endpoint user account is outside this protection. Revocation is pending until the target daemon applies it; revoking deployment OAuth is not device revocation and cannot undo executed commands. Do not log keys, tokens, raw terminal content or unrelated private data.
 
-Propose current-user LaunchAgent on macOS, without root. This covers logged-in use, not execution before login or after logout. Logout survival would require another service account, key-unlock and permission design. Stop/uninstall must account for live sessions, remove only component-owned resources, and preserve repositories, unrelated shell configuration and other cloud projects.
+Owner decision (2026-10-08): use a current-user LaunchAgent on macOS, without root and without logout survival. The first version covers logged-in use; it does not promise execution before login or after logout. Stop/uninstall must account for live sessions, remove only component-owned resources, and preserve repositories, unrelated shell configuration and other cloud projects.
 
 ## Combe integration evidence
 
@@ -258,9 +319,9 @@ Quota keeps its existing local Claude/Codex snapshot meaning and does not switch
 
 ## Contracts that implementation would change
 
-This draft leaves [AGENTS.md](../../AGENTS.md), [CONTEXT.md](../../CONTEXT.md), [DESIGN.md](../DESIGN.md), and [the prototype](../design.html) unchanged. Approval of a proposal is distinct from implementation and deployment authorization. Before changing behavior, reconcile the following known conflicts and definitions requiring host scope, and update the affected canonical prototype/design together:
+This draft leaves [AGENTS.md](../../AGENTS.md), [CONTEXT.md](../../CONTEXT.md), [DESIGN.md](../DESIGN.md), and [the prototype](../design.html) unchanged. Owner decision (2026-10-08): the Combe scope/contract changes required for this remote adapter are approved, to be made together with adapter implementation. Before changing behavior, reconcile the following known conflicts and definitions requiring host scope, and update the affected canonical contracts and prototype/design together. This documentation change does not implement the adapter or authorize deployment:
 
-| Contract | Current text | Proposed future change |
+| Contract | Current text | Approved change to make with adapter implementation |
 | --- | --- | --- |
 | `AGENTS.md`, Scope | “Do not add agents, an editor, a browser, an SSH client or any other remote transport, a settings GUI, a theme system, a command palette, or cloud sync.” | Permit this remote component adapter; retain the other exclusions |
 | `AGENTS.md`, Stack | “Persist only repo paths. Every other preference is a constant in `crates/combe/src/habits.rs`.” | Store typed repo locations; component owns mandatory identity/recovery state separately |
@@ -352,18 +413,18 @@ fn main() {
 | G1a: surviving surface | Every-byte UTF-8/VT cut, sleep/reconnect, OSC effects and terminal queries | Same state and input results as continuous baseline; no repeated delivered effects or replies |
 | G1b: reconstructed surface | New bridge/surface, output beyond retained suffix, zsh/vim/less, mouse, paste, kitty keyboard, size change | Correct screens/modes/bounded history; real public APIs or an explicitly implemented minimal upstream interface |
 | G2: sessions and limits | Relay restart, bridge crash, lost ACK, late writer, noisy pane, long output | Original PID/group retained; one create/input effect; bounded resources and fair progress |
-| G3: deploy/pair/security | Fresh accounts, no SSH/Node/Docker/GitHub, partial deployment, UDP blocked, hostile relay, revoke/replay/oversized frames | Automated owned deployment within a cost boundary agreed before this gate; both devices communicate; no public test relay, secrets or unauthorized execution |
+| G3: deploy/pair/security | Fresh accounts, no SSH/Node/Docker/GitHub, partial deployment, UDP blocked, hostile relay, revoke/replay/oversized frames | Automated owned deployment on Workers Paid within USD 10/month; Containers candidate, Worker + DO if exceeded; both devices communicate; no public test relay, secrets or unauthorized execution |
 | G4: Combe entrypoints | Local regression; two hosts/same paths; tabs/splits/cwd; offline/missing Git; close; Hop; quota; light/dark | Existing semantics preserved, no path collision or accidental deletion, actual windows inspected |
-| G5: services | Login/logout, update, stop/uninstall, reboot | Declared service guarantees hold; service restart is never called original-process recovery |
+| G5: services | Login/logout, normal Quit, update, stop/uninstall, reboot | Current-user LaunchAgent; no logout survival; normal Quit ends app-run-owned sessions; service restart is never called original-process recovery |
 
-Run small G1 and G3 feasibility probes first. Then build G2, integrate G4, and verify packaging/service G5. Do not scaffold a complete host UI before the two decisive gates. No implementation, installed service, two-host control, OAuth deployment or cloud bill has been validated by this proposal.
+The G1 feasibility probe is complete for the tested matrix; the full G1 acceptance gate remains open. Run the G3 deployment/cost probe next. Owner decision (2026-10-08): v1 includes both G1a and G1b, implementing G1a first; port the probe matrix into a regression suite and run it on every Ghostty upgrade. Then complete G2, G4 and packaging/service G5 with their actual entrypoints. Do not scaffold a complete host UI before resolving the decisive recovery/deployment evidence. No production adapter, installed service, two-host control, OAuth deployment or cloud bill has been validated by this proposal.
 
 ## Scope boundaries for implementation planning
 
-Propose a first support matrix of macOS Apple Silicon on both ends with zsh; this is not yet an accepted platform restriction. Linux/systemd, other shells and CPUs require an explicit matrix and acceptance workload. Logged-in user-service operation is not a promise of logout survival. Paid relay operation also remains a planning boundary; free-tier deployment must not be assumed accepted or rejected.
+Owner decisions (2026-10-08): the first support matrix is macOS Apple Silicon on both ends with zsh. Use a current-user LaunchAgent with no logout survival; normal Quit ends sessions owned by that app run. The relay operating boundary is USD 10/month on Cloudflare Workers Paid, with Containers as candidate and Worker + DO if exceeded. Linux/systemd, other shells and CPUs require a later explicit matrix and acceptance workload.
 
 Easy work is spawning a shell, moving bytes, resizing and remote Git execution. Hard work is bounded terminal recovery, exactly-once query/effect handling, close intent, trustworthy cwd/busy, device revocation and reconnect input safety. Cloudflare does not supply those PTY semantics.
 
 Leave out remote file browsing/sync/download, an editor, shared writers/collaboration, root control, remote GUI launch, predictive input, unlimited recording, process resurrection after reboot/PTY-owner crash, transparent hot upgrade, a settings GUI, multi-tenant administration, remote quota and cloud terminal-content telemetry.
 
-Before implementation planning is closed, establish the actual remote OS/CPU, whether execution must survive logout, and the allowed relay operating cost. Project name, license, publisher OAuth identity and release ownership are separate publication decisions. This draft creates none of those resources.
+Owner decisions (2026-10-08): v1 includes both G1a and G1b, with G1a implemented first and the probe matrix ported as a regression suite run on every Ghostty upgrade. Start the component in a private repository with a working name; the public name and license are decided later. Combe scope/contract changes for the remote adapter are approved and will accompany adapter implementation. Publisher OAuth identity and release ownership remain separate publication decisions. This draft creates none of those resources.

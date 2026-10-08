@@ -138,6 +138,42 @@ Unlimited raw output, finite resources and complete recovery cannot all be guara
 
 Same-surface reconnection must preserve its existing presentation state. A fresh app does not acquire new promises to persist selection or layout, but it still needs a correct terminal state for the original process. G1 must distinguish those contracts.
 
+## Ghostty build and link feasibility
+
+Build/link probes were executed on 2026-10-08 on Apple Silicon macOS 27.0.1 with Zig 0.16.0 and Rust 1.96.0. Both VT and full libraries were built from a source archive of the pinned Ghostty commit `82232ecde55405559dec29c5466cb9e39938cb41`, with source, caches and outputs outside the repository. Full builds used Combe's existing XCFramework shim and Apple's Metal compiler 32023.921, installed in the user toolchain directory and exposed through `PATH`; Command Line Tools remained selected. This establishes build/link feasibility, not G1 terminal recovery.
+
+The pin contains `include/ghostty/vt/terminal.h`, `snapshot.h` and `formatter.h`, including the public continuation API. Ghostty's install step builds both VT libraries even in Combe's current full-library build. Combe's Rust build script links only `ghostty-internal` and generates bindings only for `include/ghostty.h`. A VT consumer needs separate bindings and a link declaration, but no new upstream Zig target. See [VT install steps](https://github.com/ghostty-org/ghostty/blob/82232ecde55405559dec29c5466cb9e39938cb41/build.zig#L127) and [Combe's build script](../../crates/ghostty-sys/build.rs).
+
+The tested VT-only build command, from the Ghostty source directory, is:
+
+```sh
+scratch=$(mktemp -d)
+zig build -Demit-lib-vt=true -Demit-xcframework=false -Dapp-runtime=none \
+  -Doptimize=Debug --prefix "$scratch/vt" \
+  --cache-dir "$scratch/cache" --global-cache-dir "$scratch/global"
+clang -I include example/c-vt-snapshot/src/main.c \
+  "$scratch/vt/lib/libghostty-vt.a" -lc++ -o "$scratch/snapshot-probe"
+"$scratch/snapshot-probe"
+```
+
+`ReleaseFast` also passed. Disabling the VT XCFramework explicitly avoids its Xcode dependency. Both modes produced `libghostty-vt.a` and a versioned dylib. The official snapshot example encoded 25,245 bytes, advertised 999 primary history rows and completed incremental restoration. That is a VT-object codec test, not surface restoration.
+
+| Probe | Observed result | Evidence boundary |
+| --- | --- | --- |
+| Fresh VT-only Zig build, Debug and ReleaseFast | Passed | No full renderer or Metal compiler required |
+| Independent Rust binary, fresh static VT library, both modes | Passed; `terminal_new=0 continuation_bytes=4 bytes_match=true` | Calls the public terminal and continuation APIs; compiled with edition 2024 and `-D warnings` |
+| Rust binary linking fresh full static library and fresh static VT library, both modes | Passed; full API retained, `ghostty_info()` read successfully, continuation probe passed | Normal Rust linking uses dead stripping; no surface created |
+| Rust binary linking fresh full static library and fresh VT dylib, both modes | Passed with an explicit dylib rpath | Packaging and signing untested |
+| Same static Rust probe with `-C link-dead-code=yes`, both modes | Failed with 36 duplicate-symbol diagnostics | Both archives bundle UBSan runtime definitions; do not generalize this failure to the passing default Rust link |
+| Both C headers included in one translation unit | Failed | `GHOSTTY_SUCCESS` macro and color-scheme enum collisions; generate bindings in separate modules |
+| Fresh full-library build using Combe's Zig flags, Debug and ReleaseFast | Passed after installing Metal | Full renderer build requires the Metal compiler; VT-only build does not |
+
+A static Rust probe passed an explicit archive path with `-C link-arg=/path/to/libghostty-vt.a` and linked `c++`. `otool -L` confirmed no VT dylib dependency. With both library types in the search directory, the tested `-L native=... -l static=ghostty-vt` invocation instead selected the dylib and failed at runtime without an rpath. Select the archive explicitly or expose an archive-only link directory; inspect the resulting binary rather than relying on the requested link mode.
+
+The proposed daemon already owns the VT mirror in a separate process, so Combe does not need to link VT for that ownership. Use the standalone VT build for the first parser/checkpoint probe. The passing default Rust co-link is a credible alternative if a later adapter needs VT inside Combe; the duplicate runtime symbols are a link-configuration constraint, not proof that process separation is mandatory. Verify the actual Rust adapter, packaging and the real surface before accepting that alternative. See [full-library runtime bundling](https://github.com/ghostty-org/ghostty/blob/82232ecde55405559dec29c5466cb9e39938cb41/src/build/GhosttyLib.zig#L41) and [VT runtime bundling](https://github.com/ghostty-org/ghostty/blob/82232ecde55405559dec29c5466cb9e39938cb41/src/build/GhosttyLibVt.zig#L239).
+
+`make check` passed against the unchanged Combe implementation with temporary build caches and a target directory: dependency audit, format, clippy with `-D warnings`, and all 52 workspace tests. The selected Command Line Tools required adding the installed Metal toolchain's `usr/bin` directory to `PATH` for full builds. Real surfaces, PTY/bridge behavior, resize, query/effect handling and G1 remain unverified.
+
 ## Transport and deployment
 
 Prefer pinned `iroh 1.3.0`, its Minimal preset, persisted identity, a custom relay and explicit `EndpointAddr`. Do not default to N0 public test relays or discovery. Address tickets locate devices; they do not authorize execution. Reuse device-authenticated transport rather than designing another cryptographic protocol. A new connection does not restore old streams: session sequencing and resume remain component responsibilities. See [release](https://github.com/n0-computer/iroh/releases/tag/v1.3.0), [presets](https://github.com/n0-computer/iroh/blob/v1.3.0/iroh/src/endpoint/presets.rs), and [self-hosted relay](https://docs.iroh.computer/iroh-services/relays/self-hosted).

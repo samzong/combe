@@ -1,12 +1,12 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex, PoisonError};
 
 use crate::log::note;
 use combe_catalog::{
-    CatalogError, HOME_LABEL, REMOTE_HOME, Reach, Remote, State, Workspace, add_repo, catalog,
-    home_dir, is_alias, is_home_path, load_state, save_state, should_inject_home, state_path,
-    workspace_key,
+    Catalog, CatalogError, HOME_LABEL, REMOTE_HOME, Reach, Remote, State, Workspace, add_repo,
+    catalog, home_dir, is_alias, is_home_path, load_state, save_state, should_inject_home,
+    state_path, workspace_key,
 };
 
 static REMOTE: LazyLock<Mutex<Remote>> = LazyLock::new(|| Mutex::new(Remote::default()));
@@ -45,16 +45,7 @@ pub(crate) fn listing(scan: bool) -> Listing {
     let Some(state) = read_state() else {
         return with_homes(Vec::new(), &[], Vec::new(), BTreeSet::new());
     };
-    let found = if scan {
-        let mut remote = REMOTE.lock().unwrap_or_else(|poison| poison.into_inner());
-        catalog(&state, Reach::Scan(&mut remote))
-    } else {
-        match REMOTE.try_lock() {
-            Ok(remote) => catalog(&state, Reach::Cached(&remote)),
-            Err(_) => catalog(&state, Reach::Local),
-        }
-    };
-    let found = match found {
+    let found = match read_catalog(&REMOTE, &state, scan) {
         Ok(found) => found,
         Err(err) => {
             note!("{err}");
@@ -90,6 +81,21 @@ pub(crate) fn listing(scan: bool) -> Listing {
         });
     }
     with_homes(repos, &found.rows, hosts(&state), found.unreachable)
+}
+
+fn read_catalog(
+    remote: &Mutex<Remote>,
+    state: &State,
+    scan: bool,
+) -> Result<Catalog, CatalogError> {
+    let lock = || remote.lock().unwrap_or_else(PoisonError::into_inner);
+    if !scan {
+        return catalog(state, Reach::Cached(&lock()));
+    }
+    let mut snapshot = lock().clone();
+    let found = catalog(state, Reach::Scan(&mut snapshot));
+    *lock() = snapshot;
+    found
 }
 
 pub(crate) fn rows() -> Vec<Workspace> {
@@ -198,4 +204,70 @@ fn repo_name(local: bool, path: &Path) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or_else(|| path.to_str().unwrap_or("repo"))
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use std::process::Command;
+    use std::time::{Duration, Instant};
+
+    fn run(cwd: &Path, program: &str, args: &[&str]) {
+        let output = Command::new(program)
+            .args(args)
+            .current_dir(cwd)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn cached_reads_do_not_wait_for_a_running_scan() {
+        let root = std::env::temp_dir().join(format!("combe-sidebar-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let repo = root.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        run(&repo, "git", &["init", "-q", "-b", "main"]);
+        let slow = root.join("slow");
+        let ssh = root.join("ssh");
+        std::fs::write(
+            &ssh,
+            format!(
+                "#!/bin/sh\n[ -e '{}' ] && sleep 3\nfor last; do :; done\nexec /bin/sh -c \"$last\"\n",
+                slow.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&ssh, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let state = State {
+            repos: vec![combe_catalog::Repo {
+                path: repo.clone(),
+                host: Some("fake".into()),
+            }],
+        };
+        let remote = std::sync::Arc::new(Mutex::new(Remote::with_ssh(&ssh)));
+        let primed = read_catalog(&remote, &state, true).unwrap().rows;
+        assert_eq!(primed.len(), 1);
+
+        std::fs::write(&slow, "").unwrap();
+        let scanner = {
+            let remote = remote.clone();
+            let state = state.clone();
+            std::thread::spawn(move || read_catalog(&remote, &state, true).unwrap().rows)
+        };
+        std::thread::sleep(Duration::from_millis(500));
+        let started = Instant::now();
+        let cached = read_catalog(&remote, &state, false).unwrap().rows;
+        let waited = started.elapsed();
+        assert_eq!(cached, primed);
+        assert!(waited < Duration::from_millis(500), "{waited:?}");
+        assert!(!scanner.is_finished());
+        assert_eq!(scanner.join().unwrap(), primed);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

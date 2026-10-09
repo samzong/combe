@@ -50,6 +50,7 @@ pub fn remote_path(path: &str) -> Option<String> {
     Some(if trimmed.is_empty() { "/" } else { trimmed }.to_owned())
 }
 
+#[derive(Clone)]
 pub struct Remote {
     ssh: OsString,
     last: HashMap<(String, PathBuf), Vec<WorktreeRecord>>,
@@ -83,11 +84,17 @@ impl Remote {
         &mut self,
         host: &str,
         path: &std::path::Path,
-    ) -> Result<Vec<WorktreeRecord>, CatalogError> {
-        let records = scan_remote(&self.ssh, host, &path.to_string_lossy())?;
+    ) -> Result<(Vec<WorktreeRecord>, Vec<PathBuf>), CatalogError> {
+        let (records, skipped): (Vec<_>, Vec<_>) =
+            scan_remote(&self.ssh, host, &path.to_string_lossy())?
+                .into_iter()
+                .partition(|record| !record.path.to_string_lossy().chars().any(char::is_control));
         self.last
             .insert((host.to_owned(), path.to_path_buf()), records.clone());
-        Ok(records)
+        Ok((
+            records,
+            skipped.into_iter().map(|record| record.path).collect(),
+        ))
     }
 }
 

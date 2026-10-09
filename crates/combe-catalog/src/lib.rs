@@ -95,7 +95,15 @@ pub fn catalog(state: &State, mut reach: Reach<'_>) -> Result<Catalog, CatalogEr
                     None
                 } else {
                     match remote.scan(host, &repo.path) {
-                        Ok(records) => Some(records),
+                        Ok((records, skipped)) => {
+                            errors.extend(skipped.into_iter().map(|path| {
+                                CatalogError::ControlCharacter {
+                                    host: host.clone(),
+                                    path,
+                                }
+                            }));
+                            Some(records)
+                        }
                         Err(err) => {
                             if matches!(err, CatalogError::Unreachable { .. }) {
                                 unreachable.insert(host.clone());
@@ -451,6 +459,43 @@ mod tests {
         let first = catalog(&state, Reach::Scan(&mut cold)).unwrap();
         assert!(first.rows.is_empty());
         assert!(first.unreachable.contains("fake"));
+    }
+
+    #[test]
+    fn remote_worktrees_with_control_characters_are_skipped() {
+        let root = tempfile::tempdir().unwrap();
+        let (ssh, _) = fake_ssh(root.path());
+        let repo = root.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        git(&repo, &["init", "-b", "main"]);
+        git(&repo, &["commit", "--allow-empty", "-m", "init"]);
+        for (name, branch) in [("tab\tpath", "tab"), ("cr\rpath", "cr")] {
+            let linked = root.path().join(name);
+            git(
+                &repo,
+                &["worktree", "add", linked.to_str().unwrap(), "-b", branch],
+            );
+        }
+        let mut state = State::default();
+        add_remote_repo(&mut state, "fake", repo.to_str().unwrap()).unwrap();
+        let mut remote = Remote::with_ssh(&ssh);
+
+        let found = catalog(&state, Reach::Scan(&mut remote)).unwrap();
+
+        let labels: Vec<String> = found.rows.iter().map(Workspace::label).collect();
+        assert_eq!(labels, ["main"]);
+        assert_eq!(
+            found
+                .errors
+                .iter()
+                .filter(|err| matches!(err, CatalogError::ControlCharacter { .. }))
+                .count(),
+            2
+        );
+        assert_eq!(
+            catalog(&state, Reach::Cached(&remote)).unwrap().rows,
+            found.rows
+        );
     }
 
     #[test]

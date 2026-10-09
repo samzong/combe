@@ -25,6 +25,7 @@ use combe_catalog::split_key;
 use crate::chrome_view;
 use crate::ghostty;
 use crate::habits;
+use crate::log::note;
 use crate::menu;
 use crate::overview::Session;
 use crate::quota_panel;
@@ -312,7 +313,23 @@ fn leaf_name(path: &str) -> String {
         .to_string()
 }
 
+fn launchable(host: Option<&str>, cwd: &str) -> bool {
+    if crate::remote::launchable(host, cwd) {
+        return true;
+    }
+    let host = host.unwrap_or_default();
+    note!("refused a remote surface on {host}: no ssh command for {cwd:?}");
+    inform(
+        &format!("Can't open this workspace on {host}"),
+        "Combe will not pass its host alias or path to ssh.",
+    );
+    false
+}
+
 fn open_worktree(path: &str, name: &str, source: Source) {
+    if !launchable(split_key(path).0, &split_key(path).1) {
+        return;
+    }
     let existing = STATE.with(|state| {
         let mut state = state.borrow_mut();
         let state = state.as_mut()?;
@@ -326,6 +343,9 @@ fn open_worktree(path: &str, name: &str, source: Source) {
 }
 
 pub(crate) fn new_tab(workspace: &str, cwd: &str, name: &str, input: Option<&str>, source: Source) {
+    if !launchable(split_key(workspace).0, cwd) {
+        return;
+    }
     let mtm = MainThreadMarker::new().expect("main thread");
     with_mut_state(|state| {
         let root = split::root(
@@ -466,6 +486,16 @@ pub(crate) fn confirm(message: &str, informative: &str, action: &str) -> bool {
     alert.runModal() == NSAlertFirstButtonReturn
 }
 
+pub(crate) fn inform(message: &str, informative: &str) {
+    let mtm = MainThreadMarker::new().expect("main thread");
+    let alert = NSAlert::new(mtm);
+    alert.setAlertStyle(NSAlertStyle::Warning);
+    alert.setMessageText(&NSString::from_str(message));
+    alert.setInformativeText(&NSString::from_str(informative));
+    alert.addButtonWithTitle(&NSString::from_str("OK"));
+    alert.runModal();
+}
+
 pub(crate) fn reveal_window() {
     with_state(|state| {
         if state.window.isMiniaturized() {
@@ -593,8 +623,11 @@ pub(crate) fn divide(vertical: bool, source: Source) {
     let Some(view) = focused_surface() else {
         return;
     };
-    restore_zoom(&view);
     let cwd = view.cwd();
+    if !launchable(view.host(), &cwd) {
+        return;
+    }
+    restore_zoom(&view);
     let Some(fresh) = split::divide(mtm, &view, vertical, &cwd) else {
         return;
     };

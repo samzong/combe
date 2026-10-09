@@ -20,6 +20,8 @@ pub enum CatalogError {
     InvalidRemotePath(String),
     #[error("not a directory on {host}: {path}")]
     RemoteMissing { host: String, path: PathBuf },
+    #[error("skipped a worktree on {host} whose path has a control character: {path:?}")]
+    ControlCharacter { host: String, path: PathBuf },
     #[error("{host} unreachable: {stderr}")]
     Unreachable { host: String, stderr: String },
 }

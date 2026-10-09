@@ -18,6 +18,7 @@ use objc2_foundation::{
 
 use crate::find_bar::FindBar;
 use crate::ghostty;
+use crate::log::note;
 
 const NX_DEVICE_RSHIFT: usize = 0x00000004;
 const NX_DEVICE_RCTRL: usize = 0x00002000;
@@ -474,6 +475,11 @@ impl SurfaceView {
             crate::remote::command(host, &self.ivars().cwd.borrow())
                 .and_then(|command| CString::new(command).ok())
         });
+        if self.host().is_some() && command.is_none() {
+            note!("refused a remote surface without an ssh command");
+            crate::window::queue_close(self.retain());
+            return;
+        }
         let cwd = match self.host() {
             Some(_) => CString::new(std::env::var("HOME").unwrap_or_else(|_| "/".to_owned())).ok(),
             None => None,

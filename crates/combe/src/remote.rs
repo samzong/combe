@@ -3,6 +3,10 @@ use combe_catalog::{REMOTE_HOME, is_alias, quote};
 const RESOURCES: &str = "/Applications/Combe.app/Contents/Resources";
 const FEATURES: &str = "sudo,title";
 
+pub(crate) fn launchable(host: Option<&str>, path: &str) -> bool {
+    host.is_none_or(|host| command(host, path).is_some())
+}
+
 pub(crate) fn command(host: &str, path: &str) -> Option<String> {
     if !is_alias(host) || path.chars().any(|c| c.is_control()) {
         return None;
@@ -119,6 +123,16 @@ mod tests {
         for path in ["/tmp/a\nb", "relative", "~/git", "/tmp/\u{1b}[2J"] {
             assert!(command("xbp", path).is_none(), "{path:?}");
         }
+    }
+
+    #[test]
+    fn control_characters_make_a_remote_path_unlaunchable() {
+        for path in ["/srv/a\tb", "/srv/a\rb", "/srv/a\u{7f}b"] {
+            assert!(command("xbp", path).is_none(), "{path:?}");
+            assert!(!launchable(Some("xbp"), path), "{path:?}");
+        }
+        assert!(launchable(None, "/srv/a\tb"));
+        assert!(launchable(Some("xbp"), "/srv/a b"));
     }
 
     #[test]

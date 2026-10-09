@@ -42,6 +42,7 @@ thread_local! {
     static SIDEBAR_TIMER: RefCell<Option<Retained<NSTimer>>> = const { RefCell::new(None) };
 }
 static SIDEBAR_INCOMING: Mutex<Option<sidebar::Listing>> = Mutex::new(None);
+static REMOTE_ADDED: Mutex<Option<(String, Result<String, String>)>> = Mutex::new(None);
 const LOCAL_HOST: &str = "Local";
 const UNREACHABLE: &str = "unreachable";
 
@@ -603,6 +604,10 @@ pub(crate) fn first_row() -> Option<(String, String)> {
 
 fn add_repo() {
     prepare_action();
+    if let Some(host) = with_state(|state| state.host.clone()).flatten() {
+        add_remote_repo(&host);
+        return;
+    }
     let mtm = MainThreadMarker::new().expect("main thread");
     let panel = NSOpenPanel::openPanel(mtm);
     panel.setCanChooseFiles(false);
@@ -620,6 +625,55 @@ fn add_repo() {
         .collect();
     sidebar::add(&paths);
     refresh();
+}
+
+fn add_remote_repo(host: &str) {
+    let mtm = MainThreadMarker::new().expect("main thread");
+    let alert = objc2_app_kit::NSAlert::new(mtm);
+    alert.setMessageText(&NSString::from_str(&format!("Add a repo on {host}")));
+    alert.setInformativeText(&NSString::from_str(
+        "Enter the absolute path of a repo or folder on that host.",
+    ));
+    alert.addButtonWithTitle(&NSString::from_str("Add"));
+    alert.addButtonWithTitle(&NSString::from_str("Cancel"));
+    let field = objc2_app_kit::NSTextField::initWithFrame(
+        objc2_app_kit::NSTextField::alloc(mtm),
+        rect(0.0, 0.0, 300.0, 24.0),
+    );
+    field.setPlaceholderString(Some(&NSString::from_str("/Users/you/git/project")));
+    alert.setAccessoryView(Some(&field));
+    alert.window().setInitialFirstResponder(Some(&field));
+    if alert.runModal() != objc2_app_kit::NSAlertFirstButtonReturn {
+        return;
+    }
+    let path = field.stringValue().to_string().trim().to_owned();
+    let host = host.to_owned();
+    let spawned = std::thread::Builder::new()
+        .name("combe-remote-add".into())
+        .spawn(move || {
+            let checked = sidebar::probe_remote(&host, &path);
+            *REMOTE_ADDED
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner()) = Some((host, checked));
+            ghostty::on_main(remote_added_on_main);
+        });
+    if let Err(err) = spawned {
+        crate::log::note!("{err}");
+    }
+}
+
+unsafe extern "C" fn remote_added_on_main(_: *mut c_void) {
+    let Some((host, checked)) = REMOTE_ADDED
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .take()
+    else {
+        return;
+    };
+    match checked.and_then(|path| sidebar::add_remote(&host, &path)) {
+        Ok(()) => refresh(),
+        Err(reason) => crate::window::inform(&format!("Can't add a repo on {host}"), &reason),
+    }
 }
 
 pub(crate) fn toggle(source: Source) {
@@ -1147,6 +1201,14 @@ pub(crate) fn rebuild() {
                 .find(|view| view.identifier().is_some_and(|value| value == identifier))
         {
             state.window.makeFirstResponder(Some(&view));
+        }
+        if let Some(add) = &state.add_repo {
+            let label = match &state.host {
+                Some(host) => format!("Add repo on {host}"),
+                None => "Add repo".to_owned(),
+            };
+            add.setToolTip(Some(&NSString::from_str(&label)));
+            add.setAccessibilityLabel(Some(&NSString::from_str(&label)));
         }
         let current = state.current.as_deref();
         let title = state.listing.repos.iter().find_map(|repo| {

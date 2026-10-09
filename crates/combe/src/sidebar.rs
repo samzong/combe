@@ -182,6 +182,21 @@ pub(crate) fn add(paths: &[PathBuf]) {
     }
 }
 
+pub(crate) fn probe_remote(host: &str, path: &str) -> Result<String, String> {
+    let path = combe_catalog::remote_path(path)
+        .ok_or_else(|| format!("{path} is not an absolute path on {host}."))?;
+    combe_catalog::scan_remote(std::ffi::OsStr::new("ssh"), host, &path)
+        .map(|_| path)
+        .map_err(|err| err.to_string())
+}
+
+pub(crate) fn add_remote(host: &str, path: &str) -> Result<(), String> {
+    let file = state_path().ok_or("cannot resolve the application support directory")?;
+    let mut state = read_state().ok_or("cannot read the state file")?;
+    combe_catalog::add_remote_repo(&mut state, host, path).map_err(|err| err.to_string())?;
+    save_state(&file, &state).map_err(|err| err.to_string())
+}
+
 fn read_state() -> Option<State> {
     let Some(file) = state_path() else {
         note!("cannot resolve the application support directory");

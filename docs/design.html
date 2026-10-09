@@ -294,7 +294,8 @@
     dialog h2 { font-size: 14px; margin-top: 0; }
     dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
     dialog button { border: 0; border-radius: 7px; padding: 6px 14px; background: var(--hover); }
-    dialog button[value="close"] { color: white; background: var(--blue); }
+    dialog button[value="close"], dialog button[value="add"] { color: white; background: var(--blue); }
+    dialog input { width: 100%; box-sizing: border-box; margin-top: 4px; padding: 5px 8px; border: .5px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); font: 13px ui-monospace, monospace; }
     .components { color: var(--muted); margin: 24px 2px 0; font-size: 12px; }
     .components p { max-width: 760px; line-height: 1.6; }
     .components a { color: var(--text-strong); }
@@ -384,6 +385,7 @@
             </div>
           </footer>
         </section>
+        <dialog id="remote-add"><form method="dialog"><h2 id="remote-add-title">Add a repo on xbp</h2><p>Enter the absolute path of a repo or folder on that host.</p><input id="remote-add-path" placeholder="/Users/you/git/project" aria-label="Remote path" autofocus><div class="actions"><button value="cancel">Cancel</button><button value="add">Add</button></div></form></dialog>
         <dialog id="close-confirm"><form method="dialog"><h2>Close terminal?</h2><p>A process is still running in this terminal.</p><div class="actions"><button value="cancel" autofocus>Cancel</button><button value="close">Close</button></div></form></dialog>
         <div class="toast" id="toast" role="status" hidden></div>
       </div>
@@ -507,6 +509,9 @@
     }
 
     function renderHosts() {
+      const addLabel = shownHost === null ? "Add repo" : `Add repo on ${shownHost}`;
+      document.getElementById("add").title = addLabel;
+      document.getElementById("add").setAttribute("aria-label", addLabel);
       hostBar.hidden = hosts.length === 0;
       hostBar.replaceChildren();
       const name = shownHost ?? "Local";
@@ -988,7 +993,23 @@
         clearTimeout(quotaTimer);
       }
     });
+    const remoteAdd = document.getElementById("remote-add");
+    remoteAdd.addEventListener("close", () => {
+      const path = document.getElementById("remote-add-path").value.trim();
+      if (remoteAdd.returnValue !== "add") return;
+      const toast = document.getElementById("toast");
+      toast.textContent = path.startsWith("/") ? `Combe checks ${path} on ${shownHost} over ssh, then adds it.` : `Can't add a repo on ${shownHost}: ${path || "an empty path"} is not an absolute path.`;
+      toast.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.hidden = true; }, 2600);
+    });
     document.getElementById("add").addEventListener("click", () => {
+      if (shownHost !== null) {
+        document.getElementById("remote-add-title").textContent = `Add a repo on ${shownHost}`;
+        document.getElementById("remote-add-path").value = "";
+        remoteAdd.showModal();
+        return;
+      }
       const toast = document.getElementById("toast");
       toast.textContent = "Combe opens the native directory picker here.";
       toast.hidden = false;

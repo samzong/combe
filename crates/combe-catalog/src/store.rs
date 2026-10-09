@@ -27,6 +27,8 @@ pub struct State {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Repo {
     pub path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
 }
 
 pub fn state_path() -> Option<PathBuf> {
@@ -90,9 +92,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.json");
         let state = State {
-            repos: vec![Repo {
-                path: PathBuf::from("/tmp/repo"),
-            }],
+            repos: vec![
+                Repo {
+                    path: PathBuf::from("/tmp/repo"),
+                    host: None,
+                },
+                Repo {
+                    path: PathBuf::from("/tmp/repo"),
+                    host: Some("xbp".into()),
+                },
+            ],
         };
         save_state(&path, &state).unwrap();
         assert_eq!(load_state(&path).unwrap(), state);
@@ -105,5 +114,23 @@ mod tests {
         let mut body = String::new();
         previous.read_to_string(&mut body).unwrap();
         assert_eq!(serde_json::from_str::<State>(&body).unwrap(), state);
+    }
+
+    #[test]
+    fn local_repos_keep_the_old_shape() {
+        let old = r#"{"repos":[{"path":"/tmp/repo"}]}"#;
+        let state: State = serde_json::from_str(old).unwrap();
+        assert_eq!(state.repos[0].host, None);
+        assert_eq!(serde_json::to_string(&state).unwrap(), old);
+        let remote = State {
+            repos: vec![Repo {
+                path: PathBuf::from("/srv/repo"),
+                host: Some("xbp".into()),
+            }],
+        };
+        assert_eq!(
+            serde_json::to_string(&remote).unwrap(),
+            r#"{"repos":[{"path":"/srv/repo","host":"xbp"}]}"#
+        );
     }
 }

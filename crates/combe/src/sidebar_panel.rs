@@ -5,14 +5,16 @@ use std::ffi::c_void;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use combe_catalog::split_key;
+
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
 use objc2::{MainThreadOnly, Message, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSAccessibility, NSAnimatablePropertyContainer, NSAnimationContext, NSAutoresizingMaskOptions,
     NSBezierPath, NSButton, NSColor, NSEvent, NSEventModifierFlags, NSEventType, NSFont,
-    NSImageView, NSOpenPanel, NSScrollView, NSShadow, NSUserInterfaceItemIdentification, NSView,
-    NSViewLayerContentsRedrawPolicy, NSWindow,
+    NSImageView, NSMenu, NSMenuItem, NSOpenPanel, NSScrollView, NSShadow,
+    NSUserInterfaceItemIdentification, NSView, NSViewLayerContentsRedrawPolicy, NSWindow,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString, NSTimer};
 
@@ -39,7 +41,9 @@ thread_local! {
     static SIDEBAR_DIRTY: Cell<bool> = const { Cell::new(false) };
     static SIDEBAR_TIMER: RefCell<Option<Retained<NSTimer>>> = const { RefCell::new(None) };
 }
-static SIDEBAR_INCOMING: Mutex<Option<Vec<sidebar::Repo>>> = Mutex::new(None);
+static SIDEBAR_INCOMING: Mutex<Option<sidebar::Listing>> = Mutex::new(None);
+const LOCAL_HOST: &str = "Local";
+const UNREACHABLE: &str = "unreachable";
 
 struct State {
     window: Retained<NSWindow>,
@@ -59,8 +63,9 @@ struct State {
     command_held: Cell<bool>,
     toggle: Option<Retained<NSButton>>,
     add_repo: Option<Retained<NSButton>>,
-    repos: Vec<sidebar::Repo>,
-    expanded_repos: HashSet<PathBuf>,
+    listing: sidebar::Listing,
+    host: Option<String>,
+    expanded_repos: HashSet<String>,
     current: Option<String>,
     opened: HashSet<String>,
     attention: HashSet<String>,
@@ -69,6 +74,13 @@ struct State {
 }
 
 impl State {
+    fn shown(&self) -> impl Iterator<Item = &sidebar::Repo> {
+        self.listing
+            .repos
+            .iter()
+            .filter(|repo| repo.host == self.host)
+    }
+
     fn rows(&self) -> impl Iterator<Item = Retained<ClickView>> {
         self.sidebar
             .documentView()
@@ -84,8 +96,10 @@ impl State {
 }
 
 fn workspace_row(view: &ClickView) -> bool {
-    view.accessibilityIdentifier()
-        .is_some_and(|id| !id.to_string().starts_with("repo:"))
+    view.accessibilityIdentifier().is_some_and(|id| {
+        let id = id.to_string();
+        !id.starts_with("repo:") && !id.starts_with("host:")
+    })
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -119,6 +133,9 @@ define_class!(
 
         #[unsafe(method(addRepo:))]
         fn add_repo(&self, _sender: Option<&AnyObject>) { add_repo(); }
+
+        #[unsafe(method(chooseHost:))]
+        fn choose_host(&self, sender: &NSMenuItem) { choose_host(sender.tag()); }
     }
 );
 
@@ -213,7 +230,8 @@ pub(crate) fn mount(
             command_held: Cell::new(false),
             toggle,
             add_repo,
-            repos: Vec::new(),
+            listing: sidebar::Listing::default(),
+            host: None,
             expanded_repos: HashSet::new(),
             current: None,
             opened: HashSet::new(),
@@ -225,29 +243,39 @@ pub(crate) fn mount(
 }
 
 pub(crate) fn set_sessions(current: Option<String>, opened: HashSet<String>) {
-    STATE.with(|state| {
-        if let Some(state) = state.borrow_mut().as_mut() {
-            let vacated: Vec<PathBuf> = state
-                .repos
-                .iter()
-                .filter(|repo| repo.has_heading)
-                .filter(|repo| {
-                    let live = |sessions: &HashSet<String>| {
-                        repo.rows
-                            .iter()
-                            .any(|row| sessions.contains(row.path.to_string_lossy().as_ref()))
-                    };
-                    live(&state.opened) && !live(&opened)
-                })
-                .map(|repo| repo.path.clone())
-                .collect();
-            for path in vacated {
-                state.expanded_repos.remove(&path);
-            }
-            state.current = current;
-            state.opened = opened;
+    let moved = STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let state = state.as_mut()?;
+        let vacated: Vec<String> = state
+            .listing
+            .repos
+            .iter()
+            .filter(|repo| repo.has_heading)
+            .filter(|repo| {
+                let live = |sessions: &HashSet<String>| {
+                    repo.rows.iter().any(|row| sessions.contains(&row.key))
+                };
+                live(&state.opened) && !live(&opened)
+            })
+            .map(|repo| repo.key.clone())
+            .collect();
+        for key in vacated {
+            state.expanded_repos.remove(&key);
         }
+        let host = current
+            .as_deref()
+            .filter(|key| state.current.as_deref() != Some(*key))
+            .map(|key| split_key(key).0.map(str::to_owned))
+            .filter(|host| *host != state.host);
+        state.current = current;
+        state.opened = opened;
+        let host = host?;
+        state.host = host;
+        Some(())
     });
+    if moved.is_some() {
+        rebuild();
+    }
 }
 
 pub(crate) fn select(path: &str, label: &str, source: Source) {
@@ -298,16 +326,93 @@ fn restore_focus() {
     }
 }
 
-fn toggle_repo(path: PathBuf) {
+fn toggle_repo(key: String) {
     prepare_action();
     STATE.with(|state| {
         let mut state = state.borrow_mut();
         let Some(state) = state.as_mut() else { return };
-        if !state.expanded_repos.remove(&path) {
-            state.expanded_repos.insert(path);
+        if !state.expanded_repos.remove(&key) {
+            state.expanded_repos.insert(key);
         }
     });
     rebuild();
+}
+
+fn choose_host(tag: isize) {
+    prepare_action();
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let Some(state) = state.as_mut() else { return };
+        state.host = usize::try_from(tag)
+            .ok()
+            .and_then(|index| index.checked_sub(1))
+            .and_then(|index| state.listing.hosts.get(index))
+            .cloned();
+    });
+    rebuild();
+    let keyboard = with_state(|state| {
+        let row = host_row(state).filter(|_| state.sidebar_keyboard.get());
+        if let Some(row) = &row {
+            state.focus_row(row);
+        }
+        row.is_some()
+    });
+    if keyboard == Some(false) {
+        restore_focus();
+    }
+}
+
+fn host_row(state: &State) -> Option<Retained<ClickView>> {
+    state.rows().find(|row| {
+        row.identifier()
+            .is_some_and(|id| id.to_string().starts_with("host:"))
+    })
+}
+
+fn show_hosts() {
+    let mtm = MainThreadMarker::new().expect("main thread");
+    let Some((hosts, current, unreachable, target, Some(anchor))) = with_state(|state| {
+        (
+            state.listing.hosts.clone(),
+            state.host.clone(),
+            state.listing.unreachable.clone(),
+            state.actions.clone(),
+            host_row(state),
+        )
+    }) else {
+        return;
+    };
+    let menu = NSMenu::new(mtm);
+    menu.setAutoenablesItems(false);
+    let names = std::iter::once(None).chain(hosts.iter().map(Some));
+    for (index, host) in names.enumerate() {
+        let title = match host {
+            None => LOCAL_HOST.to_owned(),
+            Some(host) if unreachable.contains(host) => format!("{host} · {UNREACHABLE}"),
+            Some(host) => host.clone(),
+        };
+        let item = unsafe {
+            NSMenuItem::initWithTitle_action_keyEquivalent(
+                NSMenuItem::alloc(mtm),
+                &NSString::from_str(&title),
+                Some(sel!(chooseHost:)),
+                &NSString::new(),
+            )
+        };
+        unsafe { item.setTarget(Some(&target)) };
+        item.setTag(index as isize);
+        item.setState(if host == current.as_ref() { 1 } else { 0 });
+        menu.addItem(&item);
+    }
+    let selected = current
+        .as_ref()
+        .and_then(|host| hosts.iter().position(|other| other == host))
+        .map_or(0, |index| index + 1);
+    menu.popUpMenuPositioningItem_atLocation_inView(
+        menu.itemAtIndex(selected as isize).as_deref(),
+        NSPoint::new(38.0, 4.0),
+        Some(&anchor),
+    );
 }
 
 pub(crate) fn after_event(event: &NSEvent) {
@@ -477,18 +582,22 @@ pub(crate) fn layout(size: NSSize, inset: f64, animated: bool) -> f64 {
 }
 
 fn chip_title(repo: &sidebar::Repo, row: &sidebar::Row) -> String {
-    if repo.has_heading {
+    let title = if repo.has_heading {
         format!("{} / {}", repo.name, row.label)
     } else {
         row.label.clone()
+    };
+    match &repo.host {
+        Some(host) => format!("{host} · {title}"),
+        None => title,
     }
 }
 
 pub(crate) fn first_row() -> Option<(String, String)> {
     STATE.with(|state| {
         let state = state.borrow();
-        let row = state.as_ref()?.repos.first()?.rows.first()?;
-        Some((row.path.to_string_lossy().into_owned(), row.label.clone()))
+        let row = state.as_ref()?.shown().next()?.rows.first()?;
+        Some((row.key.clone(), row.label.clone()))
     })
 }
 
@@ -724,12 +833,11 @@ pub(crate) fn handle_event(event: &NSEvent) -> bool {
             let state = state.borrow();
             let state = state.as_ref()?;
             state
-                .repos
-                .iter()
-                .filter(|repo| !repo.has_heading || state.expanded_repos.contains(&repo.path))
+                .shown()
+                .filter(|repo| !repo.has_heading || state.expanded_repos.contains(&repo.key))
                 .flat_map(|repo| &repo.rows)
                 .nth(index - 1)
-                .map(|row| (row.path.to_string_lossy().into_owned(), row.label.clone()))
+                .map(|row| (row.key.clone(), row.label.clone()))
         });
         if let Some((path, label)) = target {
             activate(&path, &label, Source::Key);
@@ -798,10 +906,10 @@ fn update_workspace_hints() {
     crate::window::set_tab_shortcuts(tab_hints_visible());
 }
 
-pub(crate) fn set_repos(repos: Vec<sidebar::Repo>) {
+pub(crate) fn set_listing(listing: sidebar::Listing) {
     STATE.with(|state| {
         if let Some(state) = state.borrow_mut().as_mut() {
-            state.repos = repos;
+            state.listing = listing;
         }
     });
     rebuild();
@@ -816,10 +924,10 @@ pub(crate) fn refresh() {
     let spawned = std::thread::Builder::new()
         .name("combe-catalog".into())
         .spawn(|| {
-            let repos = sidebar::repos();
+            let listing = sidebar::listing(true);
             *SIDEBAR_INCOMING
                 .lock()
-                .unwrap_or_else(|poison| poison.into_inner()) = Some(repos);
+                .unwrap_or_else(|poison| poison.into_inner()) = Some(listing);
             ghostty::on_main(apply_sidebar_on_main);
         });
     if spawned.is_err() {
@@ -829,12 +937,12 @@ pub(crate) fn refresh() {
 
 unsafe extern "C" fn apply_sidebar_on_main(_: *mut c_void) {
     SIDEBAR_SCANNING.set(false);
-    let repos = SIDEBAR_INCOMING
+    let listing = SIDEBAR_INCOMING
         .lock()
         .unwrap_or_else(|poison| poison.into_inner())
         .take();
-    if let Some(repos) = repos {
-        set_repos(repos);
+    if let Some(listing) = listing {
+        set_listing(listing);
     }
     if SIDEBAR_DIRTY.replace(false) {
         refresh();
@@ -850,17 +958,16 @@ pub(crate) fn set_attention(attention: HashSet<String>) {
             let Some(id) = view.identifier().map(|id| id.to_string()) else {
                 continue;
             };
-            let attention = if let Some(path) = id.strip_prefix("repo:") {
+            let attention = if let Some(key) = id.strip_prefix("repo:") {
                 state
+                    .listing
                     .repos
                     .iter()
-                    .find(|repo| repo.path.to_string_lossy() == path)
+                    .find(|repo| repo.key == key)
                     .is_some_and(|repo| {
-                        repo.rows.iter().any(|row| {
-                            state
-                                .attention
-                                .contains(row.path.to_string_lossy().as_ref())
-                        })
+                        repo.rows
+                            .iter()
+                            .any(|row| state.attention.contains(&row.key))
                     })
             } else {
                 state.attention.contains(&id)
@@ -886,28 +993,88 @@ pub(crate) fn rebuild() {
         };
 
         let mut y = 8.0;
-        for (index, repo) in state.repos.iter().enumerate() {
+        if !state.listing.hosts.is_empty() {
+            let name = state.host.as_deref().unwrap_or(LOCAL_HOST);
+            let unreachable = state
+                .host
+                .as_ref()
+                .is_some_and(|host| state.listing.unreachable.contains(host));
+            let text = if unreachable {
+                format!("{name} · {UNREACHABLE}")
+            } else {
+                name.to_owned()
+            };
+            let switcher = ClickView::new(
+                mtm,
+                rect(6.0, y, width - 12.0, HEADER_HEIGHT),
+                &text,
+                34.0,
+                48.0,
+                show_hosts,
+            );
+            switcher.set_font(&NSFont::systemFontOfSize_weight(
+                habits::CHROME_FONT_SIZE,
+                unsafe { objc2_app_kit::NSFontWeightMedium },
+            ));
+            if unreachable {
+                let start = name.encode_utf16().count();
+                let length = text.encode_utf16().count() - start;
+                switcher.set_warn(vec![(
+                    objc2_foundation::NSRange::new(start, length),
+                    crate::glass::color(habits::CHROME_MUTED),
+                )]);
+            }
+            chrome_view::symbol(
+                mtm,
+                &switcher,
+                if state.host.is_some() {
+                    "server.rack"
+                } else {
+                    "laptopcomputer"
+                },
+                rect(12.0, 8.0, 14.0, 14.0),
+            );
+            chrome_view::symbol(
+                mtm,
+                &switcher,
+                "chevron.up.chevron.down",
+                rect(width - 38.0, 9.0, 10.0, 12.0),
+            );
+            if let Some(arrow) = switcher.subviews().lastObject() {
+                arrow.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
+            }
+            switcher.setAccessibilityElement(true);
+            switcher.setAccessibilityRole(Some(&NSString::from_str("AXPopUpButton")));
+            switcher.setAccessibilityLabel(Some(&NSString::from_str(&format!("Host, {text}"))));
+            let id = NSString::from_str(&format!("host:{name}"));
+            switcher.setIdentifier(Some(&id));
+            switcher.setAccessibilityIdentifier(Some(&id));
+            switcher.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
+            document.addSubview(&switcher);
+            y += HEADER_HEIGHT + 16.5;
+        }
+        for (index, repo) in state.shown().enumerate() {
             if index > 0 {
                 y += 16.5;
             }
-            let collapsed = repo.has_heading && !state.expanded_repos.contains(&repo.path);
+            let collapsed = repo.has_heading && !state.expanded_repos.contains(&repo.key);
 
             if repo.has_heading {
-                let path = repo.path.clone();
+                let key = repo.key.clone();
                 let header = ClickView::new(
                     mtm,
                     rect(6.0, y, width - 12.0, HEADER_HEIGHT),
                     &repo.name,
                     34.0,
                     48.0,
-                    move || toggle_repo(path.clone()),
+                    move || toggle_repo(key.clone()),
                 );
                 header.dim_when_idle();
-                header.set_attention(repo.rows.iter().any(|row| {
-                    state
-                        .attention
-                        .contains(row.path.to_string_lossy().as_ref())
-                }));
+                header.set_attention(
+                    repo.rows
+                        .iter()
+                        .any(|row| state.attention.contains(&row.key)),
+                );
                 header.set_font(&NSFont::systemFontOfSize_weight(
                     habits::CHROME_FONT_SIZE,
                     unsafe { objc2_app_kit::NSFontWeightMedium },
@@ -929,10 +1096,7 @@ pub(crate) fn rebuild() {
                 header.setAccessibilityElement(true);
                 header.setAccessibilityRole(Some(&NSString::from_str("AXButton")));
                 header.setAccessibilityLabel(Some(&NSString::from_str(&repo.name)));
-                header.setIdentifier(Some(&NSString::from_str(&format!(
-                    "repo:{}",
-                    repo.path.display()
-                ))));
+                header.setIdentifier(Some(&NSString::from_str(&format!("repo:{}", repo.key))));
                 header.setAccessibilityExpanded(!collapsed);
                 header.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
                 document.addSubview(&header);
@@ -943,7 +1107,7 @@ pub(crate) fn rebuild() {
             }
 
             for row in &repo.rows {
-                let path = row.path.to_string_lossy().into_owned();
+                let path = row.key.clone();
                 let frame = rect(6.0, y + 2.0, width - 12.0, ROW_HEIGHT - 2.0);
                 let opened = state.opened.contains(&path);
                 let target = path.clone();
@@ -985,10 +1149,10 @@ pub(crate) fn rebuild() {
             state.window.makeFirstResponder(Some(&view));
         }
         let current = state.current.as_deref();
-        let title = state.repos.iter().find_map(|repo| {
+        let title = state.listing.repos.iter().find_map(|repo| {
             repo.rows
                 .iter()
-                .find(|row| current == Some(row.path.to_string_lossy().as_ref()))
+                .find(|row| current == Some(row.key.as_str()))
                 .map(|row| chip_title(repo, row))
         });
         state
@@ -1015,6 +1179,12 @@ define_class!(
         #[unsafe(method(drawRect:))]
         fn draw_rect(&self, _dirty: NSRect) {
             NSColor::labelColor().colorWithAlphaComponent(0.06).setFill();
+            if let Some(switcher) = self.subviews().into_iter().find(|view| {
+                view.identifier().is_some_and(|identifier| identifier.to_string().starts_with("host:"))
+            }) {
+                let frame = switcher.frame();
+                NSBezierPath::fillRect(rect(6.0, frame.origin.y + frame.size.height + 8.0, (self.bounds().size.width - 12.0).max(0.0), 0.5));
+            }
             for header in self.subviews().into_iter().filter(|view| {
                 view.identifier().is_some_and(|identifier| identifier.to_string().starts_with("repo:"))
             }) {

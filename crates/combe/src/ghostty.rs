@@ -208,6 +208,17 @@ unsafe extern "C" fn action(
             crate::window::refresh_labels();
             true
         }
+        sys::GHOSTTY_ACTION_SHOW_CHILD_EXITED => {
+            let Some(view) = surface_view(target).filter(|view| view.host().is_some()) else {
+                return false;
+            };
+            let exited = unsafe { action.action.child_exited };
+            if exited.timetime_ms <= habits::ABNORMAL_EXIT_MS {
+                return false;
+            }
+            crate::window::queue_close(view);
+            true
+        }
         sys::GHOSTTY_ACTION_PWD => {
             let Some(view) = surface_view(target) else {
                 return false;

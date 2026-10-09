@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 use combe_catalog::{
-    State, add_repo, catalog, cleanup, home_dir, load_state, remove_repo, save_state, state_path,
+    Reach, Remote, State, add_remote_repo, add_repo, catalog, cleanup, home_dir, hosts, load_state,
+    remove_remote_repo, remove_repo, save_state, state_path,
 };
 use objc2::AnyThread;
 use objc2::rc::Retained;
@@ -22,10 +23,16 @@ Usage:
   combe <path>              Open a tab on that directory
   combe list                List registered repos and their worktrees
   combe add <path>...       Register repos
+  combe add --host <host> <path>...
+                            Register repos on a Host from ~/.ssh/config
   combe remove <path>...    Unregister repos
+  combe remove --host <host> <path>...
+                            Unregister repos on a Host
   combe cleanup             Drop registered paths missing from disk
   combe help                Show this help
 ";
+
+const LOCAL_HOST: &str = "local";
 
 const TELEMETRY_USAGE: &str = "\
 combe telemetry — local behavior study log, off by default
@@ -246,35 +253,79 @@ fn list() -> ExitCode {
         println!("no repos registered — combe add <path>");
         return ExitCode::SUCCESS;
     }
-    let found = match catalog(&state) {
+    let found = match catalog(&state, Reach::Scan(&mut Remote::default())) {
         Ok(found) => found,
         Err(err) => {
             eprintln!("combe: {err}");
             return ExitCode::FAILURE;
         }
     };
+    for err in &found.errors {
+        eprintln!("combe: {err}");
+    }
     for repo in &state.repos {
+        let host = repo.host.as_deref().unwrap_or(LOCAL_HOST);
         let rows: Vec<_> = found
             .rows
             .iter()
-            .filter(|row| row.repo_path == repo.path)
+            .filter(|row| row.host == repo.host && row.repo_path == repo.path)
             .collect();
-        if rows.is_empty() {
-            println!("{}  (missing)", repo.path.display());
-            continue;
-        }
-        println!("{}", repo.path.display());
+        let status = match &repo.host {
+            Some(alias) if found.unreachable.contains(alias) => "  (unreachable)",
+            _ if rows.is_empty() => "  (missing)",
+            _ => "",
+        };
+        println!("{host:<12} {}{status}", repo.path.display());
         for row in rows {
-            println!("  {:<28} {}", row.label(), row.path.display());
+            println!("{:<12}   {:<28} {}", "", row.label(), row.path.display());
         }
     }
     ExitCode::SUCCESS
 }
 
-fn add(paths: &[String]) -> ExitCode {
+fn host_option<'a>(
+    command: &str,
+    args: &'a [String],
+) -> Result<(Option<&'a str>, &'a [String]), ExitCode> {
+    match args {
+        [flag, host, rest @ ..] if flag == "--host" => {
+            if !hosts().iter().any(|known| known == host) {
+                eprintln!("combe: {host} is not a Host in ~/.ssh/config");
+                return Err(ExitCode::FAILURE);
+            }
+            Ok((Some(host.as_str()), rest))
+        }
+        [flag] if flag == "--host" => {
+            eprintln!("combe: {command} --host needs a host and a path");
+            Err(ExitCode::from(2))
+        }
+        _ => Ok((None, args)),
+    }
+}
+
+fn add(args: &[String]) -> ExitCode {
+    let (host, paths) = match host_option("add", args) {
+        Ok(parsed) => parsed,
+        Err(code) => return code,
+    };
     if paths.is_empty() {
         eprintln!("combe: add needs at least one path");
         return ExitCode::from(2);
+    }
+    if let Some(host) = host {
+        return edit(|state| {
+            let mut failed = false;
+            for path in paths {
+                match add_remote_repo(state, host, path) {
+                    Ok(resolved) => println!("added {host} {}", resolved.display()),
+                    Err(err) => {
+                        eprintln!("combe: {err}");
+                        failed = true;
+                    }
+                }
+            }
+            !failed
+        });
     }
     edit(|state| {
         let mut failed = false;
@@ -291,7 +342,11 @@ fn add(paths: &[String]) -> ExitCode {
     })
 }
 
-fn remove(paths: &[String]) -> ExitCode {
+fn remove(args: &[String]) -> ExitCode {
+    let (host, paths) = match args {
+        [flag, host, rest @ ..] if flag == "--host" => (Some(host.as_str()), rest),
+        _ => (None, args),
+    };
     if paths.is_empty() {
         eprintln!("combe: remove needs at least one path");
         return ExitCode::from(2);
@@ -299,8 +354,15 @@ fn remove(paths: &[String]) -> ExitCode {
     edit(|state| {
         let mut failed = false;
         for path in paths {
-            if remove_repo(state, Path::new(path)) {
-                println!("removed {path}");
+            let removed = match host {
+                Some(host) => remove_remote_repo(state, host, path),
+                None => remove_repo(state, Path::new(path)),
+            };
+            if removed {
+                match host {
+                    Some(host) => println!("removed {host} {path}"),
+                    None => println!("removed {path}"),
+                }
             } else {
                 eprintln!("combe: not registered: {path}");
                 failed = true;

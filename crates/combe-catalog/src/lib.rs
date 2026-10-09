@@ -1,17 +1,23 @@
 mod home;
 mod porcelain;
+mod remote;
 mod scan;
+mod ssh_config;
 mod store;
 
 pub use home::{HOME_LABEL, home_dir, home_workspace, is_home_path, should_inject_home};
 pub use porcelain::{WorktreeKind, WorktreeRecord, parse_worktree_list};
+pub use remote::{REMOTE_HOME, Remote, quote, remote_path, scan_remote, split_key, workspace_key};
 pub use scan::{CatalogError, scan_repo};
+pub use ssh_config::{hosts, hosts_in, is_alias};
 pub use store::{Repo, State, StoreError, load_state, save_state, state_path};
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Workspace {
+    pub host: Option<String>,
     pub repo_path: PathBuf,
     pub path: PathBuf,
     pub kind: WorktreeKind,
@@ -20,8 +26,12 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    pub fn key(&self) -> String {
+        workspace_key(self.host.as_deref(), &self.path.to_string_lossy())
+    }
+
     pub fn label(&self) -> String {
-        if self.kind == WorktreeKind::Folder && is_home_path(&self.path) {
+        if self.host.is_none() && self.kind == WorktreeKind::Folder && is_home_path(&self.path) {
             return HOME_LABEL.to_string();
         }
         if let Some(branch) = &self.branch {
@@ -37,7 +47,7 @@ impl Workspace {
     }
 
     pub fn repo_label(&self) -> String {
-        if is_home_path(&self.repo_path) {
+        if self.host.is_none() && is_home_path(&self.repo_path) {
             return HOME_LABEL.to_string();
         }
         self.repo_path
@@ -52,22 +62,66 @@ impl Workspace {
 pub struct Catalog {
     pub rows: Vec<Workspace>,
     pub errors: Vec<CatalogError>,
+    pub unreachable: BTreeSet<String>,
 }
 
-pub fn catalog(state: &State) -> Result<Catalog, CatalogError> {
+pub enum Reach<'a> {
+    Local,
+    Cached(&'a Remote),
+    Scan(&'a mut Remote),
+}
+
+pub fn catalog(state: &State, mut reach: Reach<'_>) -> Result<Catalog, CatalogError> {
     let mut rows = Vec::new();
     let mut errors = Vec::new();
+    let mut unreachable = BTreeSet::new();
     for repo in &state.repos {
-        let records = match scan_repo(&repo.path) {
-            Ok(records) => records,
-            Err(err @ CatalogError::NotADirectory(_)) => {
-                errors.push(err);
-                continue;
+        let records = match (&repo.host, &mut reach) {
+            (None, _) => match scan_repo(&repo.path) {
+                Ok(records) => records,
+                Err(err @ CatalogError::NotADirectory(_)) => {
+                    errors.push(err);
+                    continue;
+                }
+                Err(err) => return Err(err),
+            },
+            (Some(_), Reach::Local) => continue,
+            (Some(host), Reach::Cached(remote)) => match remote.recall(host, &repo.path) {
+                Some(records) => records.to_vec(),
+                None => continue,
+            },
+            (Some(host), Reach::Scan(remote)) => {
+                let scanned = if unreachable.contains(host) {
+                    None
+                } else {
+                    match remote.scan(host, &repo.path) {
+                        Ok(records) => Some(records),
+                        Err(err) => {
+                            if matches!(err, CatalogError::Unreachable { .. }) {
+                                unreachable.insert(host.clone());
+                            } else {
+                                remote.forget(host, &repo.path);
+                            }
+                            errors.push(err);
+                            None
+                        }
+                    }
+                };
+                let kept = || {
+                    unreachable
+                        .contains(host)
+                        .then(|| remote.recall(host, &repo.path).map(<[_]>::to_vec))
+                        .flatten()
+                };
+                match scanned.or_else(kept) {
+                    Some(records) => records,
+                    None => continue,
+                }
             }
-            Err(err) => return Err(err),
         };
         for record in records {
             rows.push(Workspace {
+                host: repo.host.clone(),
                 repo_path: repo.path.clone(),
                 path: record.path,
                 kind: record.kind,
@@ -77,35 +131,78 @@ pub fn catalog(state: &State) -> Result<Catalog, CatalogError> {
         }
     }
     rows.sort_by(|left, right| {
-        left.repo_path
-            .cmp(&right.repo_path)
+        left.host
+            .cmp(&right.host)
+            .then_with(|| left.repo_path.cmp(&right.repo_path))
             .then_with(|| left.path.cmp(&right.path))
     });
-    Ok(Catalog { rows, errors })
+    Ok(Catalog {
+        rows,
+        errors,
+        unreachable,
+    })
 }
 
 pub fn add_repo(state: &mut State, path: &Path) -> Result<PathBuf, CatalogError> {
     let resolved = resolve_dir(path)?;
-    if state.repos.iter().any(|repo| repo.path == resolved) {
+    if state
+        .repos
+        .iter()
+        .any(|repo| repo.host.is_none() && repo.path == resolved)
+    {
         return Ok(resolved);
     }
     state.repos.push(Repo {
         path: resolved.clone(),
+        host: None,
     });
     Ok(resolved)
+}
+
+pub fn add_remote_repo(state: &mut State, host: &str, path: &str) -> Result<PathBuf, CatalogError> {
+    if !is_alias(host) {
+        return Err(CatalogError::InvalidHost(host.to_owned()));
+    }
+    let path = PathBuf::from(
+        remote_path(path).ok_or_else(|| CatalogError::InvalidRemotePath(path.to_owned()))?,
+    );
+    if !state
+        .repos
+        .iter()
+        .any(|repo| repo.host.as_deref() == Some(host) && repo.path == path)
+    {
+        state.repos.push(Repo {
+            path: path.clone(),
+            host: Some(host.to_owned()),
+        });
+    }
+    Ok(path)
 }
 
 pub fn remove_repo(state: &mut State, path: &Path) -> bool {
     let resolved = resolve_vanished(path);
     let before = state.repos.len();
-    state.repos.retain(|repo| repo.path != resolved);
+    state
+        .repos
+        .retain(|repo| repo.host.is_some() || repo.path != resolved);
+    before != state.repos.len()
+}
+
+pub fn remove_remote_repo(state: &mut State, host: &str, path: &str) -> bool {
+    let Some(path) = remote_path(path).map(PathBuf::from) else {
+        return false;
+    };
+    let before = state.repos.len();
+    state
+        .repos
+        .retain(|repo| repo.host.as_deref() != Some(host) || repo.path != path);
     before != state.repos.len()
 }
 
 pub fn cleanup(state: &mut State) -> Vec<PathBuf> {
     let mut cleaned = Vec::new();
     state.repos.retain(|repo| {
-        if repo.path.is_dir() {
+        if repo.host.is_some() || repo.path.is_dir() {
             return true;
         }
         cleaned.push(repo.path.clone());
@@ -162,7 +259,7 @@ mod tests {
         let mut state = State::default();
         add_repo(&mut state, &first).unwrap();
         add_repo(&mut state, &second).unwrap();
-        let found = catalog(&state).unwrap();
+        let found = catalog(&state, Reach::Local).unwrap();
         assert_eq!(found.rows[0].path, std::fs::canonicalize(&second).unwrap());
         assert_eq!(found.rows[1].path, std::fs::canonicalize(&first).unwrap());
         assert!(found.errors.is_empty());
@@ -183,7 +280,13 @@ mod tests {
         let cleaned = cleanup(&mut state);
 
         let live = std::fs::canonicalize(&live).unwrap();
-        assert_eq!(state.repos, vec![Repo { path: live }]);
+        assert_eq!(
+            state.repos,
+            vec![Repo {
+                path: live,
+                host: None
+            }]
+        );
         assert_eq!(cleaned.len(), 1);
     }
 
@@ -202,7 +305,7 @@ mod tests {
 
     #[test]
     fn catalog_does_not_inject_home() {
-        let found = catalog(&State::default()).unwrap();
+        let found = catalog(&State::default(), Reach::Local).unwrap();
         assert!(found.rows.is_empty());
     }
 
@@ -214,8 +317,9 @@ mod tests {
         add_repo(&mut state, dir.path()).unwrap();
         state.repos.push(Repo {
             path: missing.clone(),
+            host: None,
         });
-        let found = catalog(&state).unwrap();
+        let found = catalog(&state, Reach::Local).unwrap();
         assert_eq!(found.rows.len(), 1);
         assert_eq!(
             found.rows[0].path,
@@ -225,5 +329,147 @@ mod tests {
             &found.errors[..],
             [CatalogError::NotADirectory(path)] if path == &missing
         ));
+    }
+
+    fn fake_ssh(root: &Path) -> (PathBuf, PathBuf) {
+        let flag = root.join("down");
+        let script = root.join("ssh");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nif [ -e '{}' ]; then echo 'ssh: connect to host fake: Host is down' >&2; exit 255; fi\nfor last; do :; done\nexec /bin/sh -c \"$last\"\n",
+                flag.display()
+            ),
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        (script, flag)
+    }
+
+    fn git(cwd: &Path, args: &[&str]) {
+        let output = std::process::Command::new("git")
+            .args(["-c", "user.name=Combe", "-c", "user.email=combe@test"])
+            .args(args)
+            .current_dir(cwd)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn remote_repo_lists_worktrees_over_ssh_and_keeps_them_while_unreachable() {
+        let root = tempfile::tempdir().unwrap();
+        let (ssh, flag) = fake_ssh(root.path());
+        let repo = root.path().join("with space");
+        std::fs::create_dir_all(&repo).unwrap();
+        git(&repo, &["init", "-b", "main"]);
+        std::fs::write(repo.join("README"), "hi").unwrap();
+        git(&repo, &["add", "README"]);
+        git(&repo, &["commit", "-m", "init"]);
+        let linked = root.path().join("feat");
+        git(
+            &repo,
+            &["worktree", "add", linked.to_str().unwrap(), "-b", "feat"],
+        );
+        let folder = root.path().join("notes");
+        std::fs::create_dir_all(&folder).unwrap();
+
+        let mut state = State::default();
+        add_remote_repo(&mut state, "fake", repo.to_str().unwrap()).unwrap();
+        add_remote_repo(&mut state, "fake", folder.to_str().unwrap()).unwrap();
+        add_remote_repo(&mut state, "fake", "/nonexistent/combe").unwrap();
+        let mut remote = Remote::with_ssh(&ssh);
+
+        let found = catalog(&state, Reach::Scan(&mut remote)).unwrap();
+        assert!(found.unreachable.is_empty());
+        assert!(
+            found
+                .rows
+                .iter()
+                .all(|row| row.host.as_deref() == Some("fake"))
+        );
+        let mut labels: Vec<String> = found.rows.iter().map(Workspace::label).collect();
+        labels.sort();
+        assert_eq!(labels, ["feat", "main", "notes"]);
+        assert!(
+            found
+                .rows
+                .iter()
+                .all(|row| row.key().starts_with("ssh://fake/"))
+        );
+        assert!(matches!(
+            &found.errors[..],
+            [CatalogError::RemoteMissing { host, .. }] if host == "fake"
+        ));
+        assert!(catalog(&state, Reach::Local).unwrap().rows.is_empty());
+
+        std::fs::write(&flag, "").unwrap();
+        let offline = catalog(&state, Reach::Scan(&mut remote)).unwrap();
+        assert_eq!(offline.unreachable.iter().collect::<Vec<_>>(), ["fake"]);
+        assert_eq!(offline.rows, found.rows);
+        assert_eq!(
+            offline
+                .errors
+                .iter()
+                .filter(|err| matches!(err, CatalogError::Unreachable { .. }))
+                .count(),
+            1
+        );
+        assert_eq!(
+            catalog(&state, Reach::Cached(&remote)).unwrap().rows,
+            found.rows
+        );
+
+        std::fs::remove_file(&flag).unwrap();
+        std::fs::remove_dir_all(&folder).unwrap();
+        let removed = catalog(&state, Reach::Scan(&mut remote)).unwrap();
+        assert!(removed.unreachable.is_empty());
+        assert!(!removed.rows.iter().any(|row| row.label() == "notes"));
+        assert_eq!(removed.rows.len(), 2);
+        assert_eq!(
+            removed
+                .errors
+                .iter()
+                .filter(|err| matches!(err, CatalogError::RemoteMissing { .. }))
+                .count(),
+            2
+        );
+        assert_eq!(
+            catalog(&state, Reach::Cached(&remote)).unwrap().rows,
+            removed.rows
+        );
+        std::fs::write(&flag, "").unwrap();
+        let still_offline = catalog(&state, Reach::Scan(&mut remote)).unwrap();
+        assert_eq!(still_offline.rows, removed.rows);
+
+        let mut cold = Remote::with_ssh(&ssh);
+        let first = catalog(&state, Reach::Scan(&mut cold)).unwrap();
+        assert!(first.rows.is_empty());
+        assert!(first.unreachable.contains("fake"));
+    }
+
+    #[test]
+    fn remote_and_local_registrations_are_independent() {
+        let dir = tempfile::tempdir().unwrap();
+        let local = std::fs::canonicalize(dir.path()).unwrap();
+        let mut state = State::default();
+        add_repo(&mut state, &local).unwrap();
+        let path = local.to_str().unwrap();
+        add_remote_repo(&mut state, "xbp", path).unwrap();
+        add_remote_repo(&mut state, "xbp", &format!("{path}/")).unwrap();
+        assert_eq!(state.repos.len(), 2);
+        assert!(add_remote_repo(&mut state, "-oProxyCommand=id", path).is_err());
+        assert!(add_remote_repo(&mut state, "xbp", "relative").is_err());
+        assert!(cleanup(&mut state).is_empty());
+        assert!(remove_repo(&mut state, &local));
+        assert_eq!(state.repos[0].host.as_deref(), Some("xbp"));
+        assert!(!remove_remote_repo(&mut state, "other", path));
+        assert!(remove_remote_repo(&mut state, "xbp", path));
+        assert!(state.repos.is_empty());
     }
 }

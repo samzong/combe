@@ -14,6 +14,7 @@ mod overview;
 mod pane_overlay;
 mod quota;
 mod quota_panel;
+mod remote;
 mod sidebar;
 mod sidebar_panel;
 mod split;

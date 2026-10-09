@@ -153,14 +153,11 @@ fn accept(entry: Entry) {
     match entry {
         Entry::Workspace(path) => {
             sidebar::add(std::slice::from_ref(&path));
-            let repos = sidebar::repos();
-            let label = repos
-                .iter()
-                .flat_map(|repo| repo.rows.iter())
-                .find(|row| row.path == path)
-                .map(|row| row.label.clone())
+            let listing = sidebar::listing(false);
+            let label = listing
+                .label(&path.to_string_lossy())
                 .unwrap_or_else(|| entry::name_of(&path));
-            sidebar_panel::set_repos(repos);
+            sidebar_panel::set_listing(listing);
             sidebar_panel::select(&path.to_string_lossy(), &label, Source::Url);
         }
         Entry::Hop(dir) => {
@@ -179,7 +176,10 @@ fn accept(entry: Entry) {
             }
             let cwd = cwd
                 .map(|cwd| cwd.to_string_lossy().into_owned())
-                .or_else(window::current_workspace)
+                .or_else(|| {
+                    window::current_workspace()
+                        .filter(|workspace| combe_catalog::split_key(workspace).0.is_none())
+                })
                 .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| "/".to_owned()));
             window::new_tab(&cwd, &cwd, &name, Some(&input), Source::Url);
         }

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use combe_catalog::{HOME_LABEL, Workspace};
+use combe_catalog::{HOME_LABEL, Workspace, quote};
 
 pub(crate) const HOP_SCHEME: &str = "combe";
 
@@ -113,17 +113,6 @@ pub(crate) fn name_of(path: &Path) -> String {
         .to_owned()
 }
 
-fn quote(value: &str) -> String {
-    let bare = !value.is_empty()
-        && value
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "@%+=:,./-_".contains(c));
-    if bare {
-        return value.to_owned();
-    }
-    format!("'{}'", value.replace('\'', r#"'"'"'"#))
-}
-
 fn is_host(host: &str) -> bool {
     !host.is_empty()
         && host.len() <= 255
@@ -170,6 +159,7 @@ mod tests {
 
     fn worktree(repo: &str, path: &str, branch: &str) -> Workspace {
         Workspace {
+            host: None,
             repo_path: PathBuf::from(repo),
             path: PathBuf::from(path),
             kind: WorktreeKind::Git,
@@ -180,6 +170,7 @@ mod tests {
 
     fn folder(path: &str) -> Workspace {
         Workspace {
+            host: None,
             repo_path: PathBuf::from(path),
             path: PathBuf::from(path),
             kind: WorktreeKind::Folder,
@@ -214,15 +205,6 @@ mod tests {
         assert!(man(None, "ls;id").is_none());
         assert!(man(Some("3;id"), "printf").is_none());
         assert!(man(None, "-w").is_none());
-    }
-
-    #[test]
-    fn quote_neutralizes_shell_metacharacters() {
-        assert_eq!(quote("/tmp/plain.command"), "/tmp/plain.command");
-        assert_eq!(quote("/tmp/a b;id"), "'/tmp/a b;id'");
-        assert_eq!(quote("/tmp/it's"), r#"'/tmp/it'"'"'s'"#);
-        assert_eq!(quote("$(id)"), "'$(id)'");
-        assert_eq!(quote(""), "''");
     }
 
     #[test]

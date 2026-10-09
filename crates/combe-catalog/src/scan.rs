@@ -14,6 +14,14 @@ pub enum CatalogError {
     },
     #[error("git failed in {path}: {stderr}")]
     Git { path: PathBuf, stderr: String },
+    #[error("not an ssh config host alias: {0}")]
+    InvalidHost(String),
+    #[error("not an absolute remote path: {0}")]
+    InvalidRemotePath(String),
+    #[error("not a directory on {host}: {path}")]
+    RemoteMissing { host: String, path: PathBuf },
+    #[error("{host} unreachable: {stderr}")]
+    Unreachable { host: String, stderr: String },
 }
 
 pub fn scan_repo(path: &Path) -> Result<Vec<WorktreeRecord>, CatalogError> {

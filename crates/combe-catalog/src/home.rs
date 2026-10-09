@@ -13,6 +13,7 @@ pub fn home_dir() -> Option<PathBuf> {
 
 pub fn home_workspace(home: PathBuf) -> Workspace {
     Workspace {
+        host: None,
         repo_path: home.clone(),
         path: home,
         kind: WorktreeKind::Folder,
@@ -64,6 +65,7 @@ mod tests {
     fn skips_home_when_git_row_owns_path() {
         let home = PathBuf::from("/Users/tester");
         let rows = vec![Workspace {
+            host: None,
             repo_path: home.clone(),
             path: home.clone(),
             kind: WorktreeKind::Git,

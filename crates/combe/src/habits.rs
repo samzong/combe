@@ -114,6 +114,7 @@ pub(crate) const TELEMETRY_QUEUE: usize = 512;
 pub(crate) const ALLOW_OSC52_READ: bool = false;
 
 pub(crate) const NEST_ENV: &str = "COMBE";
+pub(crate) const ABNORMAL_EXIT_MS: u64 = 250;
 
 pub(crate) fn ghostty_config(dark: bool) -> String {
     let background = background(dark);
@@ -167,6 +168,7 @@ pub(crate) fn ghostty_config(dark: bool) -> String {
     let _ = writeln!(config, "copy-on-select = {COPY_ON_SELECT}");
     let _ = writeln!(config, "scrollback-limit-lines = {SCROLLBACK_LINES}");
     let _ = writeln!(config, "command = {SHELL}");
+    let _ = writeln!(config, "abnormal-command-exit-runtime = {ABNORMAL_EXIT_MS}");
     let _ = writeln!(config, "env = {NEST_ENV}={}", std::process::id());
     let _ = writeln!(config, "bell-features = no-attention,no-title");
     let _ = writeln!(config, "link-url = true");

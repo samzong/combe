@@ -20,6 +20,8 @@ use objc2_foundation::{
 };
 use objc2_quartz_core::CAMediaTimingFunction;
 
+use combe_catalog::split_key;
+
 use crate::chrome_view;
 use crate::ghostty;
 use crate::habits;
@@ -264,7 +266,7 @@ pub(crate) fn open(mtm: MainThreadMarker) {
     window.center();
     window.makeKeyAndOrderFront(None);
 
-    sidebar_panel::set_repos(sidebar::repos());
+    sidebar_panel::set_listing(sidebar::listing(false));
     quota_panel::start();
     if let Some(first) = sidebar_panel::first_row() {
         sidebar_panel::select(&first.0, &first.1, Source::Startup);
@@ -297,8 +299,8 @@ pub(crate) fn new_current_tab(source: Source) {
             Some((workspace, name))
         })
         .or_else(sidebar_panel::first_row);
-    if let Some((path, name)) = target {
-        new_tab(&path, &path, &name, None, source);
+    if let Some((workspace, name)) = target {
+        new_tab(&workspace, &split_key(&workspace).1, &name, None, source);
     }
 }
 
@@ -318,7 +320,7 @@ fn open_worktree(path: &str, name: &str, source: Source) {
     });
     match existing {
         Some(id) => activate_tab(id, source),
-        None => new_tab(path, path, name, None, source),
+        None => new_tab(path, &split_key(path).1, name, None, source),
     }
     study("workspace.enter", source).emit();
 }
@@ -326,7 +328,13 @@ fn open_worktree(path: &str, name: &str, source: Source) {
 pub(crate) fn new_tab(workspace: &str, cwd: &str, name: &str, input: Option<&str>, source: Source) {
     let mtm = MainThreadMarker::new().expect("main thread");
     with_mut_state(|state| {
-        let root = split::root(mtm, state.content.bounds(), cwd, input);
+        let root = split::root(
+            mtm,
+            state.content.bounds(),
+            split_key(workspace).0,
+            cwd,
+            input,
+        );
         state.content.addSubview(&root);
         state.tabs.push(workspace.to_owned(), name.to_owned(), root);
     });

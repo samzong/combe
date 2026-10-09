@@ -29,6 +29,7 @@ pub(crate) struct SurfaceIvars {
     notification_id: String,
     attention: Cell<bool>,
     guide: RefCell<Option<Retained<crate::pane_overlay::PaneGuide>>>,
+    host: Option<String>,
     cwd: RefCell<String>,
     input: RefCell<Option<String>>,
     title: RefCell<Option<String>>,
@@ -303,6 +304,7 @@ impl SurfaceView {
     pub(crate) fn new(
         mtm: MainThreadMarker,
         frame: NSRect,
+        host: Option<&str>,
         cwd: &str,
         input: Option<&str>,
     ) -> Retained<Self> {
@@ -311,6 +313,7 @@ impl SurfaceView {
             notification_id: objc2_foundation::NSUUID::UUID().UUIDString().to_string(),
             attention: Cell::new(false),
             guide: RefCell::new(None),
+            host: host.map(str::to_owned),
             cwd: RefCell::new(cwd.to_owned()),
             input: RefCell::new(input.map(str::to_owned)),
             title: RefCell::new(None),
@@ -376,9 +379,13 @@ impl SurfaceView {
         self.ivars().cwd.borrow().clone()
     }
 
+    pub(crate) fn host(&self) -> Option<&str> {
+        self.ivars().host.as_deref()
+    }
+
     pub(crate) fn set_cwd(&self, cwd: &str) {
         let cwd = cwd.trim();
-        if cwd.is_empty() || cwd.contains('\0') {
+        if self.host().is_some() || cwd.is_empty() || cwd.contains('\0') {
             return;
         }
         *self.ivars().cwd.borrow_mut() = cwd.to_owned();
@@ -463,8 +470,17 @@ impl SurfaceView {
             .window()
             .map(|window| window.backingScaleFactor())
             .unwrap_or(2.0);
-        let cwd =
-            CString::new(self.ivars().cwd.borrow().as_str()).expect("cwd has no interior nul");
+        let command = self.host().and_then(|host| {
+            crate::remote::command(host, &self.ivars().cwd.borrow())
+                .and_then(|command| CString::new(command).ok())
+        });
+        let cwd = match self.host() {
+            Some(_) => CString::new(std::env::var("HOME").unwrap_or_else(|_| "/".to_owned())).ok(),
+            None => None,
+        }
+        .unwrap_or_else(|| {
+            CString::new(self.ivars().cwd.borrow().as_str()).expect("cwd has no interior nul")
+        });
         let input = self
             .ivars()
             .input
@@ -478,6 +494,9 @@ impl SurfaceView {
         config.userdata = self as *const Self as *mut c_void;
         config.scale_factor = scale;
         config.working_directory = cwd.as_ptr();
+        if let Some(command) = &command {
+            config.command = command.as_ptr();
+        }
         if let Some(input) = &input {
             config.initial_input = input.as_ptr();
         }

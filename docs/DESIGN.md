@@ -35,11 +35,19 @@ Each workspace owns its tabs and remembers its active tab. Selecting a workspace
 
 The built-in Home workspace is one `home` row without a repo heading or disclosure; its chip also reads `home`. The [catalog](#catalog) injects it first unless a row owns `$HOME`. Startup opens the first row. Home is not registered or persisted, and `$HOME` is scanned for worktrees only when the user registers it.
 
+### Hosts
+
+A host is a concrete `Host` alias from `~/.ssh/config`; the Mac itself is the implicit local host. Workspace identity is the pair (host, path). Its key string is the path for local workspaces and `ssh://<alias>/<path>` for remote ones; tabs, session marks, attention, and sidebar row identifiers compare that key.
+
+Remote repos are registered only from the CLI (`combe add --host <alias> <path>`), because the native directory picker cannot see another machine. The sidebar's Add repo stays local. Every host also has its own Home workspace, `~` on that host, so a host without registered repos still offers one `home` row.
+
+Combe reads `~/.ssh/config` and never writes it. Concrete `Host` aliases are listed in file order; patterns containing `*`, `?`, or `!` and `Match` blocks are skipped; `Include` is followed, relative to `~/.ssh/`, with filename globs. Reachability, keys, and host keys belong to the user's ssh setup (for example Tailscale or a VPN); Combe ships no server, relay, or daemon. A remote session lives exactly as long as its ssh connection: when the connection drops, the pane closes like a local shell that exited.
+
 ## Non-goals
 
 - Agents, chat overlays, command palettes
 - In-app editor, browser, diffs, PR/issue chrome
-- An SSH client, WSL, remote hosts, a PTY daemon that survives app updates
+- A transport, relay, daemon, or key store of its own; writing ~/.ssh/config; sessions that survive a dropped connection; WSL; a PTY daemon that survives app updates; any Combe-operated server for other users
 - A settings GUI, a theme market, cloud sync, user configuration files
 - A telemetry backend, network reporting, or a usage dashboard
 - A third quota provider, quota settings, or usage fetched from the network
@@ -80,6 +88,7 @@ The sidebar's single glass surface has chip, transient catalog, and pinned state
 | Pinned sidebar | Same header and width as the transient catalog; extends to 12 pt above the bottom; reserves terminal space |
 | Header controls | Traffic lights, workspace text, add and pin share a vertical center 30 pt below the window content top in all sidebar states; 28 pt hit targets; 4 pt between add and pin, 4 pt from pin to the glass right edge; workspace text has a 12 pt leading inset within its trigger; add and pin remain available when the catalog is closed |
 | Tabs | 36 pt high, 180 pt nominal width, 18 pt glass and hover corners; keyboard focus follows a 16 pt path inset by 2 pt with a 2 pt stroke; 12 pt gaps; inactive tabs carry a faint neutral fill so each pill reads at rest; active tab has its own fuller glass with a stronger edge so it reads against idle tabs and the chip; long titles truncate; overflow scrolls horizontally only; close and new-tab symbols have no separate fill or border at rest; close has a 20 pt target, 10 pt right inset, and appears on tab hover or keyboard focus without moving the title |
+| Host switcher | First catalog item, present only when `~/.ssh/config` has a concrete Host; 30 pt high like a repo heading, `laptopcomputer` symbol for Local or `server.rack` for a remote host, 12 pt medium text, trailing `chevron.up.chevron.down`; an unreachable host appends ` · unreachable` in secondary text; separated from the rows below by the repo-group gap and hairline |
 | Repo heading | 30 pt high, folder symbol, trailing disclosure indicator, 12 pt medium system text |
 | Workspace row | 34 pt high with 2 pt vertical spacing; 16 pt corners; session dot at 32 pt, label at 48 pt, and selected checkmark |
 | Shortcut hint | The close button's 20 pt circle in its pressed fill, holding an 11 pt medium tabular numeral in chrome primary text, centered horizontally and vertically using its measured text height; occupies the close button's frame, 10 pt from the right edge; replaces the checkmark without moving the row |
@@ -109,9 +118,11 @@ Workspace selection keeps the catalog open and restores that workspace's tabs an
 
 Repo groups start collapsed on every app launch, including newly added repos. Clicking a repo heading toggles its rows without changing selection or closing terminals. A repo group collapses again when its last tab closes, whether the user closed it or the shell exited; the selection moves to another live workspace and that group keeps its state. Collapse state and session marks otherwise last for the app run. Green means a workspace owns a tab; dim means it does not. The chip has no session dot; Home has no collapsible heading.
 
+The host switcher lists Local and every concrete Host from `~/.ssh/config` in a native pop-up menu, checking the shown host. Choosing one replaces the rows below it with that host's catalog: its Home workspace and the worktrees of repos registered on it. Choosing a host selects nothing and closes no terminal. Tabs are not filtered by host. When the selected workspace changes to one on another host, for example after closing the last tab of a workspace, the switcher follows it. The chip prefixes a remote workspace with its alias, `xbp · combe / main`; local workspaces have no prefix.
+
 Hovered and selected rows share the neutral fill and appearance-adaptive text; hover does not select. Keep tracking areas alive during AppKit visible-rectangle updates to preserve paired enter/exit events across geometry changes.
 
-In either open catalog state, holding Command numbers the first nine visible workspace rows in display order, excluding collapsed rows. Cmd-1 through Cmd-9 selects them without dismissing the panel; unassigned numbers are consumed. With the catalog closed, holding Command numbers the first nine tabs from left to right and Ghostty's tab-number bindings apply. Tab hints use the same 20 pt marker in the close button's frame, so nothing shifts while it replaces that button and labels do not move; the fill is the shared pressed step because Command is being held, not hovered. Opening the catalog transfers the hints from tabs to workspace rows.
+In either open catalog state, holding Command numbers the first nine visible workspace rows of the shown host in display order, excluding collapsed rows and the host switcher. Cmd-1 through Cmd-9 selects them without dismissing the panel; unassigned numbers are consumed. With the catalog closed, holding Command numbers the first nine tabs from left to right and Ghostty's tab-number bindings apply. Tab hints use the same 20 pt marker in the close button's frame, so nothing shifts while it replaces that button and labels do not move; the fill is the shared pressed step because Command is being held, not hovered. Opening the catalog transfers the hints from tabs to workspace rows.
 
 ### Appearance and typography
 
@@ -160,6 +171,10 @@ All tabs share one content view. Only the selected worktree's active tab is visi
 A tab follows its focused pane's terminal title, falling back to the worktree name. Ghostty shell integration supplies the running command (for example, `claude`) or shortened prompt path. `GHOSTTY_ACTION_SET_TITLE` reaches the runtime action callback, which identifies the pane through `ghostty_surface_userdata`. There is no process-name API in `ghostty.h`; without shell integration, keep the worktree name.
 
 Splitting reparents the focused surface into a new `NSSplitView` with a fresh sibling. The sibling uses the last `GHOSTTY_ACTION_PWD` directory, falling back to the workspace path. Reported directories do not change workspace selection; new tabs use the selected worktree path. Closing removes the leaf and collapses any single-child pane into its parent. `close_surface_cb` queues the surface for removal on the main queue.
+
+A remote surface runs the user's `ssh` as its command instead of a login shell: `ssh -t -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -- <alias> '<remote>'`, where `<remote>` changes into the worktree and `exec`s `zsh -l`. When the host has `/Applications/Combe.app`, the remote shell loads Ghostty's zsh integration and `xterm-ghostty` terminfo from that bundle's Resources, so titles, prompt marks, and the close confirmation work as they do locally; otherwise it starts plain zsh with `TERM=xterm-256color`, and closing always asks. The local working directory is `$HOME`. libghostty forces `wait-after-command` on a surface started with a command, so the runtime action callback answers `GHOSTTY_ACTION_SHOW_CHILD_EXITED` for remote surfaces by closing the pane; an exit within `abnormal-command-exit-runtime` (250 ms, set in `habits.rs`) is left to Ghostty's abnormal-exit message so an instant ssh failure stays readable. `crates/combe/src/remote.rs` builds the command from registered data only: the alias must pass the same character whitelist as entry hosts, the path must be absolute, and both are single-quoted.
+
+Ghostty accepts `GHOSTTY_ACTION_PWD` only for local hostnames, so a remote pane never reports a directory. Its split siblings, which inherit the focused pane's host, therefore start at the worktree root rather than following `cd`. Moving a pane to a new tab keeps its host. Remote shells do not receive `COMBE`, and the hop CLI is not on the remote host.
 
 Title updates change labels and accessibility text in place, preserving tab, close, and new-tab controls, hover, and in-progress mouse tracking. The prototype's **Update tab title** control demonstrates this.
 
@@ -235,7 +250,9 @@ The application menu's first item is **About Combe**. It opens the system About 
 
 `argv[0]` selects between two entry points in one binary: `<something>.app/Contents/MacOS/Combe` without arguments opens the GUI (Dock, Finder, `open -a`); every other invocation is CLI, with no arguments showing help. Use `argv[0]` because `current_exe()` resolves the `make install` symlink on `PATH` back into the bundle.
 
-`list`, `add`, `remove`, and `cleanup` operate on `state.json` without AppKit. `cleanup` removes registered paths whose directories no longer exist.
+`list`, `add`, `remove`, and `cleanup` operate on `state.json` without AppKit. `cleanup` removes registered local paths whose directories no longer exist and never touches remote repos.
+
+`add --host <alias> <path>...` registers remote repos. The alias must be a concrete Host in `~/.ssh/config`; the path must be absolute and is stored as given, without a trailing slash, since the local filesystem cannot resolve it. `remove --host <alias> <path>...` unregisters them. `list` prints a host column (`local` or the alias) before each repo and marks a repo `(unreachable)` when its host could not be reached.
 
 `telemetry on`, `telemetry off`, and `telemetry status` own the study log switch described under [Telemetry](#telemetry). `combe help` does not list them, because the study log is an owner instrument rather than a product feature; `combe telemetry --help` is its own help and states what is recorded and what never is.
 
@@ -257,6 +274,8 @@ Always open a new tab; never reuse one, inject `cd` into a live surface, or infe
 Every surface sets `COMBE=<app pid>` through Ghostty's `env` override after `TERM_PROGRAM=ghostty`. A hop trusts that mark only when the marked pid is an ancestor of the running CLI, so a GUI editor launched from a tab inherits the variable without inheriting the verdict. A confirmed mark makes hops print a message and exit without opening a URL. Catalog subcommands and a bundle GUI launch still run.
 
 ## System entry points
+
+`Info.plist` carries `NSLocalNetworkUsageDescription`: macOS attributes the `ssh` a remote tab starts to Combe, and a Host on the local network (`.local`, `192.168.x`) triggers the system prompt once. Tailscale `100.x` addresses do not.
 
 `Info.plist` registers these LaunchServices entry points. macOS has no default-terminal role equivalent to browser or mail:
 
@@ -280,6 +299,8 @@ Use the terms in [CONTEXT.md](../CONTEXT.md). Folder workspaces are single rows 
 6. If `$HOME` is a directory and no row already owns that path, prepend a folder workspace labelled `home` as a single catalog row. Do not write it to `state.json`. Do not scan `$HOME` for git worktrees unless the user registered it.
 
 Identity is the resolved worktree path. `list`, `add`, `remove`, and `cleanup` still operate only on registered repos.
+
+A remote repo is scanned with one `ssh -o BatchMode=yes -o ConnectTimeout=5 -T -- <alias> '<script>'`. The script changes into the quoted path, falls back to one folder row when `git rev-parse --git-dir` fails, and otherwise runs `git worktree list --porcelain`. Remote paths are never canonicalized locally; Git's output is the identity. A missing remote directory or a failing remote Git skips that repo for this scan and drops its remembered rows. When ssh itself fails (exit 255), the host is marked unreachable, the remaining repos on it are not tried in that scan, and their rows keep the last successful result held in memory for the app run; a host that never answered shows only its `home` row. Hosts are scanned serially on the background refresh. Startup and other synchronous catalog reads use only that in-memory result and never start ssh.
 
 Startup loads the catalog synchronously. Later refreshes run Git in the background and apply results on the main queue: on activation, after adding repos or opening a tab, and on sidebar empty-area clicks. A refresh requested during a scan runs once more afterwards. Tab selection and session marks reuse the catalog without Git.
 
@@ -324,11 +345,12 @@ Recording must not reach the terminal. The main thread only fills a `Copy` recor
 
 ```text
 crates/ghostty-sys     zig build + bindgen over vendor/ghostty
-crates/combe-catalog   state.json, git porcelain, folder fallback, Home workspace
+crates/combe-catalog   state.json, git porcelain, folder fallback, Home workspace, ssh config hosts, remote scans
 crates/combe
   main.rs              CLI or GUI, GHOSTTY_RESOURCES_DIR, NSApplication
   cli.rs               list, add, remove, cleanup, telemetry, hop
   entry.rs             external file, URL, and service requests, hop resolution
+  remote.rs            ssh command for a remote surface
   ghostty.rs           ghostty_init, app lifecycle, runtime callbacks
   notification.rs      terminal attention, bounded delivery, and native notification callbacks
   surface.rs           one NSView per libghostty surface
@@ -371,6 +393,7 @@ Preserve these capabilities when changing chrome. Prototype states demonstrate a
 | Search and clipboard | Open find, type, step both directions, close and restore terminal focus; copy, ordinary paste, copy-on-select and URL opening remain available |
 | Window and process lifetime | Reopen, minimize, full screen, close and quit confirmation with a foreground process; background child exit preserves current focus |
 | Appearance | System/light/dark in the same process, including hidden and zoomed surfaces; typography and terminal state remain stable |
+| Remote hosts | Switcher lists Local and the ssh config hosts; a remote host shows its `home` row and registered worktrees; a selected row opens a tab whose shell runs on that host in that directory; split siblings stay on the same host at the worktree root; ⌘W asks while a remote command runs and closes directly at the prompt; `exit` closes the pane; an unreachable host keeps its rows and shows the unreachable state; switching back to Local restores the local list |
 
 Run `make check` and inspect the real AppKit window. After menu changes verify Cmd-H, Opt-Cmd-H, Cmd-M, Cmd-Q, Cmd-W and Opt-Cmd-W, including confirmation cancellation. Serve this directory, open `design.html`, and run the prototype checks in the browser console:
 
@@ -392,5 +415,7 @@ Inspect both appearances and the component selector, including Typography. User-
 - Git porcelain over libgit2.
 - Preferences as Rust constants over a config file.
 - `initial_input` plus a confirmation alert over `config.command`: libghostty always runs `command` through `/bin/sh -c`, and an external URL must never reach a shell without the user seeing the line.
+- Remote surfaces do use `config.command`. The rule above guards external input; a remote command is built only from Combe's own registered data, a whitelisted alias and a quoted absolute path, so no outside text reaches the shell. With `command`, the pane's process is `ssh`: a remote `exit` or a dropped connection closes the pane exactly as a local shell exit does, and the close confirmation sees the remote shell's prompt marks. `initial_input` would leave a local shell underneath, which breaks both.
+- The user's `ssh` and `~/.ssh/config` over a transport of Combe's own: reachability, keys, and host trust are already solved by the user's ssh and network (Tailscale, VPN), and owning them would make Combe a remote-access product.
 - Persisting the telemetry switch is a deliberate exception to preferences-as-constants. It is one boolean the owner flips from the CLI to study his own usage, so it cannot be compiled in, and a study log that forgot itself on every restart would be useless. The exception is exactly that boolean in its own file: it never grows a second field, a config format, a GUI entry, or a menu item, and everything about how the log behaves stays in `habits.rs`. The GUI is unchanged, so `docs/design.html` has nothing to show.
 - Quota is a compiled instrument, not a surface. Local snapshots of tools the owner already runs may show remaining percent. Claude and Codex are the closed provider list. It may not grow another panel, another provider, a setting, or a network.

@@ -186,6 +186,18 @@
     .group-head .arrow { margin-left: auto; width: 10px; height: 10px; opacity: .7; }
     .group-head:hover { background: var(--hover); }
     .group.shut .rows { display: none; }
+    .host-switch { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 12px; border: 0; border-radius: var(--radius-row); background: transparent; color: var(--fg); font-size: 12px; font-weight: 500; text-align: left; }
+    .host-switch > svg:first-child { width: 14px; height: 14px; color: var(--muted); }
+    .host-switch > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .host-switch .state { color: var(--muted); font-weight: 400; }
+    .host-switch .arrow { margin-left: auto; width: 10px; height: 12px; opacity: .7; }
+    .host-switch:hover, .host-switch:focus-visible { background: var(--hover); }
+    .host-bar { margin-bottom: 8px; padding-bottom: 8px; border-bottom: .5px solid var(--line); }
+    .host-bar[hidden] { display: none; }
+    .host-menu { position: absolute; z-index: 20; min-width: 180px; padding: 5px; border-radius: 8px; background: var(--glass-tab, #fff); box-shadow: 0 0 0 .5px var(--line), 0 8px 24px #00000033; backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter); }
+    .host-menu button { display: flex; align-items: center; gap: 6px; width: 100%; height: 22px; padding: 0 10px 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--fg); font-size: 13px; text-align: left; }
+    .host-menu button:hover, .host-menu button:focus-visible { background: #0a84ff; color: #fff; }
+    .host-menu button .mark { width: 12px; text-align: center; }
     .group.shut .arrow { transform: rotate(-90deg); }
     .row { position: relative; height: 34px; padding: 0 12px 0 32px; gap: 10px; border-radius: var(--radius-row); margin: 2px 0; color: var(--fg); }
     .row .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -345,7 +357,7 @@
                 <button class="icon" id="pin" type="button" title="Pin sidebar (⌘B)" aria-label="Pin sidebar" aria-pressed="false"><svg viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M6.5 3v10"/></svg></button>
               </div>
             </div>
-            <nav class="catalog" id="catalog" aria-label="Workspaces" inert><div class="list" id="list"></div></nav>
+            <nav class="catalog" id="catalog" aria-label="Workspaces" inert><div class="host-bar" id="host-bar"></div><div class="list" id="list"></div></nav>
           </div>
           <div class="sidebar-resize" role="separator" aria-label="Sidebar width" aria-orientation="vertical" aria-valuemin="160" aria-valuemax="420" aria-valuenow="300" tabindex="0"></div>
         </aside>
@@ -396,8 +408,17 @@
         { id: "confer-main", label: "main", path: "~/projects/confer", live: false },
         { id: "confer-old", label: "old-man", path: "~/projects/confer-old-man", live: false }
       ] },
-      { name: "combe", open: false, rows: [{ id: "combe-main", label: "main", path: "~/projects/combe", live: false }] }
+      { name: "combe", open: false, rows: [{ id: "combe-main", label: "main", path: "~/projects/combe", live: false }] },
+      { host: "xbp", name: "home", heading: false, open: true, rows: [{ id: "xbp-home", label: "home", path: "xbp:~", live: false }] },
+      { host: "xbp", name: "combe", open: false, rows: [
+        { id: "xbp-combe-main", label: "main", path: "xbp:/Users/x/git/samzong/combe", live: false },
+        { id: "xbp-combe-remote", label: "feat/remote-hosts", path: "xbp:/Users/x/git/samzong/combe--feat--remote-hosts", live: false }
+      ] },
+      { host: "devbox", name: "home", heading: false, open: true, rows: [{ id: "devbox-home", label: "home", path: "devbox:~", live: false }] }
     ];
+    const hosts = ["xbp", "devbox"];
+    const unreachable = new Set(["devbox"]);
+    let shownHost = null;
     const win = document.getElementById("win");
     const hot = document.getElementById("hot");
     const trigger = document.getElementById("trigger");
@@ -474,9 +495,79 @@
       }
     }
 
+    const laptop = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3.5" width="10" height="7" rx="1"/><path d="M1.5 12.5h13"/></svg>';
+    const server = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="4.5" rx="1"/><rect x="2.5" y="9" width="11" height="4.5" rx="1"/><path d="M5 4.75h.01M5 11.25h.01"/></svg>';
+    const updown = '<svg class="arrow" viewBox="0 0 12 14" aria-hidden="true"><path d="m3.5 5 2.5-2.5L8.5 5M3.5 9l2.5 2.5L8.5 9"/></svg>';
+    const hostBar = document.getElementById("host-bar");
+    let hostMenu = null;
+
+    function closeHostMenu() {
+      hostMenu?.remove();
+      hostMenu = null;
+    }
+
+    function renderHosts() {
+      hostBar.hidden = hosts.length === 0;
+      hostBar.replaceChildren();
+      const name = shownHost ?? "Local";
+      const down = shownHost !== null && unreachable.has(shownHost);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "host-switch";
+      button.setAttribute("aria-haspopup", "menu");
+      button.setAttribute("aria-label", `Host, ${name}${down ? " · unreachable" : ""}`);
+      button.innerHTML = `${shownHost === null ? laptop : server}<span>${name}${down ? '<span class="state"> · unreachable</span>' : ""}</span>${updown}`;
+      button.addEventListener("click", event => {
+        event.stopPropagation();
+        if (hostMenu) return closeHostMenu();
+        hostMenu = document.createElement("div");
+        hostMenu.className = "host-menu";
+        hostMenu.setAttribute("role", "menu");
+        for (const host of [null, ...hosts]) {
+          const item = document.createElement("button");
+          item.type = "button";
+          item.setAttribute("role", "menuitemradio");
+          item.setAttribute("aria-checked", String(host === shownHost));
+          const label = host === null ? "Local" : unreachable.has(host) ? `${host} · unreachable` : host;
+          item.innerHTML = `<span class="mark">${host === shownHost ? "✓" : ""}</span>${label}`;
+          item.addEventListener("click", () => {
+            closeHostMenu();
+            showHost(host);
+            hostBar.querySelector(".host-switch").focus();
+          });
+          hostMenu.append(item);
+        }
+        const box = button.getBoundingClientRect();
+        const frame = win.getBoundingClientRect();
+        hostMenu.style.left = `${box.left - frame.left + 24}px`;
+        hostMenu.style.top = `${box.top - frame.top + 2}px`;
+        win.append(hostMenu);
+        hostMenu.querySelector('[aria-checked="true"]').focus();
+      });
+      hostBar.append(button);
+    }
+
+    document.addEventListener("click", event => {
+      if (hostMenu && !hostMenu.contains(event.target)) closeHostMenu();
+    });
+    document.addEventListener("keydown", event => {
+      if (hostMenu && event.key === "Escape") {
+        event.stopPropagation();
+        closeHostMenu();
+        hostBar.querySelector(".host-switch").focus();
+      }
+    }, true);
+
+    function showHost(host) {
+      shownHost = host;
+      renderList();
+      select(selected, false);
+    }
+
     function renderList() {
+      renderHosts();
       list.replaceChildren();
-      for (const repo of repos) {
+      for (const repo of repos.filter(repo => (repo.host ?? null) === shownHost)) {
         const group = document.createElement("div");
         group.className = "group" + (repo.open ? "" : " shut");
         const rows = document.createElement("div");
@@ -526,11 +617,16 @@
       }
     }
 
-    function select(id) {
+    function select(id, follow = true) {
       selected = id;
       const { repo, row } = rowOf(id);
+      if (follow && (repo.host ?? null) !== shownHost) {
+        shownHost = repo.host ?? null;
+        renderList();
+      }
       row.live = true;
-      current.textContent = repo.heading === false ? row.label : `${repo.name} / ${row.label}`;
+      const title = repo.heading === false ? row.label : `${repo.name} / ${row.label}`;
+      current.textContent = repo.host ? `${repo.host} · ${title}` : title;
       for (const button of list.querySelectorAll(".row")) {
         const item = rowOf(button.dataset.id).row;
         button.classList.toggle("on", item.id === selected);

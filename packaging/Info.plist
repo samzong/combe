@@ -28,6 +28,8 @@
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Combe runs your ssh to reach hosts from ~/.ssh/config on your local network.</string>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>

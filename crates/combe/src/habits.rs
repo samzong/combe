@@ -2,6 +2,7 @@ use std::fmt::Write as _;
 use std::time::Duration;
 
 pub(crate) const SHELL: &str = "/bin/zsh -l";
+pub(crate) const TERM: &str = "xterm-256color";
 
 pub(crate) const FONT_FAMILY: &str = "Fira Code";
 pub(crate) const FONT_FAMILY_CJK: &str = "Noto Sans Mono CJK SC";
@@ -137,6 +138,7 @@ pub(crate) fn ghostty_config(dark: bool) -> String {
         )
     };
     let mut config = String::new();
+    let _ = writeln!(config, "term = {TERM}");
     let _ = writeln!(config, "font-family = {FONT_FAMILY}");
     let _ = writeln!(config, "font-family = {FONT_FAMILY_CJK}");
     let _ = writeln!(config, "font-style = {FONT_STYLE}");

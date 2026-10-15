@@ -392,12 +392,12 @@ fn request_close_tab(id: u64, source: Source) {
     if last && current && other.is_none() {
         let closing = study_tab("tab.close", source, Some(id));
         close_window();
+        let open = is_open();
+        if !open {
+            close_tab(id);
+        }
         closing
-            .outcome(if is_open() {
-                Outcome::Cancel
-            } else {
-                Outcome::Ok
-            })
+            .outcome(if open { Outcome::Cancel } else { Outcome::Ok })
             .emit();
         return;
     }
@@ -465,6 +465,14 @@ pub(crate) fn reveal_window() {
         }
         state.window.makeKeyAndOrderFront(None);
     });
+    if STATE.with(|state| {
+        state
+            .borrow()
+            .as_ref()
+            .is_some_and(|state| state.tabs.items().is_empty())
+    }) {
+        new_current_tab(Source::Auto);
+    }
 }
 
 fn close_window() {

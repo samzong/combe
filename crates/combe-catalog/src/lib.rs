@@ -3,9 +3,10 @@ mod porcelain;
 mod scan;
 mod store;
 
-pub use home::{HOME_LABEL, home_dir, home_workspace, is_home_path, should_inject_home};
-pub use porcelain::{WorktreeKind, WorktreeRecord, parse_worktree_list};
-pub use scan::{CatalogError, scan_repo};
+pub use home::{HOME_LABEL, home_dir, is_home_path, should_inject_home};
+pub use porcelain::WorktreeKind;
+pub use scan::CatalogError;
+use scan::scan_repo;
 pub use store::{Repo, State, StoreError, load_state, save_state, state_path};
 
 use std::path::{Path, PathBuf};
@@ -16,7 +17,6 @@ pub struct Workspace {
     pub path: PathBuf,
     pub kind: WorktreeKind,
     pub branch: Option<String>,
-    pub head: Option<String>,
 }
 
 impl Workspace {
@@ -34,17 +34,6 @@ impl Workspace {
                 WorktreeKind::Git => "git".to_string(),
             },
         }
-    }
-
-    pub fn repo_label(&self) -> String {
-        if is_home_path(&self.repo_path) {
-            return HOME_LABEL.to_string();
-        }
-        self.repo_path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or(self.repo_path.to_str().unwrap_or("repo"))
-            .to_string()
     }
 }
 
@@ -72,7 +61,6 @@ pub fn catalog(state: &State) -> Result<Catalog, CatalogError> {
                 path: record.path,
                 kind: record.kind,
                 branch: record.branch,
-                head: record.head,
             });
         }
     }

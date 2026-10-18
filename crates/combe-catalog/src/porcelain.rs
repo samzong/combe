@@ -5,16 +5,14 @@ pub enum WorktreeKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorktreeRecord {
-    pub path: std::path::PathBuf,
-    pub kind: WorktreeKind,
-    pub branch: Option<String>,
-    pub head: Option<String>,
-    pub bare: bool,
-    pub prunable: bool,
+pub(crate) struct WorktreeRecord {
+    pub(crate) path: std::path::PathBuf,
+    pub(crate) kind: WorktreeKind,
+    pub(crate) branch: Option<String>,
+    pub(crate) prunable: bool,
 }
 
-pub fn parse_worktree_list(output: &str) -> Vec<WorktreeRecord> {
+pub(crate) fn parse_worktree_list(output: &str) -> Vec<WorktreeRecord> {
     let mut records = Vec::new();
     let mut current: Option<WorktreeRecord> = None;
 
@@ -30,8 +28,6 @@ pub fn parse_worktree_list(output: &str) -> Vec<WorktreeRecord> {
                 path: std::path::PathBuf::from(path),
                 kind: WorktreeKind::Git,
                 branch: None,
-                head: None,
-                bare: false,
                 prunable: false,
             });
             continue;
@@ -41,14 +37,10 @@ pub fn parse_worktree_list(output: &str) -> Vec<WorktreeRecord> {
             continue;
         };
 
-        if let Some(head) = raw.strip_prefix("HEAD ") {
-            record.head = Some(head.to_string());
-        } else if let Some(branch) = raw.strip_prefix("branch ") {
+        if let Some(branch) = raw.strip_prefix("branch ") {
             record.branch = Some(branch.trim_start_matches("refs/heads/").to_string());
         } else if raw == "detached" || raw.starts_with("detached ") {
             record.branch = Some("(detached)".to_string());
-        } else if raw == "bare" {
-            record.bare = true;
         } else if raw == "prunable" || raw.starts_with("prunable ") {
             record.prunable = true;
         }
@@ -88,7 +80,7 @@ branch refs/heads/feat
     }
 
     #[test]
-    fn parses_detached_and_bare() {
+    fn retains_bare_and_detached_worktrees_and_skips_prunable() {
         let output = "\
 worktree /tmp/bare
 HEAD 0123456789abcdef0123456789abcdef01234567
@@ -105,7 +97,7 @@ prunable gitdir file points to non-existent location
 ";
         let records = parse_worktree_list(output);
         assert_eq!(records.len(), 2);
-        assert!(records[0].bare);
+        assert_eq!(records[0].path.as_os_str(), "/tmp/bare");
         assert_eq!(records[1].branch.as_deref(), Some("(detached)"));
     }
 }

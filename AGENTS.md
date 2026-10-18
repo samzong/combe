@@ -46,6 +46,8 @@ make run
 
 Chrome changes need a look at the running window, not just a green build.
 
+Tests must not return early when an environment precondition is missing. Fail with `expect`, or remove the dependency on the environment.
+
 ## Style
 
 No comments in code. Name files after the domain object. English in anything that will be committed.

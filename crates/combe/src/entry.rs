@@ -174,7 +174,6 @@ mod tests {
             path: PathBuf::from(path),
             kind: WorktreeKind::Git,
             branch: Some(branch.to_owned()),
-            head: None,
         }
     }
 
@@ -184,7 +183,6 @@ mod tests {
             path: PathBuf::from(path),
             kind: WorktreeKind::Folder,
             branch: None,
-            head: None,
         }
     }
 

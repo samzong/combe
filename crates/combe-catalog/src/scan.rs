@@ -16,7 +16,7 @@ pub enum CatalogError {
     Git { path: PathBuf, stderr: String },
 }
 
-pub fn scan_repo(path: &Path) -> Result<Vec<WorktreeRecord>, CatalogError> {
+pub(crate) fn scan_repo(path: &Path) -> Result<Vec<WorktreeRecord>, CatalogError> {
     if !path.is_dir() {
         return Err(CatalogError::NotADirectory(path.to_path_buf()));
     }
@@ -25,8 +25,6 @@ pub fn scan_repo(path: &Path) -> Result<Vec<WorktreeRecord>, CatalogError> {
             path: canonicalize(path),
             kind: WorktreeKind::Folder,
             branch: None,
-            head: None,
-            bare: false,
             prunable: false,
         }]);
     }

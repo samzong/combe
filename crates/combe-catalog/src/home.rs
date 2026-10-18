@@ -1,4 +1,4 @@
-use crate::{Workspace, WorktreeKind};
+use crate::Workspace;
 use std::path::{Path, PathBuf};
 
 pub const HOME_LABEL: &str = "home";
@@ -9,16 +9,6 @@ pub fn home_dir() -> Option<PathBuf> {
         return None;
     }
     Some(std::fs::canonicalize(&home).unwrap_or(home))
-}
-
-pub fn home_workspace(home: PathBuf) -> Workspace {
-    Workspace {
-        repo_path: home.clone(),
-        path: home,
-        kind: WorktreeKind::Folder,
-        branch: None,
-        head: None,
-    }
 }
 
 pub fn should_inject_home(rows: &[Workspace], home: &Path) -> bool {
@@ -32,16 +22,15 @@ pub fn is_home_path(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::WorktreeKind;
 
-    #[test]
-    fn home_workspace_is_folder_without_branch() {
-        let home = PathBuf::from("/Users/tester");
-        let workspace = home_workspace(home.clone());
-        assert_eq!(workspace.kind, WorktreeKind::Folder);
-        assert_eq!(workspace.path, home);
-        assert_eq!(workspace.repo_path, home);
-        assert_eq!(workspace.branch, None);
-        assert_eq!(workspace.head, None);
+    fn folder(path: PathBuf) -> Workspace {
+        Workspace {
+            repo_path: path.clone(),
+            path,
+            kind: WorktreeKind::Folder,
+            branch: None,
+        }
     }
 
     #[test]
@@ -49,7 +38,7 @@ mod tests {
         let home = PathBuf::from("/Users/tester");
         assert!(should_inject_home(&[], &home));
         assert!(should_inject_home(
-            &[home_workspace(PathBuf::from("/tmp/other"))],
+            &[folder(PathBuf::from("/tmp/other"))],
             &home
         ));
     }
@@ -57,7 +46,7 @@ mod tests {
     #[test]
     fn skips_home_when_folder_row_owns_path() {
         let home = PathBuf::from("/Users/tester");
-        assert!(!should_inject_home(&[home_workspace(home.clone())], &home));
+        assert!(!should_inject_home(&[folder(home.clone())], &home));
     }
 
     #[test]
@@ -68,16 +57,13 @@ mod tests {
             path: home.clone(),
             kind: WorktreeKind::Git,
             branch: Some("main".into()),
-            head: None,
         }];
         assert!(!should_inject_home(&rows, &home));
     }
 
     #[test]
     fn folder_at_home_uses_home_label() {
-        let Some(home) = home_dir() else {
-            return;
-        };
-        assert_eq!(home_workspace(home).label(), HOME_LABEL);
+        let home = home_dir().expect("Home directory must exist to verify its workspace label");
+        assert_eq!(folder(home).label(), HOME_LABEL);
     }
 }

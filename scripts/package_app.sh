@@ -12,10 +12,7 @@ VERSION="${1:-}"
 if [[ -z "${VERSION}" ]]; then
   VERSION="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
 fi
-if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "error: version must be MAJOR.MINOR.PATCH" >&2
-  exit 1
-fi
+python3 scripts/release_version.py validate "v${VERSION}"
 
 cargo build --locked --release -p combe
 
@@ -41,8 +38,6 @@ rm -rf "${APP_DIR}"
 mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
 cp "${BIN_PATH}" "${APP_DIR}/Contents/MacOS/${APP_NAME}"
 cp packaging/Info.plist "${APP_DIR}/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "${APP_DIR}/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" "${APP_DIR}/Contents/Info.plist"
 cp "${ICON_PATH}" "${APP_DIR}/Contents/Resources/app-icon.icns"
 mkdir -p "${APP_DIR}/Contents/Resources/ghostty"
 cp -R "${SHARE_DIR}/ghostty/shell-integration" "${APP_DIR}/Contents/Resources/ghostty/shell-integration"

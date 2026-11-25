@@ -12,7 +12,7 @@ make run
 
 The first `make` that needs `vendor/ghostty/build.zig` runs `git submodule update --init` and checks Zig against `vendor/ghostty/build.zig.zon`. Missing `zig` with Homebrew on `PATH` runs `brew install zig`. Later `make` calls skip that recipe.
 
-`make build` is a debug binary. `make install` copies `build/Combe.app` to `/Applications` and links `combe` onto `PATH`. About reads the version from the running bundle; `make app` stamps it from `Cargo.toml`.
+`make build` is a debug binary. `make install` copies `build/Combe.app` to `/Applications` and links `combe` onto `PATH`. About reads the version from the running bundle; `make app` copies the tracked version from `packaging/Info.plist`.
 
 Zig caches its build artifacts in `~/Library/Caches/combe/zig` and grows to several gigabytes. Set `COMBE_ZIG_CACHE` to put it elsewhere. Deleting it costs one slow rebuild, nothing else.
 
@@ -52,23 +52,34 @@ combe list
 
 ## Release
 
-Version lives in `[workspace.package]` of `Cargo.toml` and `packaging/Info.plist`. `cargo-release` bumps both, commits, tags `vX.Y.Z`, and pushes. The tag workflow packages the app and publishes the GitHub Release. The Homebrew tap watches that release.
+The canonical version lives in `[workspace.package].version` in `Cargo.toml`. Combe is an L1 desktop tool. Tags use `vX.Y.Z` or `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, and `vX.Y.Z-rc.N`.
 
-Commit or stash everything first. `cargo-release` refuses a dirty tree, including staged files.
+`CFBundleShortVersionString` contains the core `X.Y.Z`. `CFBundleVersion` increases independently for every release, including prereleases. The release hook increments its first integer and stores that integer in Git. The existing `0.2.7` build number stays unchanged until the next release. Packaging copies these tracked values without rewriting them in CI.
 
-```sh
-cargo install cargo-release
-make release-patch              # dry-run
-make release-patch EXECUTE=1    # bump, commit, tag, push
-```
-
-`release-minor` and `release-major` work the same way. The commit subject must be `chore(release): bump to vX.Y.Z`; the tag workflow refuses anything else.
-
-If `Cargo.toml` is behind already-published tags, a patch bump will collide. Skip to the next free version:
+Install Python 3.11 or later, `cargo-release`, and `git-cliff` 2.14.1. Commit or stash changes before you prepare a release.
 
 ```sh
-cargo release 0.2.7
-cargo release 0.2.7 --execute
+cargo install cargo-release --locked
+cargo install git-cliff --version 2.14.1 --locked
+make release-patch
 ```
+
+The default is a dry run. With separate publication approval, append `EXECUTE=1` to bump, commit, tag, and push. `release-minor` and `release-major` work the same way. The release hook updates the tracked plist and prepends structured notes to `CHANGELOG.md` before the release commit. The commit subject must be `chore(release): bump to v<version>`.
+
+For a prerelease, select a free target version and start its stage counter at 1:
+
+```sh
+cargo release 0.3.0-rc.1
+```
+
+Use a new target version after a final release. Never reuse or move a published tag. Before publication, inspect the release commit and run:
+
+```sh
+python3 scripts/release_version.py validate v0.3.0-rc.1
+make check
+bash scripts/package_app.sh 0.3.0-rc.1
+```
+
+The validator rejects invalid tags, manifest mismatches, and build numbers that do not increase after the previous release. The tag workflow runs this gate before installing build tools. Pull requests run the same checks and packaging without publishing. GitHub Releases use the tracked changelog section, require nonempty notes, and pass `--prerelease --latest=false` for prereleases. `git-cliff` also generates notes from the tagged history for inspection. Notes include all changes since the previous stable tag, so promotion from a prerelease retains its changes. The initial changelog covers `v0.2.7`; future releases prepend their own sections. The configuration accepts historical emoji prefixes and skips nonconventional merge subjects.
 
 Users pick up the cask with `brew upgrade --cask samzong/tap/combe` after the tap updates.

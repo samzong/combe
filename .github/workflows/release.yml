@@ -1,12 +1,13 @@
 name: Release
 
 on:
+  pull_request:
   push:
     tags:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -14,6 +15,8 @@ concurrency:
 
 jobs:
   release:
+    permissions:
+      contents: write
     runs-on: macos-26
     timeout-minutes: 60
     env:
@@ -21,8 +24,22 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
+          fetch-depth: 0
           submodules: recursive
           persist-credentials: false
+
+      - name: Validate release tag and manifests
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            RELEASE_TAG="v$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
+          fi
+          python3 scripts/release_version.py validate "$RELEASE_TAG"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            test "$(git rev-parse HEAD)" = "$(git rev-parse "$RELEASE_TAG^{commit}")"
+            test "$(git log -1 --format=%s)" = "chore(release): bump to $RELEASE_TAG"
+          fi
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
 
       - name: Install build tools
         run: |
@@ -39,26 +56,6 @@ jobs:
           rustup component add rustfmt clippy
           cargo install cargo-audit --locked
 
-      - name: Validate release tag
-        run: |
-          set -eu
-          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
-          plist_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' packaging/Info.plist)"
-          if [ -z "$version" ] || [ "$RELEASE_TAG" != "v$version" ]; then
-            echo "::error::release tag $RELEASE_TAG does not match Cargo.toml version ${version:-missing}"
-            exit 1
-          fi
-          if [ "$plist_version" != "$version" ]; then
-            echo "::error::Info.plist version $plist_version does not match Cargo.toml version $version"
-            exit 1
-          fi
-          subject="$(git log -1 --format=%s)"
-          expected_subject="chore(release): bump to v$version"
-          if [ "$subject" != "$expected_subject" ]; then
-            echo "::error::release commit subject '$subject' does not match '$expected_subject'"
-            exit 1
-          fi
-
       - name: Check
         run: make check
 
@@ -69,9 +66,27 @@ jobs:
           test "$(lipo -archs build/Combe.app/Contents/MacOS/Combe)" = arm64
           ditto -c -k --sequesterRsrc --keepParent build/Combe.app "build/Combe-${RELEASE_TAG}-macos-arm64.zip"
 
+      - name: Generate release notes
+        run: |
+          set -euo pipefail
+          cargo install git-cliff --version 2.14.1 --locked
+          git-cliff --latest --strip header --output "$RUNNER_TEMP/generated-notes.md"
+          grep -q '^\* ' "$RUNNER_TEMP/generated-notes.md"
+          version="${RELEASE_TAG#v}"
+          awk -v heading="## [$version]" '
+            /^## / { if (found) exit; if (index($0, heading " ") == 1) found=1 }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          grep -q '^\* ' "$RUNNER_TEMP/release-notes.md"
+
       - name: Publish release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$RELEASE_TAG" "build/Combe-${RELEASE_TAG}-macos-arm64.zip" \
-            --verify-tag --title "$RELEASE_TAG" --generate-notes
+          set -euo pipefail
+          args=(--verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md")
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            args+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" "build/Combe-${RELEASE_TAG}-macos-arm64.zip" "${args[@]}"

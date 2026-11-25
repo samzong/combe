@@ -80,6 +80,6 @@ make check
 bash scripts/package_app.sh 0.3.0-rc.1
 ```
 
-The validator rejects invalid tags, manifest mismatches, and build numbers that do not increase after the previous release. The tag workflow runs this gate before installing build tools. Pull requests run the same checks and packaging without publishing. GitHub Releases use the tracked changelog section, require nonempty notes, and pass `--prerelease --latest=false` for prereleases. `git-cliff` also generates notes from the tagged history for inspection. The initial changelog covers `v0.2.7`; future releases prepend their own sections. The configuration accepts historical emoji prefixes and skips nonconventional merge subjects.
+The validator rejects invalid tags, manifest mismatches, and build numbers that do not increase after the previous release. The tag workflow runs this gate before installing build tools. Pull requests run the same checks and packaging without publishing. GitHub Releases use the tracked changelog section, require nonempty notes, and pass `--prerelease --latest=false` for prereleases. `git-cliff` also generates notes from the tagged history for inspection. Notes include all changes since the previous stable tag, so promotion from a prerelease retains its changes. The initial changelog covers `v0.2.7`; future releases prepend their own sections. The configuration accepts historical emoji prefixes and skips nonconventional merge subjects.
 
 Users pick up the cask with `brew upgrade --cask samzong/tap/combe` after the tap updates.

@@ -70,7 +70,8 @@ jobs:
         run: |
           set -euo pipefail
           cargo install git-cliff --version 2.14.1 --locked
-          git-cliff --latest --strip header --output "$RUNNER_TEMP/generated-notes.md"
+          previous_stable=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' HEAD^)
+          git-cliff "$previous_stable..HEAD" --ignore-tags '.*-(alpha|beta|rc)\.[0-9]+$' --tag "$RELEASE_TAG" --strip header --output "$RUNNER_TEMP/generated-notes.md"
           grep -q '^\* ' "$RUNNER_TEMP/generated-notes.md"
           version="${RELEASE_TAG#v}"
           awk -v heading="## [$version]" '

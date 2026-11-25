@@ -42,7 +42,8 @@ def main():
             if count != 1:
                 raise ValueError(f"Expected one {key}")
         path.write_text(content)
-        subprocess.run(["git-cliff", "--unreleased", "--tag", tag, "--prepend", "CHANGELOG.md"], cwd=ROOT, check=True)
+        previous_stable = git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "--exclude", "*-*")
+        subprocess.run(["git-cliff", f"{previous_stable}..HEAD", "--ignore-tags", r".*-(alpha|beta|rc)\.[0-9]+$", "--tag", tag, "--prepend", "CHANGELOG.md"], cwd=ROOT, check=True)
         changelog = ROOT / "CHANGELOG.md"
         changelog.write_text(changelog.read_text().strip() + "\n")
     else:
